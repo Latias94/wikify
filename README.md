@@ -92,14 +92,18 @@ cargo run --bin wikify -- --help
 #### **🌐 Web Interface**
 
 ```bash
-# Start the web server
-cargo run --bin wikify-web -- --dev --port 8080
+# Start the web server (recommended for development)
+cargo run --bin wikify-web -- --dev --host localhost --port 8080
 
-# Or with custom configuration
-cargo run --bin wikify-web -- --host 0.0.0.0 --port 3000
+# Or bind to all interfaces
+cargo run --bin wikify-web -- --host 0.0.0.0 --port 8080
 
 # Access the web interface at http://localhost:8080
 ```
+
+**For detailed web server configuration (including CORS settings), see [wikify-web/README.md](wikify-web/README.md).**
+
+**For frontend development, see [web/README.md](web/README.md).**
 
 ### Configuration
 

@@ -54,6 +54,8 @@ pnpm install
 
 ### 环境配置
 
+#### 前端配置
+
 复制环境变量配置文件：
 
 ```bash
@@ -63,23 +65,70 @@ cp .env.example .env.local
 根据实际情况修改 `.env.local` 中的配置：
 
 ```env
-# API 配置
-VITE_API_BASE_URL=http://localhost:8080/api
-VITE_WS_BASE_URL=ws://localhost:8080/ws
+# API 配置 (通过 Vite 代理访问后端，避免 CORS 问题)
+VITE_API_BASE_URL=/api
+VITE_WS_BASE_URL=/ws
 
 # 开发配置
 VITE_DEV_MODE=true
 VITE_DEBUG_WEBSOCKET=true
 VITE_DEBUG_API=true
+
+# 应用配置
+VITE_APP_TITLE=Wikify
+VITE_APP_DESCRIPTION=AI-powered codebase exploration tool
 ```
+
+#### 后端配置
+
+前端通过 Vite 代理访问后端 API，避免 CORS 问题。确保后端服务器正常运行：
+
+```bash
+# 启动后端服务器 (在项目根目录)
+cargo run --bin wikify-web -- --dev --host localhost --port 8080
+```
+
+**注意**: 后端的详细配置说明请参考 [wikify-web/README.md](../wikify-web/README.md)。
 
 ### 启动开发服务器
 
+#### 完整启动流程
+
+1. **启动后端服务器** (在项目根目录):
 ```bash
+# 确保后端环境变量已配置
+cargo run --bin wikify-web -- --dev --host localhost --port 8080
+```
+
+2. **启动前端开发服务器** (在 web 目录):
+```bash
+cd web
 pnpm run dev
 ```
 
-应用将在 http://localhost:8080 启动。
+3. **访问应用**:
+   - 前端界面: http://localhost:5173
+   - 后端 API: http://localhost:8080/api
+   - 后端健康检查: http://localhost:8080/api/health
+
+#### 开发服务器选项
+
+```bash
+# 基本启动
+pnpm run dev
+
+# 带环境检查的启动 (推荐)
+pnpm run dev:check
+
+# 指定端口启动
+pnpm run dev --port 3000
+```
+
+**注意事项:**
+- 前端运行在 `localhost:5173` (Vite 默认端口)
+- 后端运行在 `localhost:8080`
+- 前端通过 Vite 代理访问后端 API，避免 CORS 问题
+- 确保两个服务都正常启动后再进行开发
 
 ### 构建生产版本
 

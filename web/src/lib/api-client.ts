@@ -31,15 +31,25 @@ import {
   PaginationParams,
   PaginatedResponse,
 } from "@/types/api";
+import { backendConnection } from "@/lib/backend-connection";
 
 // ============================================================================
-// 配置和常量
+// Configuration and Constants
 // ============================================================================
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+const DEFAULT_API_BASE_URL = "http://localhost:8080/api";
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 3;
+
+// Get current API base URL from backend connection manager
+function getCurrentApiBaseUrl(): string {
+  const currentEndpoint = backendConnection.getCurrentEndpoint();
+  return (
+    currentEndpoint?.apiUrl ||
+    import.meta.env.VITE_API_BASE_URL ||
+    DEFAULT_API_BASE_URL
+  );
+}
 
 // ============================================================================
 // 错误处理
@@ -93,9 +103,9 @@ export class ApiClient {
   private instance: AxiosInstance;
   private retryCount = new Map<string, number>();
 
-  constructor(baseURL: string = API_BASE_URL) {
+  constructor(baseURL?: string) {
     this.instance = axios.create({
-      baseURL,
+      baseURL: baseURL || getCurrentApiBaseUrl(),
       timeout: REQUEST_TIMEOUT,
       headers: {
         "Content-Type": "application/json",
@@ -103,6 +113,20 @@ export class ApiClient {
     });
 
     this.setupInterceptors();
+  }
+
+  /**
+   * Update the base URL for API requests
+   */
+  updateBaseURL(baseURL: string) {
+    this.instance.defaults.baseURL = baseURL;
+  }
+
+  /**
+   * Get current base URL
+   */
+  getBaseURL(): string {
+    return this.instance.defaults.baseURL || getCurrentApiBaseUrl();
   }
 
   /**
