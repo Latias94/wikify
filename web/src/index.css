@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Japanese Minimalist Design System - Natural, calm colors with HSL values */
+
+@layer base {
+  :root {
+    /* Base colors - warm, natural tones */
+    --background: 40 15% 97%;
+    --foreground: 25 8% 20%;
+
+    /* Card system - soft, paper-like */
+    --card: 40 20% 99%;
+    --card-foreground: 25 8% 20%;
+
+    /* Interactive elements */
+    --popover: 40 20% 99%;
+    --popover-foreground: 25 8% 20%;
+
+    /* Primary - warm tea/wood tones */
+    --primary: 25 35% 45%;
+    --primary-foreground: 40 20% 98%;
+
+    /* Secondary - soft sage green */
+    --secondary: 120 15% 85%;
+    --secondary-foreground: 120 15% 25%;
+
+    /* Muted elements - gentle grays */
+    --muted: 40 10% 90%;
+    --muted-foreground: 25 8% 55%;
+
+    /* Accent - soft bamboo green */
+    --accent: 140 20% 80%;
+    --accent-foreground: 140 30% 25%;
+
+    /* Status colors */
+    --destructive: 355 70% 60%;
+    --destructive-foreground: 40 20% 98%;
+
+    --success: 140 35% 55%;
+    --success-foreground: 40 20% 98%;
+
+    --warning: 45 85% 65%;
+    --warning-foreground: 25 8% 20%;
+
+    /* Borders and inputs - subtle, natural */
+    --border: 40 12% 88%;
+    --input: 40 15% 92%;
+    --ring: 25 35% 45%;
+
+    /* Enhanced radius for Japanese aesthetic */
+    --radius: 0.75rem;
+
+    /* Custom gradients */
+    --gradient-warm: linear-gradient(135deg, hsl(40 20% 99%), hsl(40 15% 96%));
+    --gradient-accent: linear-gradient(135deg, hsl(140 20% 80%), hsl(120 15% 85%));
+
+    /* Subtle shadows */
+    --shadow-soft: 0 2px 12px -2px hsl(25 8% 20% / 0.08);
+    --shadow-medium: 0 4px 20px -4px hsl(25 8% 20% / 0.12);
+    --shadow-strong: 0 8px 32px -8px hsl(25 8% 20% / 0.16);
+
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Sidebar tokens */
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Dark Japanese theme - deep natural tones */
+    --background: 25 15% 8%;
+    --foreground: 40 20% 92%;
+
+    --card: 25 20% 12%;
+    --card-foreground: 40 20% 90%;
+
+    --popover: 25 20% 12%;
+    --popover-foreground: 40 20% 90%;
+
+    --primary: 40 25% 80%;
+    --primary-foreground: 25 15% 15%;
+
+    --secondary: 120 10% 20%;
+    --secondary-foreground: 120 15% 80%;
+
+    --muted: 25 10% 18%;
+    --muted-foreground: 40 15% 60%;
+
+    --accent: 140 15% 25%;
+    --accent-foreground: 140 20% 85%;
+
+    --destructive: 355 60% 65%;
+    --destructive-foreground: 25 15% 8%;
+
+    --success: 140 30% 60%;
+    --success-foreground: 25 15% 8%;
+
+    --warning: 45 75% 70%;
+    --warning-foreground: 25 15% 8%;
+
+    --border: 25 12% 22%;
+    --input: 25 15% 16%;
+    --ring: 40 25% 70%;
+
+    /* Dark gradients */
+    --gradient-warm: linear-gradient(135deg, hsl(25 20% 12%), hsl(25 15% 10%));
+    --gradient-accent: linear-gradient(135deg, hsl(140 15% 25%), hsl(120 10% 20%));
+
+    --sidebar-background: 25 20% 10%;
+    --sidebar-foreground: 40 20% 85%;
+    --sidebar-primary: 40 25% 75%;
+    --sidebar-primary-foreground: 25 15% 15%;
+    --sidebar-accent: 25 15% 15%;
+    --sidebar-accent-foreground: 40 20% 85%;
+    --sidebar-border: 25 12% 18%;
+    --sidebar-ring: 40 25% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image: var(--gradient-warm);
+    background-attachment: fixed;
+  }
+
+  /* Custom Japanese-inspired utilities */
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-medium {
+    box-shadow: var(--shadow-medium);
+  }
+
+  .shadow-strong {
+    box-shadow: var(--shadow-strong);
+  }
+
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+
+  .gradient-warm {
+    background: var(--gradient-warm);
+  }
+
+  .gradient-accent {
+    background: var(--gradient-accent);
+  }
+}
