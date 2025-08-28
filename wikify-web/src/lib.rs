@@ -3,11 +3,16 @@
 //! This module provides a web interface for Wikify, similar to DeepWiki's architecture.
 
 pub mod handlers;
+pub mod middleware;
 pub mod routes;
 pub mod server;
 pub mod state;
 pub mod templates;
 pub mod websocket;
+
+// Database support (optional)
+#[cfg(feature = "sqlite")]
+pub mod simple_database;
 
 // Re-export main types
 pub use server::WikifyServer;
@@ -44,6 +49,9 @@ pub fn create_app(state: AppState) -> Router {
         // Frontend routes (SPA fallback)
         .fallback(handlers::spa_fallback)
         // Add middleware
+        .layer(axum::middleware::from_fn(
+            middleware::user_context_middleware,
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB max body size
@@ -72,7 +80,7 @@ impl Default for WebConfig {
             port: 8080,
             dev_mode: false,
             static_dir: None,
-            database_url: None,
+            database_url: Some("sqlite:./data/wikify.db".to_string()), // 启用文件 SQLite 数据库
         }
     }
 }
@@ -98,6 +106,32 @@ impl WebConfig {
     /// Get the server address
     pub fn address(&self) -> String {
         format!("{}:{}", self.host, self.port)
+    }
+
+    /// Get the database URL with path expansion
+    pub fn database_url(&self) -> String {
+        let url = self
+            .database_url
+            .as_ref()
+            .unwrap_or(&"sqlite:~/.wikify/wikify.db".to_string())
+            .clone();
+
+        // 展开 ~ 路径
+        if url.starts_with("sqlite:~/") {
+            if let Some(home) = dirs::home_dir() {
+                let path = url.strip_prefix("sqlite:~/").unwrap();
+                let full_path = home.join(".wikify").join(path);
+
+                // 确保目录存在
+                if let Some(parent) = full_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+
+                return format!("sqlite:{}", full_path.display());
+            }
+        }
+
+        url
     }
 }
 

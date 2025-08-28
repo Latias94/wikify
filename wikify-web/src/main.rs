@@ -98,7 +98,7 @@ async fn main() {
 
     // Build and start the server
     println!("🏗️  Building server...");
-    let server = match WikifyServerBuilder::new()
+    let mut builder = WikifyServerBuilder::new()
         .host(config.host.clone())
         .port(config.port)
         .dev_mode(config.dev_mode)
@@ -107,16 +107,14 @@ async fn main() {
                 .static_dir
                 .clone()
                 .unwrap_or_else(|| "static".to_string()),
-        )
-        .database_url(
-            config
-                .database_url
-                .clone()
-                .unwrap_or_else(|| "sqlite::memory:".to_string()),
-        )
-        .build()
-        .await
-    {
+        );
+
+    // Only set database URL if it's provided
+    if let Some(db_url) = &config.database_url {
+        builder = builder.database_url(db_url.clone());
+    }
+
+    let server = match builder.build().await {
         Ok(server) => {
             println!("✅ Server built successfully");
             server

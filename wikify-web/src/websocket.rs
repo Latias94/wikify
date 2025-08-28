@@ -226,15 +226,42 @@ async fn handle_chat_message(
             // Update session activity
             state.update_session_activity(&session_id).await;
 
-            // For now, send a placeholder response
-            let response = WsMessage::ChatResponse {
-                session_id: session_id.clone(),
-                answer: format!(
-                    "You asked: '{}'. RAG integration is being implemented.",
-                    question
-                ),
-                sources: vec![],
-                timestamp: chrono::Utc::now(),
+            // Execute RAG query
+            let response = match state.query_rag(&session_id, &question).await {
+                Ok(rag_response) => {
+                    // Convert RAG response to WebSocket response
+                    let sources = rag_response
+                        .sources
+                        .into_iter()
+                        .map(|source| WsSourceDocument {
+                            file_path: source
+                                .chunk
+                                .metadata
+                                .get("file_path")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            content: source.chunk.content,
+                            similarity_score: source.score as f64,
+                        })
+                        .collect();
+
+                    WsMessage::ChatResponse {
+                        session_id: session_id.clone(),
+                        answer: rag_response.answer,
+                        sources,
+                        timestamp: chrono::Utc::now(),
+                    }
+                }
+                Err(e) => {
+                    // Return error response
+                    WsMessage::ChatResponse {
+                        session_id: session_id.clone(),
+                        answer: format!("Sorry, I encountered an error: {}", e),
+                        sources: vec![],
+                        timestamp: chrono::Utc::now(),
+                    }
+                }
             };
 
             let response_text = serde_json::to_string(&response)?;

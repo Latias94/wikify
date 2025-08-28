@@ -6775,6 +6775,7 @@ dependencies = [
  "chrono",
  "clap",
  "config",
+ "dirs 5.0.1",
  "dotenvy",
  "include_dir",
  "reqwest 0.12.23",

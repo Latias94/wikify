@@ -11,7 +11,7 @@ use tower_http::services::ServeDir;
 
 /// Create API routes
 pub fn api_routes() -> Router<AppState> {
-    Router::new()
+    let router = Router::new()
         // Health check
         .route("/health", get(handlers::health_check))
         // Repository management
@@ -32,7 +32,16 @@ pub fn api_routes() -> Router<AppState> {
         .route("/files/content", post(handlers::get_file_content))
         // Configuration
         .route("/config", get(handlers::get_config))
-        .route("/config", post(handlers::update_config))
+        .route("/config", post(handlers::update_config));
+
+    // Add database-specific routes if SQLite feature is enabled
+    #[cfg(feature = "sqlite")]
+    let router = router
+        .route("/repositories", get(handlers::get_repositories))
+        .route("/sessions", get(handlers::get_sessions))
+        .route("/history/{repository_id}", get(handlers::get_query_history));
+
+    router
 }
 
 /// Create WebSocket routes

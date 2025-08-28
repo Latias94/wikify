@@ -62,7 +62,7 @@ enum Commands {
         token: Option<String>,
 
         /// Similarity threshold for document retrieval (0.0-1.0)
-        #[arg(long, default_value = "0.5")]
+        #[arg(long, default_value = "0.3")]
         threshold: f32,
 
         /// Number of top documents to retrieve
@@ -300,9 +300,7 @@ async fn main() -> WikifyResult<()> {
             )
             .await?;
         }
-        Commands::Serve { port, host } => {
-            handle_serve(host, port, &config).await?;
-        }
+
         Commands::Config {
             show,
             init,
@@ -439,21 +437,31 @@ async fn handle_ask(
 ) -> WikifyResult<()> {
     log_operation_start!("ask_question");
 
+    println!("🚀 Starting ask command...");
     info!("Asking question about repository: {}", repo);
     info!("Question: {}", question);
 
+    println!("📂 Repository: {}", repo);
+    println!("❓ Question: {}", question);
+
     // Parse repository info
+    println!("🔍 Parsing repository URL...");
     let repo_info = RepositoryProcessor::parse_repo_url(&repo).map_err(|e| {
+        println!("❌ Failed to parse repository URL: {}", e);
         log_operation_error!("parse_repo_url", e, repo = %repo);
         e
     })?;
+    println!("✅ Repository parsed successfully");
 
     // Get repository path
+    println!("📁 Processing repository...");
     let processor = RepositoryProcessor::new(&config.storage.data_dir);
     let repo_path = processor.clone_repository(&repo_info).await.map_err(|e| {
+        println!("❌ Failed to process repository: {}", e);
         log_operation_error!("clone_repository", e, repo = %repo);
         e
     })?;
+    println!("✅ Repository processed: {}", repo_path);
 
     println!("🤖 Initializing RAG system...");
 
@@ -823,16 +831,6 @@ async fn handle_test_embedding(count: usize, _config: &WikifyConfig) -> WikifyRe
     Ok(())
 }
 
-async fn handle_serve(host: String, port: u16, config: &WikifyConfig) -> WikifyResult<()> {
-    info!("Starting web server on {}:{}", host, port);
-
-    // TODO: Implement web server
-    println!("🌐 Web server is not yet implemented. Coming soon!");
-    println!("🔗 Would listen on: http://{}:{}", host, port);
-
-    Ok(())
-}
-
 async fn handle_config(
     show: bool,
     init: bool,
@@ -1034,6 +1032,8 @@ async fn handle_wiki(
     _config: &WikifyConfig,
 ) -> WikifyResult<()> {
     println!("📚 Starting wiki generation for repository: {}", repo);
+    println!("📁 Output directory: {}", output);
+    println!("📄 Format: {}", format);
 
     // Parse export format
     let export_format = match format.to_lowercase().as_str() {
@@ -1059,7 +1059,9 @@ async fn handle_wiki(
     wiki_config.include_diagrams = diagrams;
 
     // Create wiki service
+    println!("🔧 Creating wiki service...");
     let mut wiki_service = wikify_wiki::WikiService::new().map_err(|e| {
+        println!("❌ Failed to create wiki service: {}", e);
         log_operation_error!("create_wiki_service", e);
         WikifyError::Repository {
             message: format!("Failed to create wiki service: {}", e),
@@ -1069,6 +1071,7 @@ async fn handle_wiki(
                 .with_suggestion("Check if all dependencies are properly configured"),
         }
     })?;
+    println!("✅ Wiki service created successfully");
 
     // Check for cached wiki first
     if !force {

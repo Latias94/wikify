@@ -200,6 +200,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## 🚧 **Development Status**
+
+Wikify is currently in active development. Here's the current status:
+
+### ✅ **Fully Functional Modules**
+
+- **wikify-core**: Unified error handling, logging, and configuration ✅
+- **wikify-indexing**: Document indexing with cheungfun integration ✅
+- **wikify-rag**: RAG system with siumai LLM integration ✅
+- **wikify-repo**: Git repository processing and analysis ✅
+- **wikify-cli**: Command-line interface with `ask`, `chat`, `wiki` commands ✅
+- **wikify-web**: Modern web UI with REST API and WebSocket support ✅
+
+### ⚠️ **Under Refactoring**
+
+- **wikify-wiki**: Wiki generation module (fixing 36 compilation errors)
+  - Professional modules (`generator.rs`, `cache.rs`, `export.rs`) need integration
+  - API inconsistencies being resolved
+  - Expected completion: 2025-08-30
+
+### 🎯 **Current Focus**
+
+1. **Fix wikify-wiki compilation errors** (Priority 1)
+2. **Integrate professional wiki generation modules**
+3. **Comprehensive testing and validation**
+4. **Documentation and examples**
+
+### 📊 **Module Completion Status**
+
+```text
+wikify-core      ████████████████████ 95%
+wikify-indexing  ████████████████████ 90%
+wikify-rag       ████████████████████ 85%
+wikify-repo      ████████████████████ 80%
+wikify-cli       ████████████████████ 75%
+wikify-web       ████████████████████ 70%
+wikify-wiki      ██████░░░░░░░░░░░░░░ 30%
+```
+
+For detailed development status, see [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) and [TODO.md](TODO.md)
+
 ## 🔧 Development
 
 ### Building from Source

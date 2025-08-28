@@ -1,44 +1,38 @@
 //! Wiki generator implementation
-//! 
+//!
 //! This module contains the core logic for generating wiki structures and content.
 
 use crate::types::*;
-use wikify_core::{WikifyResult, WikifyError, ErrorContext, DocumentInfo};
-use wikify_rag::{RagPipeline, RagConfig, RagQuery};
-use wikify_indexing::pipeline::IndexingPipeline;
 use serde_json::Value;
+use std::collections::HashMap;
+use wikify_core::{DocumentInfo, ErrorContext, WikifyError, WikifyResult};
+use wikify_rag::{RagConfig, RagError, RagPipeline, RagQuery};
 
 use chrono::Utc;
-use tracing::{info, debug, warn};
+use tracing::{debug, info};
 
 /// Main wiki generator that orchestrates the wiki creation process
 pub struct WikiGenerator {
     rag_pipeline: Option<RagPipeline>,
-    indexing_pipeline: IndexingPipeline,
 }
 
 impl WikiGenerator {
     /// Create a new WikiGenerator instance
     pub fn new() -> WikifyResult<Self> {
-        let indexing_pipeline = IndexingPipeline::new()?;
-        
-        Ok(Self {
-            rag_pipeline: None,
-            indexing_pipeline,
-        })
+        Ok(Self { rag_pipeline: None })
     }
 
     /// Initialize the RAG pipeline for content generation
-    pub async fn initialize_rag(&mut self, config: &WikiConfig) -> WikifyResult<()> {
+    pub async fn initialize_rag(&mut self, _config: &WikiConfig) -> WikifyResult<()> {
         info!("Initializing RAG pipeline for wiki generation");
-        
+
         let mut rag_config = RagConfig::default();
-        
-        // Configure RAG based on wiki config
-        rag_config.retrieval.similarity_threshold = 0.4; // Lower threshold for broader context
-        rag_config.retrieval.top_k = 10; // More documents for comprehensive content
-        rag_config.retrieval.max_context_length = 16000; // Larger context for detailed pages
-        
+
+        // Configure RAG based on wiki config - use lower thresholds for better content generation
+        rag_config.retrieval.similarity_threshold = 0.2; // Lower threshold for broader context
+        rag_config.retrieval.top_k = 15; // More documents for comprehensive content
+        rag_config.retrieval.max_context_length = 20000; // Larger context for detailed pages
+
         // Auto-detect LLM provider
         if std::env::var("OPENAI_API_KEY").is_ok() {
             rag_config.llm = wikify_rag::llm_client::configs::openai_gpt4o_mini();
@@ -51,10 +45,65 @@ impl WikiGenerator {
         }
 
         let mut rag_pipeline = RagPipeline::new(rag_config);
-        rag_pipeline.initialize().await?;
-        
+        rag_pipeline.initialize().await.map_err(|e| match e {
+            RagError::Core(core_err) => core_err,
+            other => WikifyError::Rag {
+                message: format!("Failed to initialize RAG pipeline: {}", other),
+                source: Some(Box::new(other)),
+                context: ErrorContext::new("wiki_generator"),
+            },
+        })?;
+
         self.rag_pipeline = Some(rag_pipeline);
         Ok(())
+    }
+
+    /// Generate a complete wiki for a repository
+    pub async fn generate_wiki(
+        &mut self,
+        repo_path: &str,
+        config: &WikiConfig,
+    ) -> WikifyResult<WikiStructure> {
+        info!("Starting wiki generation for repository: {}", repo_path);
+
+        // Step 1: Generate the wiki structure
+        let mut wiki_structure = self.generate_structure(repo_path, config).await?;
+
+        info!(
+            "Generated wiki structure with {} pages",
+            wiki_structure.pages.len()
+        );
+
+        // Step 2: Generate content for each page
+        info!(
+            "Generating content for {} pages...",
+            wiki_structure.pages.len()
+        );
+
+        for i in 0..wiki_structure.pages.len() {
+            let page_title = wiki_structure.pages[i].title.clone();
+            info!("Generating content for page: {}", page_title);
+
+            // Generate content for this page
+            let generated_page = self
+                .generate_page_content(&wiki_structure.pages[i], repo_path, config)
+                .await?;
+
+            // Update the page in the structure
+            wiki_structure.pages[i] = generated_page;
+
+            info!(
+                "✅ Generated content for page: {} ({} words)",
+                page_title,
+                wiki_structure.pages[i].content.split_whitespace().count()
+            );
+        }
+
+        info!(
+            "Wiki generation completed successfully - {} pages with content",
+            wiki_structure.pages.len()
+        );
+        Ok(wiki_structure)
     }
 
     /// Generate the overall wiki structure by analyzing the repository
@@ -70,19 +119,42 @@ impl WikiGenerator {
             self.initialize_rag(config).await?;
         }
 
-        // Index the repository
+        // Index the repository using RAG pipeline
         info!("Indexing repository for wiki generation");
-        self.indexing_pipeline.index_repository(repo_path).await?;
+        if let Some(ref mut rag_pipeline) = self.rag_pipeline {
+            rag_pipeline
+                .index_repository(repo_path)
+                .await
+                .map_err(|e| match e {
+                    RagError::Core(core_err) => core_err,
+                    other => WikifyError::Rag {
+                        message: format!("Failed to index repository: {}", other),
+                        source: Some(Box::new(other)),
+                        context: ErrorContext::new("wiki_generator"),
+                    },
+                })?;
+        } else {
+            return Err(WikifyError::Config {
+                message: "RAG pipeline not initialized".to_string(),
+                source: None,
+                context: ErrorContext::new("wiki_generator"),
+            });
+        }
 
         // Get repository information
         let repo_info = self.analyze_repository_structure(repo_path, config).await?;
-        
+
         // Generate wiki structure using LLM
-        let wiki_structure = self.generate_wiki_structure_with_llm(&repo_info, config).await?;
-        
-        info!("Generated wiki structure with {} pages and {} sections", 
-              wiki_structure.pages.len(), wiki_structure.sections.len());
-        
+        let wiki_structure = self
+            .generate_wiki_structure_with_llm(&repo_info, config)
+            .await?;
+
+        info!(
+            "Generated wiki structure with {} pages and {} sections",
+            wiki_structure.pages.len(),
+            wiki_structure.sections.len()
+        );
+
         Ok(wiki_structure)
     }
 
@@ -90,21 +162,14 @@ impl WikiGenerator {
     pub async fn generate_page_content(
         &mut self,
         page: &WikiPage,
-        repo_path: &str,
+        _repo_path: &str,
         config: &WikiConfig,
     ) -> WikifyResult<WikiPage> {
         info!("Generating content for page: {}", page.title);
 
-        let rag_pipeline = self.rag_pipeline.as_mut()
-            .ok_or_else(|| WikifyError::Config {
-                message: "RAG pipeline not initialized".to_string(),
-                source: None,
-                context: ErrorContext::new("wiki_generator"),
-            })?;
-
         // Create a comprehensive prompt for this page
         let prompt = self.create_page_generation_prompt(page, config);
-        
+
         // Query RAG system for relevant information
         let query = RagQuery {
             question: prompt,
@@ -113,19 +178,68 @@ impl WikiGenerator {
             retrieval_config: None,
         };
 
-        let rag_response = rag_pipeline.query(query).await?;
-        
+        let rag_response = {
+            let rag_pipeline = self
+                .rag_pipeline
+                .as_mut()
+                .ok_or_else(|| WikifyError::Config {
+                    message: "RAG pipeline not initialized".to_string(),
+                    source: None,
+                    context: ErrorContext::new("wiki_generator"),
+                })?;
+
+            rag_pipeline.ask(query).await.map_err(|e| match e {
+                RagError::Core(core_err) => core_err,
+                other => WikifyError::Rag {
+                    message: format!("Failed to query RAG pipeline: {}", other),
+                    source: Some(Box::new(other)),
+                    context: ErrorContext::new("wiki_generator"),
+                },
+            })?
+        };
+
         // Process the response to create structured content
         let mut generated_page = page.clone();
-        generated_page.content = self.process_generated_content(&rag_response.answer, page, config)?;
+        generated_page.content =
+            self.process_generated_content(&rag_response.answer, page, config)?;
         generated_page.generated_at = Utc::now();
-        generated_page.source_documents = rag_response.sources;
+        // Convert SearchResult to DocumentInfo for compatibility
+        generated_page.source_documents = rag_response
+            .sources
+            .into_iter()
+            .map(|sr| {
+                let file_path = sr
+                    .chunk
+                    .metadata
+                    .get("file_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let metadata_strings: HashMap<String, String> = sr
+                    .chunk
+                    .metadata
+                    .into_iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k, s.to_string())))
+                    .collect();
+
+                DocumentInfo {
+                    id: sr.chunk.id.to_string(),
+                    file_path,
+                    content: sr.chunk.content.clone(),
+                    file_type: wikify_core::FileType::Other,
+                    metadata: metadata_strings,
+                    token_count: sr.chunk.content.split_whitespace().count(), // Rough estimate
+                }
+            })
+            .collect();
         generated_page.estimate_reading_time();
 
-        info!("Generated content for page '{}' ({} words, {} min read)", 
-              page.title, 
-              generated_page.content.split_whitespace().count(),
-              generated_page.reading_time);
+        info!(
+            "Generated content for page '{}' ({} words, {} min read)",
+            page.title,
+            generated_page.content.split_whitespace().count(),
+            generated_page.reading_time
+        );
 
         Ok(generated_page)
     }
@@ -166,10 +280,10 @@ impl WikiGenerator {
 
         // Analyze directory structure
         repo_info.directory_structure = self.get_directory_structure(repo_path, config).await?;
-        
+
         // Detect programming languages
         repo_info.languages = self.detect_languages(&repo_info.directory_structure);
-        
+
         // Identify main files
         repo_info.main_files = self.identify_main_files(&repo_info.directory_structure);
 
@@ -182,16 +296,9 @@ impl WikiGenerator {
         repo_info: &RepositoryInfo,
         config: &WikiConfig,
     ) -> WikifyResult<WikiStructure> {
-        let rag_pipeline = self.rag_pipeline.as_mut()
-            .ok_or_else(|| WikifyError::Config {
-                message: "RAG pipeline not initialized".to_string(),
-                source: None,
-                context: ErrorContext::new("wiki_generator"),
-            })?;
-
         // Create structure analysis prompt
         let prompt = self.create_structure_analysis_prompt(repo_info, config);
-        
+
         let query = RagQuery {
             question: prompt,
             context: None,
@@ -199,16 +306,39 @@ impl WikiGenerator {
             retrieval_config: None,
         };
 
-        let response = rag_pipeline.query(query).await?;
-        
+        let response = {
+            let rag_pipeline = self
+                .rag_pipeline
+                .as_mut()
+                .ok_or_else(|| WikifyError::Config {
+                    message: "RAG pipeline not initialized".to_string(),
+                    source: None,
+                    context: ErrorContext::new("wiki_generator"),
+                })?;
+
+            rag_pipeline.ask(query).await.map_err(|e| match e {
+                RagError::Core(core_err) => core_err,
+                other => WikifyError::Rag {
+                    message: format!("Failed to query RAG pipeline: {}", other),
+                    source: Some(Box::new(other)),
+                    context: ErrorContext::new("wiki_generator"),
+                },
+            })?
+        };
+
         // Parse the structured response
-        let wiki_structure = self.parse_wiki_structure_response(&response.answer, repo_info, config)?;
-        
+        let wiki_structure =
+            self.parse_wiki_structure_response(&response.answer, repo_info, config)?;
+
         Ok(wiki_structure)
     }
 
     /// Create a prompt for analyzing repository structure
-    fn create_structure_analysis_prompt(&self, repo_info: &RepositoryInfo, config: &WikiConfig) -> String {
+    fn create_structure_analysis_prompt(
+        &self,
+        repo_info: &RepositoryInfo,
+        _config: &WikiConfig,
+    ) -> String {
         let readme_section = if let Some(readme) = &repo_info.readme_content {
             format!("README Content:\n{}\n\n", readme)
         } else {
@@ -216,7 +346,10 @@ impl WikiGenerator {
         };
 
         let languages_section = if !repo_info.languages.is_empty() {
-            format!("Programming Languages: {}\n\n", repo_info.languages.join(", "))
+            format!(
+                "Programming Languages: {}\n\n",
+                repo_info.languages.join(", ")
+            )
         } else {
             String::new()
         };
@@ -268,10 +401,7 @@ Return your analysis in the following JSON format:
 }}
 
 Focus on creating practical, useful documentation that would help developers understand and work with this codebase."#,
-            repo_info.name,
-            readme_section,
-            languages_section,
-            files_section
+            repo_info.name, readme_section, languages_section, files_section
         )
     }
 
@@ -305,10 +435,7 @@ Structure the content with:
 - Related Information
 
 Generate detailed, accurate documentation that would be valuable for developers working with this codebase."#,
-            page.title,
-            page.description,
-            files_context,
-            config.language
+            page.title, page.description, files_context, config.language
         )
     }
 
@@ -330,28 +457,34 @@ Generate detailed, accurate documentation that would be valuable for developers 
             response
         };
 
-        let parsed: Value = serde_json::from_str(json_str)
-            .map_err(|e| WikifyError::Config {
-                message: format!("Failed to parse wiki structure JSON: {}", e),
-                source: Some(Box::new(e)),
-                context: ErrorContext::new("wiki_generator")
-                    .with_suggestion("Check LLM response format"),
-            })?;
+        let parsed: Value = serde_json::from_str(json_str).map_err(|e| WikifyError::Config {
+            message: format!("Failed to parse wiki structure JSON: {}", e),
+            source: Some(Box::new(e)),
+            context: ErrorContext::new("wiki_generator")
+                .with_suggestion("Check LLM response format"),
+        })?;
 
         // Convert parsed JSON to WikiStructure
         let mut wiki_structure = WikiStructure::new(
-            parsed["title"].as_str().unwrap_or(&repo_info.name).to_string(),
-            parsed["description"].as_str().unwrap_or("Generated wiki").to_string(),
+            parsed["title"]
+                .as_str()
+                .unwrap_or(&repo_info.name)
+                .to_string(),
+            parsed["description"]
+                .as_str()
+                .unwrap_or("Generated wiki")
+                .to_string(),
             repo_info.path.clone(),
         );
 
         // Parse pages
         if let Some(pages_array) = parsed["pages"].as_array() {
             for (index, page_obj) in pages_array.iter().enumerate() {
-                let page_id = page_obj["id"].as_str()
+                let page_id = page_obj["id"]
+                    .as_str()
                     .unwrap_or(&format!("page-{}", index + 1))
                     .to_string();
-                
+
                 let mut page = WikiPage::new(
                     page_id,
                     page_obj["title"].as_str().unwrap_or("Untitled").to_string(),
@@ -394,14 +527,21 @@ Generate detailed, accurate documentation that would be valuable for developers 
         // Parse sections
         if let Some(sections_array) = parsed["sections"].as_array() {
             for (index, section_obj) in sections_array.iter().enumerate() {
-                let section_id = section_obj["id"].as_str()
+                let section_id = section_obj["id"]
+                    .as_str()
                     .unwrap_or(&format!("section-{}", index + 1))
                     .to_string();
 
                 let mut section = WikiSection {
                     id: section_id.clone(),
-                    title: section_obj["title"].as_str().unwrap_or("Untitled Section").to_string(),
-                    description: section_obj["description"].as_str().unwrap_or("").to_string(),
+                    title: section_obj["title"]
+                        .as_str()
+                        .unwrap_or("Untitled Section")
+                        .to_string(),
+                    description: section_obj["description"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string(),
                     pages: Vec::new(),
                     subsections: Vec::new(),
                     parent_section: None,
@@ -461,15 +601,27 @@ Generate detailed, accurate documentation that would be valuable for developers 
             page.generated_at.format("%Y-%m-%d %H:%M:%S UTC"),
             page.importance,
             page.reading_time,
-            if page.file_paths.is_empty() { "None".to_string() } else { page.file_paths.join(", ") },
-            if page.tags.is_empty() { "None".to_string() } else { page.tags.join(", ") }
+            if page.file_paths.is_empty() {
+                "None".to_string()
+            } else {
+                page.file_paths.join(", ")
+            },
+            if page.tags.is_empty() {
+                "None".to_string()
+            } else {
+                page.tags.join(", ")
+            }
         ));
 
         Ok(processed_content)
     }
 
     // Helper methods for repository analysis
-    async fn get_directory_structure(&self, repo_path: &str, config: &WikiConfig) -> WikifyResult<Vec<String>> {
+    async fn get_directory_structure(
+        &self,
+        repo_path: &str,
+        config: &WikiConfig,
+    ) -> WikifyResult<Vec<String>> {
         let mut files = Vec::new();
         let walker = walkdir::WalkDir::new(repo_path)
             .max_depth(5)
@@ -477,9 +629,12 @@ Generate detailed, accurate documentation that would be valuable for developers 
             .filter_entry(|e| {
                 let path = e.path();
                 let path_str = path.to_string_lossy();
-                
+
                 // Skip excluded directories
-                !config.excluded_dirs.iter().any(|excluded| path_str.contains(excluded))
+                !config
+                    .excluded_dirs
+                    .iter()
+                    .any(|excluded| path_str.contains(excluded))
             });
 
         for entry in walker {
@@ -497,7 +652,7 @@ Generate detailed, accurate documentation that would be valuable for developers 
 
     fn detect_languages(&self, files: &[String]) -> Vec<String> {
         let mut languages = std::collections::HashSet::new();
-        
+
         for file in files {
             if let Some(extension) = std::path::Path::new(file).extension() {
                 if let Some(ext_str) = extension.to_str() {
@@ -519,23 +674,33 @@ Generate detailed, accurate documentation that would be valuable for developers 
                 }
             }
         }
-        
+
         languages.into_iter().collect()
     }
 
     fn identify_main_files(&self, files: &[String]) -> Vec<String> {
         let important_patterns = [
-            "main.", "index.", "app.", "server.", "client.",
-            "Cargo.toml", "package.json", "requirements.txt",
-            "Dockerfile", "docker-compose.yml",
-            "README", "LICENSE", "CHANGELOG"
+            "main.",
+            "index.",
+            "app.",
+            "server.",
+            "client.",
+            "Cargo.toml",
+            "package.json",
+            "requirements.txt",
+            "Dockerfile",
+            "docker-compose.yml",
+            "README",
+            "LICENSE",
+            "CHANGELOG",
         ];
 
-        files.iter()
+        files
+            .iter()
             .filter(|file| {
-                important_patterns.iter().any(|pattern| {
-                    file.to_lowercase().contains(&pattern.to_lowercase())
-                })
+                important_patterns
+                    .iter()
+                    .any(|pattern| file.to_lowercase().contains(&pattern.to_lowercase()))
             })
             .cloned()
             .collect()

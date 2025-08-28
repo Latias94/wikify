@@ -4,7 +4,6 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use wikify_core::DocumentInfo;
 
 /// Configuration for wiki generation

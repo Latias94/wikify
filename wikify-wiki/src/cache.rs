@@ -1,14 +1,14 @@
 //! Wiki cache management
-//! 
+//!
 //! This module handles caching of generated wikis to avoid regeneration.
 
 use crate::types::WikiStructure;
-use wikify_core::{WikifyResult, WikifyError, ErrorContext};
+use chrono::{DateTime, Utc};
 use serde_json;
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tracing::{info, debug, warn};
-use chrono::{DateTime, Utc};
+use tracing::{debug, info, warn};
+use wikify_core::{ErrorContext, WikifyError, WikifyResult};
 
 /// Cache manager for wiki structures
 pub struct WikiCache {
@@ -32,7 +32,7 @@ impl WikiCache {
     pub async fn store_wiki(&self, repo_path: &str, wiki: &WikiStructure) -> WikifyResult<()> {
         let cache_key = self.generate_cache_key(repo_path);
         let cache_file = self.cache_dir.join(format!("{}.json", cache_key));
-        
+
         // Ensure cache directory exists
         if let Some(parent) = cache_file.parent() {
             fs::create_dir_all(parent).await?;
@@ -47,7 +47,10 @@ impl WikiCache {
 
         fs::write(&cache_file, json_content).await?;
 
-        info!("Cached wiki for repository: {} -> {:?}", repo_path, cache_file);
+        info!(
+            "Cached wiki for repository: {} -> {:?}",
+            repo_path, cache_file
+        );
         Ok(())
     }
 
@@ -72,11 +75,12 @@ impl WikiCache {
         // Read and deserialize cache file
         let json_content = fs::read_to_string(&cache_file).await?;
 
-        let wiki_structure: WikiStructure = serde_json::from_str(&json_content).map_err(|e| WikifyError::Config {
-            message: format!("Failed to deserialize wiki structure: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_cache"),
-        })?;
+        let wiki_structure: WikiStructure =
+            serde_json::from_str(&json_content).map_err(|e| WikifyError::Config {
+                message: format!("Failed to deserialize wiki structure: {}", e),
+                source: Some(Box::new(e)),
+                context: ErrorContext::new("wiki_cache"),
+            })?;
 
         info!("Retrieved cached wiki for repository: {}", repo_path);
         Ok(Some(wiki_structure))
@@ -150,7 +154,7 @@ impl WikiCache {
 
                     if let Ok(modified) = metadata.modified() {
                         let modified_utc: DateTime<Utc> = modified.into();
-                        
+
                         if oldest_cache.is_none() || Some(modified_utc) < oldest_cache {
                             oldest_cache = Some(modified_utc);
                         }
@@ -255,7 +259,7 @@ mod tests {
     async fn test_cache_creation() {
         let temp_dir = TempDir::new().unwrap();
         let cache = WikiCache::with_cache_dir(temp_dir.path()).unwrap();
-        
+
         let stats = cache.get_cache_stats().await.unwrap();
         assert_eq!(stats.total_files, 0);
     }
@@ -266,7 +270,7 @@ mod tests {
         let key1 = cache.generate_cache_key("/path/to/repo");
         let key2 = cache.generate_cache_key("/path/to/repo");
         let key3 = cache.generate_cache_key("/different/path");
-        
+
         assert_eq!(key1, key2);
         assert_ne!(key1, key3);
     }

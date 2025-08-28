@@ -1,13 +1,13 @@
 //! Wiki export functionality
-//! 
+//!
 //! This module handles exporting wiki structures to various formats.
 
-use crate::types::{WikiStructure, WikiPage};
-use wikify_core::{WikifyResult, WikifyError, ErrorContext};
+use crate::types::{WikiPage, WikiStructure};
 use serde_json;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tokio::fs;
-use tracing::{info, debug};
+use tracing::{debug, info};
+use wikify_core::{ErrorContext, WikifyError, WikifyResult};
 
 /// Export formats supported by the wiki exporter
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,7 +41,7 @@ impl WikiExporter {
         output_path: &str,
     ) -> WikifyResult<()> {
         let output_path = Path::new(output_path);
-        
+
         match format {
             ExportFormat::Markdown => self.export_markdown(wiki, output_path).await,
             ExportFormat::Json => self.export_json(wiki, output_path).await,
@@ -55,32 +55,20 @@ impl WikiExporter {
         info!("Exporting wiki as Markdown to: {:?}", output_path);
 
         // Create output directory
-        fs::create_dir_all(output_path).await.map_err(|e| WikifyError::Io {
-            message: format!("Failed to create output directory: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_export"),
-        })?;
+        fs::create_dir_all(output_path).await?;
 
         // Create index file
         let index_content = self.generate_markdown_index(wiki);
         let index_path = output_path.join("README.md");
-        fs::write(&index_path, index_content).await.map_err(|e| WikifyError::Io {
-            message: format!("Failed to write index file: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_export"),
-        })?;
+        fs::write(&index_path, index_content).await?;
 
         // Export each page as a separate Markdown file
         for page in &wiki.pages {
             let filename = self.sanitize_filename(&format!("{}.md", page.title));
             let page_path = output_path.join(&filename);
-            
+
             let page_content = self.generate_markdown_page(page, wiki);
-            fs::write(&page_path, page_content).await.map_err(|e| WikifyError::Io {
-                message: format!("Failed to write page file {}: {}", filename, e),
-                source: Some(Box::new(e)),
-                context: ErrorContext::new("wiki_export"),
-            })?;
+            fs::write(&page_path, page_content).await?;
 
             debug!("Exported page: {} -> {:?}", page.title, page_path);
         }
@@ -88,13 +76,12 @@ impl WikiExporter {
         // Create a table of contents file
         let toc_content = self.generate_table_of_contents(wiki);
         let toc_path = output_path.join("TABLE_OF_CONTENTS.md");
-        fs::write(&toc_path, toc_content).await.map_err(|e| WikifyError::Io {
-            message: format!("Failed to write table of contents: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_export"),
-        })?;
+        fs::write(&toc_path, toc_content).await?;
 
-        info!("Successfully exported {} pages as Markdown", wiki.pages.len());
+        info!(
+            "Successfully exported {} pages as Markdown",
+            wiki.pages.len()
+        );
         Ok(())
     }
 
@@ -110,18 +97,10 @@ impl WikiExporter {
 
         // Ensure parent directory exists
         if let Some(parent) = output_path.parent() {
-            fs::create_dir_all(parent).await.map_err(|e| WikifyError::Io {
-                message: format!("Failed to create output directory: {}", e),
-                source: Some(Box::new(e)),
-                context: ErrorContext::new("wiki_export"),
-            })?;
+            fs::create_dir_all(parent).await?;
         }
 
-        fs::write(output_path, json_content).await.map_err(|e| WikifyError::Io {
-            message: format!("Failed to write JSON file: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_export"),
-        })?;
+        fs::write(output_path, json_content).await?;
 
         info!("Successfully exported wiki as JSON");
         Ok(())
@@ -132,41 +111,25 @@ impl WikiExporter {
         info!("Exporting wiki as HTML to: {:?}", output_path);
 
         // Create output directory
-        fs::create_dir_all(output_path).await.map_err(|e| WikifyError::Io {
-            message: format!("Failed to create output directory: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_export"),
-        })?;
+        fs::create_dir_all(output_path).await?;
 
         // Create CSS file
         let css_content = self.generate_css();
         let css_path = output_path.join("style.css");
-        fs::write(&css_path, css_content).await.map_err(|e| WikifyError::Io {
-            message: format!("Failed to write CSS file: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_export"),
-        })?;
+        fs::write(&css_path, css_content).await?;
 
         // Create index HTML
         let index_html = self.generate_html_index(wiki);
         let index_path = output_path.join("index.html");
-        fs::write(&index_path, index_html).await.map_err(|e| WikifyError::Io {
-            message: format!("Failed to write index HTML: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_export"),
-        })?;
+        fs::write(&index_path, index_html).await?;
 
         // Export each page as HTML
         for page in &wiki.pages {
             let filename = self.sanitize_filename(&format!("{}.html", page.title));
             let page_path = output_path.join(&filename);
-            
+
             let page_html = self.generate_html_page(page, wiki);
-            fs::write(&page_path, page_html).await.map_err(|e| WikifyError::Io {
-                message: format!("Failed to write HTML page {}: {}", filename, e),
-                source: Some(Box::new(e)),
-                context: ErrorContext::new("wiki_export"),
-            })?;
+            fs::write(&page_path, page_html).await?;
 
             debug!("Exported HTML page: {} -> {:?}", page.title, page_path);
         }
@@ -188,11 +151,7 @@ impl WikiExporter {
 
     /// Generate Markdown index content
     fn generate_markdown_index(&self, wiki: &WikiStructure) -> String {
-        let mut content = format!(
-            "# {}\n\n{}\n\n",
-            wiki.title,
-            wiki.description
-        );
+        let mut content = format!("# {}\n\n{}\n\n", wiki.title, wiki.description);
 
         content.push_str("## Table of Contents\n\n");
 
@@ -208,9 +167,7 @@ impl WikiExporter {
                     let filename = self.sanitize_filename(&format!("{}.md", page.title));
                     content.push_str(&format!(
                         "- [{}]({}) - {}\n",
-                        page.title,
-                        filename,
-                        page.description
+                        page.title, filename, page.description
                     ));
                 }
             }
@@ -218,12 +175,11 @@ impl WikiExporter {
         }
 
         // Add pages not in any section
-        let pages_in_sections: std::collections::HashSet<_> = wiki.sections
-            .iter()
-            .flat_map(|s| &s.pages)
-            .collect();
+        let pages_in_sections: std::collections::HashSet<_> =
+            wiki.sections.iter().flat_map(|s| &s.pages).collect();
 
-        let orphan_pages: Vec<_> = wiki.pages
+        let orphan_pages: Vec<_> = wiki
+            .pages
             .iter()
             .filter(|p| !pages_in_sections.contains(&p.id))
             .collect();
@@ -234,9 +190,7 @@ impl WikiExporter {
                 let filename = self.sanitize_filename(&format!("{}.md", page.title));
                 content.push_str(&format!(
                     "- [{}]({}) - {}\n",
-                    page.title,
-                    filename,
-                    page.description
+                    page.title, filename, page.description
                 ));
             }
         }
@@ -254,10 +208,7 @@ impl WikiExporter {
         let mut content = page.content.clone();
 
         // Add navigation links at the top
-        content = format!(
-            "[← Back to Index](README.md)\n\n{}",
-            content
-        );
+        content = format!("[← Back to Index](README.md)\n\n{}", content);
 
         content
     }
@@ -269,7 +220,8 @@ impl WikiExporter {
         // Sort pages by importance and title
         let mut sorted_pages = wiki.pages.clone();
         sorted_pages.sort_by(|a, b| {
-            b.importance.cmp(&a.importance)
+            b.importance
+                .cmp(&a.importance)
                 .then_with(|| a.title.cmp(&b.title))
         });
 
@@ -277,10 +229,7 @@ impl WikiExporter {
             let filename = self.sanitize_filename(&format!("{}.md", page.title));
             content.push_str(&format!(
                 "- [{}]({}) ({:?}) - {}\n",
-                page.title,
-                filename,
-                page.importance,
-                page.description
+                page.title, filename, page.importance, page.description
             ));
         }
 
@@ -331,11 +280,7 @@ impl WikiExporter {
                             <p>{}</p>
                             <span class="importance {:?}">{:?}</span>
                         </div>"#,
-                        filename,
-                        page.title,
-                        page.description,
-                        page.importance,
-                        page.importance
+                        filename, page.title, page.description, page.importance, page.importance
                     )
                 })
                 .collect::<Vec<_>>()
@@ -522,7 +467,8 @@ blockquote {
     padding-left: 20px;
     color: #666;
 }
-"#.to_string()
+"#
+        .to_string()
     }
 
     /// Simple Markdown to HTML conversion (placeholder)
@@ -571,20 +517,20 @@ impl Default for WikiExporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{WikiStructure, WikiPage, ImportanceLevel};
+    use crate::types::{ImportanceLevel, WikiPage, WikiStructure};
     use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_markdown_export() {
         let exporter = WikiExporter::new().unwrap();
         let temp_dir = TempDir::new().unwrap();
-        
+
         let mut wiki = WikiStructure::new(
             "Test Wiki".to_string(),
             "A test wiki".to_string(),
             "/test/repo".to_string(),
         );
-        
+
         let page = WikiPage {
             id: "test-page".to_string(),
             title: "Test Page".to_string(),
@@ -599,12 +545,18 @@ mod tests {
             generated_at: chrono::Utc::now(),
             source_documents: vec![],
         };
-        
+
         wiki.pages.push(page);
-        
-        let result = exporter.export(&wiki, ExportFormat::Markdown, temp_dir.path().to_str().unwrap()).await;
+
+        let result = exporter
+            .export(
+                &wiki,
+                ExportFormat::Markdown,
+                temp_dir.path().to_str().unwrap(),
+            )
+            .await;
         assert!(result.is_ok());
-        
+
         // Check that files were created
         assert!(temp_dir.path().join("README.md").exists());
         assert!(temp_dir.path().join("Test Page.md").exists());
@@ -613,9 +565,18 @@ mod tests {
     #[test]
     fn test_filename_sanitization() {
         let exporter = WikiExporter::new().unwrap();
-        
-        assert_eq!(exporter.sanitize_filename("normal-file.md"), "normal-file.md");
-        assert_eq!(exporter.sanitize_filename("file/with\\bad:chars*.md"), "file_with_bad_chars_.md");
-        assert_eq!(exporter.sanitize_filename("file<with>more|bad\"chars?.md"), "file_with_more_bad_chars_.md");
+
+        assert_eq!(
+            exporter.sanitize_filename("normal-file.md"),
+            "normal-file.md"
+        );
+        assert_eq!(
+            exporter.sanitize_filename("file/with\\bad:chars*.md"),
+            "file_with_bad_chars_.md"
+        );
+        assert_eq!(
+            exporter.sanitize_filename("file<with>more|bad\"chars?.md"),
+            "file_with_more_bad_chars_.md"
+        );
     }
 }

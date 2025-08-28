@@ -55,9 +55,9 @@ impl Default for WikifyConfig {
                 use_database: false,
             },
             rag: crate::types::RagConfig {
-                similarity_threshold: 0.5, // Lowered from 0.7 for better recall
-                top_k: 5,
-                max_context_length: 8000,
+                similarity_threshold: 0.3, // Optimized for better recall based on testing
+                top_k: 8,
+                max_context_length: 12000,
                 enable_reranking: false,
             },
             indexing: crate::types::IndexingConfig {
