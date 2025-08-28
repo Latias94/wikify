@@ -43,13 +43,13 @@
 ### 环境要求
 
 - Node.js >= 18.0.0
-- npm >= 9.0.0
+- pnpm >= 8.0.0
 
 ### 安装依赖
 
 ```bash
 cd web
-npm install
+pnpm install
 ```
 
 ### 环境配置
@@ -76,21 +76,21 @@ VITE_DEBUG_API=true
 ### 启动开发服务器
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
-应用将在 http://localhost:5173 启动。
+应用将在 http://localhost:8080 启动。
 
 ### 构建生产版本
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 ### 预览生产版本
 
 ```bash
-npm run preview
+pnpm run preview
 ```
 
 ## 📁 项目结构
@@ -246,19 +246,19 @@ function ChatComponent() {
 ### 运行单元测试
 
 ```bash
-npm run test
+pnpm run test
 ```
 
 ### 运行 E2E 测试
 
 ```bash
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 ### 测试覆盖率
 
 ```bash
-npm run test:coverage
+pnpm run test:coverage
 ```
 
 ## 📦 构建和部署
@@ -281,10 +281,10 @@ npm run test:coverage
 ```dockerfile
 FROM node:18-alpine as builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml ./
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html

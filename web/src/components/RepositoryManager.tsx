@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,8 @@ import {
   Loader2,
   Globe,
   Folder,
-  AlertCircle
+  AlertCircle,
+  Search
 } from "lucide-react";
 
 // API hooks
@@ -43,6 +44,9 @@ const RepositoryManager = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Form state
   const [formData, setFormData] = useState<AddRepositoryFormData>({
     repo_path: '',
@@ -65,6 +69,67 @@ const RepositoryManager = () => {
   // Derived state
   const isAdding = addRepositoryMutation.isPending;
   const hasError = !!errors.repositories;
+
+  // Check if modern directory picker API is supported
+  const supportsDirectoryPicker = () => {
+    return 'showDirectoryPicker' in window &&
+           typeof window.showDirectoryPicker === 'function' &&
+           window.isSecureContext; // Requires HTTPS or localhost
+  };
+
+  // Handle folder selection
+  const handleSelectFolder = async () => {
+    // Option 1: Try using modern File System Access API
+    if (supportsDirectoryPicker()) {
+      try {
+        const dirHandle = await window.showDirectoryPicker!();
+        const folderPath = dirHandle.name;
+        setFormData(prev => ({ ...prev, repo_path: folderPath }));
+        toast({
+          title: "Folder Selected",
+          description: `Selected folder: ${folderPath}`,
+        });
+        return; // Return directly after success, don't execute fallback
+      } catch (error) {
+        const errorName = (error as Error).name;
+        if (errorName === 'AbortError') {
+          // User cancelled the selection, no need to show fallback picker
+          return;
+        } else if (errorName === 'NotAllowedError') {
+          // Permission denied, show user message
+          toast({
+            title: "Permission Denied",
+            description: "Please allow file system access or use manual input",
+            variant: "destructive"
+          });
+          return;
+        }
+        // Other errors, use fallback method
+        console.warn('Directory picker failed, falling back to file input:', error);
+      }
+    }
+
+    // Option 2: Use traditional input[type="file"] with webkitdirectory
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      // Get the first file's path and extract folder path
+      const firstFile = files[0];
+      const pathParts = firstFile.webkitRelativePath.split('/');
+      const folderName = pathParts[0];
+
+      setFormData(prev => ({ ...prev, repo_path: folderName }));
+      toast({
+        title: "Folder Selected",
+        description: `Selected folder: ${folderName}`,
+      });
+    }
+  };
 
   const handleAddRepository = async () => {
     if (!formData.repo_path.trim()) {
@@ -235,20 +300,62 @@ const RepositoryManager = () => {
           </div>
 
           <div className="space-y-3">
-            <Input
-              placeholder={
-                formData.repo_type === 'remote'
-                  ? "https://github.com/user/repository"
-                  : "/path/to/your/project"
-              }
-              value={formData.repo_path}
-              onChange={(e) => setFormData(prev => ({ ...prev, repo_path: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleAddRepository();
-                }
-              }}
+            {/* Path input - different UI based on repository type */}
+            {formData.repo_type === 'remote' ? (
+              <Input
+                placeholder="https://github.com/user/repository"
+                value={formData.repo_path}
+                onChange={(e) => setFormData(prev => ({ ...prev, repo_path: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleAddRepository();
+                  }
+                }}
+              />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="/path/to/your/project"
+                    value={formData.repo_path}
+                    onChange={(e) => setFormData(prev => ({ ...prev, repo_path: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAddRepository();
+                      }
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSelectFolder}
+                    className="px-3"
+                    title="Select Folder"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  💡 Click the folder icon to select a local project folder, or enter path manually
+                  {supportsDirectoryPicker() ?
+                    " (Native folder picker supported)" :
+                    " (Compatibility mode)"
+                  }
+                </p>
+              </div>
+            )}
+
+            {/* Hidden file input for fallback folder selection */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              {...({ webkitdirectory: true } as React.InputHTMLAttributes<HTMLInputElement>)}
+              onChange={handleFileInputChange}
+              style={{ display: 'none' }}
+              multiple
             />
 
             <Input
@@ -295,7 +402,7 @@ const RepositoryManager = () => {
                 Error
               </Badge>
             )}
-            <Badge variant="secondary">{repositories.length} repositories</Badge>
+            <Badge variant="secondary">{repositories?.length || 0} repositories</Badge>
           </div>
         </div>
 
@@ -329,7 +436,7 @@ const RepositoryManager = () => {
           </Card>
         )}
 
-        {repositories.length === 0 ? (
+        {!repositories || repositories.length === 0 ? (
           <Card className="shadow-soft">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
@@ -341,7 +448,7 @@ const RepositoryManager = () => {
           </Card>
         ) : (
           <div className="grid gap-4">
-            {repositories.map((repo) => (
+            {repositories?.map((repo) => (
               <Card key={repo.id} className="shadow-soft hover:shadow-medium transition-smooth">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
