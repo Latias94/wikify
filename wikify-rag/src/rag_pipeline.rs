@@ -74,6 +74,15 @@ impl RagPipeline {
         &mut self,
         repo_path: P,
     ) -> RagResult<IndexingStats> {
+        self.index_repository_with_progress(repo_path, None).await
+    }
+
+    /// Index a repository with progress reporting
+    pub async fn index_repository_with_progress<P: AsRef<Path>>(
+        &mut self,
+        repo_path: P,
+        progress_callback: Option<Box<dyn Fn(String, f64, Option<String>) + Send + Sync>>,
+    ) -> RagResult<IndexingStats> {
         if !self.is_initialized {
             return Err(RagError::Config("Pipeline not initialized".to_string()));
         }
@@ -83,19 +92,43 @@ impl RagPipeline {
 
         info!("Starting repository indexing: {:?}", repo_path.as_ref());
 
+        // Report progress: Starting
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Starting indexing".to_string(),
+                0.0,
+                Some("Initializing pipeline".to_string()),
+            );
+        }
+
         // Step 1: Run document indexing pipeline
         let indexing_pipeline = wikify_indexing::create_deepwiki_compatible_pipeline(&repo_path)
-            .map_err(|e| RagError::Core(e))?;
+            .map_err(RagError::Core)?;
 
-        let indexing_result = indexing_pipeline
-            .run()
-            .await
-            .map_err(|e| RagError::Core(e))?;
+        // Report progress: Document processing
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Processing documents".to_string(),
+                10.0,
+                Some("Loading and chunking files".to_string()),
+            );
+        }
+
+        let indexing_result = indexing_pipeline.run().await.map_err(RagError::Core)?;
 
         info!(
             "📚 Indexed {} documents into {} nodes",
             indexing_result.stats.total_documents, indexing_result.stats.total_nodes
         );
+
+        // Report progress: Embedding generation
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Generating embeddings".to_string(),
+                70.0,
+                Some(format!("Processing {} nodes", indexing_result.nodes.len())),
+            );
+        }
 
         // Step 2: Generate embeddings for all nodes
         let mut embedding_generator = EmbeddingGenerator::new(self.config.embeddings.clone());
@@ -107,10 +140,31 @@ impl RagPipeline {
 
         info!("🔢 Generated {} embeddings", embedded_chunks.len());
 
+        // Report progress: Storing vectors
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Storing vectors".to_string(),
+                85.0,
+                Some(format!(
+                    "Adding {} chunks to vector store",
+                    embedded_chunks.len()
+                )),
+            );
+        }
+
         // Step 3: Add to vector store
         if let Some(vector_store) = &mut self.vector_store {
             vector_store.add_chunks(embedded_chunks)?;
             info!("💾 Added chunks to vector store");
+        }
+
+        // Report progress: Finalizing
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Finalizing".to_string(),
+                95.0,
+                Some("Initializing retriever".to_string()),
+            );
         }
 
         // Step 4: Initialize retriever
@@ -133,6 +187,18 @@ impl RagPipeline {
             total_chunks: self.retriever.as_ref().unwrap().vector_store().len(),
             indexing_time_ms: indexing_time.as_millis() as u64,
         };
+
+        // Report progress: Complete
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Complete".to_string(),
+                100.0,
+                Some(format!(
+                    "Indexed {} documents into {} chunks",
+                    stats.total_documents, stats.total_chunks
+                )),
+            );
+        }
 
         log_operation_success!(
             "rag_index_repository",

@@ -219,10 +219,33 @@ impl AppState {
 
     /// Initialize RAG pipeline for a repository
     pub async fn initialize_rag(&self, repo_path: &str) -> WebResult<String> {
-        use tracing::{debug, info};
+        use tracing::{debug, info, warn};
+
+        // Check if repository already exists
+        {
+            let sessions = self.sessions.read().await;
+            for (existing_session_id, existing_session) in sessions.iter() {
+                if existing_session.repository == repo_path {
+                    if existing_session.is_indexed {
+                        info!(
+                            "[{}] Repository already indexed: {} - returning existing session",
+                            existing_session_id, repo_path
+                        );
+                        return Ok(existing_session_id.clone());
+                    } else {
+                        warn!("[{}] Repository currently being indexed: {} - returning existing session",
+                              existing_session_id, repo_path);
+                        return Ok(existing_session_id.clone());
+                    }
+                }
+            }
+        }
 
         let session_id = uuid::Uuid::new_v4().to_string();
-        info!("Initializing RAG for session: {}", session_id);
+        info!(
+            "[{}] Initializing RAG for new repository: {}",
+            session_id, repo_path
+        );
 
         // Create repository session (without RAG pipeline initially)
         let mut session = RepositorySession {
@@ -270,11 +293,26 @@ impl AppState {
             .await
             .map_err(|e| WebError::RagQuery(format!("Failed to initialize RAG: {}", e)))?;
 
-        info!("RAG pipeline initialized, starting repository indexing...");
+        info!(
+            "[{}] RAG pipeline initialized, starting repository indexing for: {}",
+            session_id, repo_path
+        );
 
-        // Index the repository using the RAG pipeline
+        // Index the repository using the RAG pipeline with progress reporting
+        let session_id_clone = session_id.clone();
         let indexing_stats = rag_pipeline
-            .index_repository(repo_path)
+            .index_repository_with_progress(
+                repo_path,
+                Some(Box::new(move |stage, percentage, current_item| {
+                    info!(
+                        "[{}] {}: {:.1}% - {}",
+                        session_id_clone,
+                        stage,
+                        percentage,
+                        current_item.unwrap_or_else(|| "Processing...".to_string())
+                    );
+                })),
+            )
             .await
             .map_err(|e| WebError::RagQuery(format!("Failed to index repository: {}", e)))?;
 
