@@ -4,7 +4,7 @@ use std::path::Path;
 use wikify_core::{RepoStats, WikifyResult};
 
 /// Analyze repository and extract statistics
-pub fn analyze_repository<P: AsRef<Path>>(repo_path: P) -> WikifyResult<RepoStats> {
+pub fn analyze_repository<P: AsRef<Path>>(_repo_path: P) -> WikifyResult<RepoStats> {
     // TODO: Implement repository analysis
     Ok(RepoStats {
         total_files: 0,

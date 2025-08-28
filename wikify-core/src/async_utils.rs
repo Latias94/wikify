@@ -252,7 +252,7 @@ impl<T: Send + 'static> BatchProcessor<T> {
 
         let buffer = Arc::clone(&self.buffer);
         let processor = Arc::clone(&self.processor);
-        let batch_size = self.batch_size;
+        let _batch_size = self.batch_size;
         let flush_interval = self.flush_interval;
 
         tokio::spawn(async move {

@@ -168,7 +168,7 @@ async fn handle_wiki_socket(mut socket: WebSocket, state: AppState) {
 }
 
 /// Handle indexing WebSocket connection
-async fn handle_index_socket(mut socket: WebSocket, state: AppState) {
+async fn handle_index_socket(mut socket: WebSocket, _state: AppState) {
     info!("New indexing WebSocket connection established");
 
     // Send periodic progress updates
@@ -224,7 +224,9 @@ async fn handle_chat_message(
             context: _,
         } => {
             // Update session activity
-            state.update_session_activity(&session_id).await;
+            if let Err(e) = state.update_session_activity(&session_id).await {
+                warn!("Failed to update session activity: {}", e);
+            }
 
             // Execute RAG query
             let response = match state.query_rag(&session_id, &question).await {
@@ -289,9 +291,12 @@ async fn handle_wiki_message(
     let message: WsMessage = serde_json::from_str(text)?;
 
     match message {
-        WsMessage::WikiGenerate { session_id, config } => {
+        WsMessage::WikiGenerate {
+            session_id,
+            config: _,
+        } => {
             // Get session info
-            let session = match state.get_session(&session_id).await {
+            let _session = match state.get_session(&session_id).await {
                 Some(session) => session,
                 None => {
                     let error = WsMessage::Error {

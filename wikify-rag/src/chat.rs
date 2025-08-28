@@ -4,15 +4,13 @@
 //! conversation context and supports session management.
 
 use crate::rag_pipeline::RagPipeline;
-use crate::storage::{ChatSessionManager, PersistentVectorStore};
-use crate::token_counter::{count_tokens, get_context_limit};
+use crate::storage::ChatSessionManager;
+use crate::token_counter::count_tokens;
 use crate::types::{
-    ChatConfig, ChatMessage, ChatSession, RagConfig, RagError, RagQuery, RagResponse, RagResult,
-    StorageConfig,
+    ChatConfig, ChatMessage, RagConfig, RagError, RagQuery, RagResponse, RagResult, StorageConfig,
 };
-use chrono::Utc;
 use std::path::Path;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Interactive chat system with persistent sessions
 pub struct ChatSystem {
@@ -34,7 +32,7 @@ impl ChatSystem {
         repository: String,
         rag_config: RagConfig,
         chat_config: ChatConfig,
-        storage_config: StorageConfig,
+        _storage_config: StorageConfig,
     ) -> RagResult<Self> {
         info!("Initializing chat system for repository: {}", repository);
 

@@ -4,15 +4,14 @@
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tracing::{error, info};
+use tracing::info;
 use wikify_core::{
     init_logging, log_operation_error, log_operation_start, log_operation_success, LoggingConfig,
     WikifyConfig, WikifyError, WikifyResult,
 };
 use wikify_indexing::create_deepwiki_compatible_pipeline;
 use wikify_rag::{
-    create_auto_chat_system, create_auto_rag_pipeline, create_simple_query, ChatInterface,
-    LlmConfig, WikifyLlmClient,
+    create_auto_chat_system, create_simple_query, ChatInterface, LlmConfig, WikifyLlmClient,
 };
 use wikify_repo::RepositoryProcessor;
 
@@ -431,8 +430,8 @@ async fn handle_ask(
     top_k: usize,
     max_context: usize,
     rerank: bool,
-    chunk_size: usize,
-    chunk_overlap: usize,
+    _chunk_size: usize,
+    _chunk_overlap: usize,
     config: &WikifyConfig,
 ) -> WikifyResult<()> {
     log_operation_start!("ask_question");
@@ -587,11 +586,11 @@ async fn handle_ask(
 }
 
 async fn handle_research(
-    repo: String,
+    _repo: String,
     topic: String,
     max_iterations: usize,
-    token: Option<String>,
-    config: &WikifyConfig,
+    _token: Option<String>,
+    _config: &WikifyConfig,
 ) -> WikifyResult<()> {
     info!("Starting deep research on topic: {}", topic);
 

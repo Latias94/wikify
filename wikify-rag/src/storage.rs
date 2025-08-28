@@ -5,8 +5,7 @@
 
 use crate::embeddings::VectorStore;
 use crate::types::{ChatMessage, ChatSession, EmbeddedChunk, RagError, RagResult, StorageConfig};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};

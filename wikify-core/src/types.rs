@@ -15,7 +15,7 @@ pub struct RepoInfo {
 }
 
 /// Supported repository types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RepoType {
     GitHub,
     GitLab,

@@ -17,3 +17,7 @@ chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
 fastrand = { workspace = true }
 toml = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"

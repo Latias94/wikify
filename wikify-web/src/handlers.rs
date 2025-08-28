@@ -228,7 +228,9 @@ pub async fn chat_query(
     info!("Processing chat query for session: {}", request.session_id);
 
     // Update session activity
-    state.update_session_activity(&request.session_id).await;
+    if let Err(e) = state.update_session_activity(&request.session_id).await {
+        tracing::warn!("Failed to update session activity: {}", e);
+    }
 
     // Execute RAG query
     match state
