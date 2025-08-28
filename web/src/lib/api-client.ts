@@ -11,7 +11,7 @@ import axios, {
 } from "axios";
 import {
   Repository,
-  AddRepositoryRequest,
+  InitializeRepositoryRequest,
   InitializeRepositoryResponse,
   RepositoriesResponse,
   Session,
@@ -276,10 +276,10 @@ export class ApiClient {
   }
 
   /**
-   * 添加新仓库
+   * 初始化仓库
    */
-  async addRepository(
-    data: AddRepositoryRequest
+  async initializeRepository(
+    data: InitializeRepositoryRequest
   ): Promise<InitializeRepositoryResponse> {
     return this.request<InitializeRepositoryResponse>({
       method: "POST",

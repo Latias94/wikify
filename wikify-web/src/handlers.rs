@@ -10,82 +10,114 @@ use axum::{
     Json as JsonExtractor,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Health check response
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct HealthResponse {
+    #[schema(example = "healthy")]
     status: String,
     timestamp: chrono::DateTime<chrono::Utc>,
+    #[schema(example = "0.1.0")]
     version: String,
 }
 
 /// Repository initialization request
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct InitializeRepositoryRequest {
+    #[schema(example = "https://github.com/user/repo")]
     pub repository: String,
+    #[schema(example = "github")]
     pub repo_type: Option<String>, // "github", "local", etc.
     pub access_token: Option<String>,
 }
 
 /// Repository initialization response
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct InitializeRepositoryResponse {
+    #[schema(example = "uuid-string")]
     pub session_id: String,
+    #[schema(example = "success")]
     pub status: String,
+    #[schema(example = "Repository initialized successfully")]
     pub message: String,
 }
 
 /// Chat query request
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ChatQueryRequest {
+    #[schema(example = "uuid-string")]
     pub session_id: String,
+    #[schema(example = "How does the authentication work?")]
     pub question: String,
     pub context: Option<String>,
 }
 
 /// Chat query response
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ChatQueryResponse {
     pub answer: String,
     pub sources: Vec<SourceDocument>,
+    #[schema(example = "uuid-string")]
     pub session_id: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 /// Source document information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SourceDocument {
+    #[schema(example = "src/main.rs")]
     pub file_path: String,
     pub content: String,
+    #[schema(example = 0.85)]
     pub similarity_score: f64,
 }
 
 /// Wiki generation request
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct GenerateWikiRequest {
+    #[schema(example = "uuid-string")]
     pub session_id: String,
     pub config: WikiGenerationConfig,
 }
 
 /// Wiki generation configuration
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct WikiGenerationConfig {
+    #[schema(example = "en")]
     pub language: Option<String>,
+    #[schema(example = 50)]
     pub max_pages: Option<usize>,
+    #[schema(example = true)]
     pub include_diagrams: Option<bool>,
+    #[schema(example = false)]
     pub comprehensive_view: Option<bool>,
 }
 
 /// Wiki generation response
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct GenerateWikiResponse {
+    #[schema(example = "uuid-string")]
     pub wiki_id: String,
+    #[schema(example = "success")]
     pub status: String,
+    #[schema(example = 25)]
     pub pages_count: usize,
+    #[schema(example = 8)]
     pub sections_count: usize,
 }
 
 /// Health check endpoint
+#[utoipa::path(
+    get,
+    path = "/api/health",
+    tag = "Health",
+    summary = "Health check",
+    description = "Check the server health status",
+    responses(
+        (status = 200, description = "Server is healthy", body = HealthResponse)
+    )
+)]
 pub async fn health_check() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "healthy".to_string(),
@@ -95,6 +127,18 @@ pub async fn health_check() -> Json<HealthResponse> {
 }
 
 /// Initialize repository for processing
+#[utoipa::path(
+    post,
+    path = "/api/repositories",
+    tag = "Repository",
+    summary = "Initialize repository",
+    description = "Initialize a repository for processing and create a new session",
+    request_body = InitializeRepositoryRequest,
+    responses(
+        (status = 200, description = "Repository initialized successfully", body = InitializeRepositoryResponse),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn initialize_repository(
     State(state): State<AppState>,
     JsonExtractor(request): JsonExtractor<InitializeRepositoryRequest>,
@@ -113,6 +157,20 @@ pub async fn initialize_repository(
 }
 
 /// Get repository information
+#[utoipa::path(
+    get,
+    path = "/api/repositories/{session_id}",
+    tag = "Repository",
+    summary = "Get repository information",
+    description = "Get information about a repository session",
+    params(
+        ("session_id" = String, Path, description = "Session ID")
+    ),
+    responses(
+        (status = 200, description = "Repository information retrieved successfully"),
+        (status = 404, description = "Session not found")
+    )
+)]
 pub async fn get_repository_info(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
@@ -136,6 +194,17 @@ pub async fn get_repository_info(
 
 /// Get all repositories (SQLite feature only)
 #[cfg(feature = "sqlite")]
+#[utoipa::path(
+    get,
+    path = "/api/repositories",
+    tag = "Repository",
+    summary = "Get all repositories",
+    description = "Get a list of all repositories (requires SQLite feature)",
+    responses(
+        (status = 200, description = "Repositories retrieved successfully"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_repositories(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -179,6 +248,17 @@ pub async fn get_repositories(
 
 /// Get all sessions (SQLite feature only)
 #[cfg(feature = "sqlite")]
+#[utoipa::path(
+    get,
+    path = "/api/sessions",
+    tag = "Session",
+    summary = "Get all sessions",
+    description = "Get a list of all active sessions (requires SQLite feature)",
+    responses(
+        (status = 200, description = "Sessions retrieved successfully"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_sessions(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -219,6 +299,17 @@ pub async fn get_sessions(
 }
 
 /// Handle chat queries
+#[utoipa::path(
+    post,
+    path = "/api/chat",
+    tag = "Chat",
+    summary = "Ask a question",
+    description = "Ask a question about the repository using RAG (Retrieval-Augmented Generation)",
+    request_body = ChatQueryRequest,
+    responses(
+        (status = 200, description = "Question answered successfully", body = ChatQueryResponse)
+    )
+)]
 pub async fn chat_query(
     State(state): State<AppState>,
     JsonExtractor(request): JsonExtractor<ChatQueryRequest>,
@@ -318,6 +409,20 @@ pub async fn chat_query(
 
 /// Get query history (SQLite feature only)
 #[cfg(feature = "sqlite")]
+#[utoipa::path(
+    get,
+    path = "/api/history/{repository_id}",
+    tag = "Chat",
+    summary = "Get query history",
+    description = "Get chat history for a specific repository (requires SQLite feature)",
+    params(
+        ("repository_id" = String, Path, description = "Repository ID")
+    ),
+    responses(
+        (status = 200, description = "Query history retrieved successfully"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_query_history(
     State(state): State<AppState>,
     Path(_repository_id): Path<String>,
@@ -360,6 +465,18 @@ pub async fn get_query_history(
 }
 
 /// Handle streaming chat queries (placeholder)
+#[utoipa::path(
+    post,
+    path = "/api/chat/stream",
+    tag = "Chat",
+    summary = "Stream chat response",
+    description = "Ask a question and receive streaming response (not yet implemented)",
+    request_body = ChatQueryRequest,
+    responses(
+        (status = 200, description = "Streaming response started"),
+        (status = 501, description = "Not implemented")
+    )
+)]
 pub async fn chat_stream(
     State(_state): State<AppState>,
     JsonExtractor(_request): JsonExtractor<ChatQueryRequest>,
@@ -371,6 +488,19 @@ pub async fn chat_stream(
 }
 
 /// Generate wiki for repository
+#[utoipa::path(
+    post,
+    path = "/api/wiki/generate",
+    tag = "Wiki",
+    summary = "Generate wiki documentation",
+    description = "Generate comprehensive wiki documentation for a repository",
+    request_body = GenerateWikiRequest,
+    responses(
+        (status = 200, description = "Wiki generated successfully", body = GenerateWikiResponse),
+        (status = 404, description = "Session not found"),
+        (status = 500, description = "Wiki generation failed")
+    )
+)]
 pub async fn generate_wiki(
     State(state): State<AppState>,
     JsonExtractor(request): JsonExtractor<GenerateWikiRequest>,
@@ -415,6 +545,20 @@ pub async fn generate_wiki(
 }
 
 /// Get generated wiki
+#[utoipa::path(
+    get,
+    path = "/api/wiki/{session_id}",
+    tag = "Wiki",
+    summary = "Get generated wiki",
+    description = "Retrieve the generated wiki documentation for a session",
+    params(
+        ("session_id" = String, Path, description = "Session ID")
+    ),
+    responses(
+        (status = 200, description = "Wiki retrieved successfully"),
+        (status = 404, description = "Wiki not found")
+    )
+)]
 pub async fn get_wiki(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
@@ -433,6 +577,20 @@ pub async fn get_wiki(
 }
 
 /// Export wiki in various formats
+#[utoipa::path(
+    post,
+    path = "/api/wiki/{session_id}/export",
+    tag = "Wiki",
+    summary = "Export wiki",
+    description = "Export generated wiki in various formats (not yet implemented)",
+    params(
+        ("session_id" = String, Path, description = "Session ID")
+    ),
+    responses(
+        (status = 200, description = "Wiki exported successfully"),
+        (status = 501, description = "Not implemented")
+    )
+)]
 pub async fn export_wiki(
     State(_state): State<AppState>,
     Path(_session_id): Path<String>,
@@ -467,6 +625,16 @@ pub async fn get_file_content(
 }
 
 /// Get server configuration
+#[utoipa::path(
+    get,
+    path = "/api/config",
+    tag = "Configuration",
+    summary = "Get server configuration",
+    description = "Get current server configuration",
+    responses(
+        (status = 200, description = "Configuration retrieved successfully")
+    )
+)]
 pub async fn get_config(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "host": state.config.host,

@@ -2,12 +2,15 @@
 //!
 //! This module defines all the routes for the web application.
 
-use crate::{handlers, websocket, AppState};
+use crate::{handlers, openapi, websocket, AppState};
 use axum::{
+    response::Json,
     routing::{get, post},
     Router,
 };
 use tower_http::services::ServeDir;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 /// Create API routes
 pub fn api_routes() -> Router<AppState> {
@@ -61,11 +64,32 @@ pub fn static_routes() -> Router<AppState> {
     Router::new().nest_service("/assets", ServeDir::new("wikify-web/static"))
 }
 
+/// Create OpenAPI documentation routes
+pub fn openapi_routes() -> Router<AppState> {
+    Router::new()
+        // OpenAPI specification endpoints
+        .route("/openapi.json", get(get_openapi_json))
+        .route("/openapi.yaml", get(get_openapi_yaml))
+        // Swagger UI
+        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()))
+}
+
+/// Get OpenAPI specification as JSON
+async fn get_openapi_json() -> Json<utoipa::openapi::OpenApi> {
+    Json(openapi::ApiDoc::openapi())
+}
+
+/// Get OpenAPI specification as YAML
+async fn get_openapi_yaml() -> String {
+    openapi::get_openapi_yaml()
+}
+
 /// Create all routes combined
 pub fn all_routes() -> Router<AppState> {
     Router::new()
         .nest("/api", api_routes())
         .nest("/ws", websocket_routes())
+        .nest("/api-docs", openapi_routes())
         .merge(static_routes())
         .fallback(handlers::spa_fallback)
 }
@@ -86,6 +110,24 @@ mod tests {
             .oneshot(
                 axum::http::Request::builder()
                     .uri("/health")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_openapi_json_route() {
+        let state = AppState::new(WebConfig::default()).await.unwrap();
+        let app = openapi_routes().with_state(state);
+
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/openapi.json")
                     .body(axum::body::Body::empty())
                     .unwrap(),
             )

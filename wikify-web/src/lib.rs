@@ -4,6 +4,7 @@
 
 pub mod handlers;
 pub mod middleware;
+pub mod openapi;
 pub mod routes;
 pub mod server;
 pub mod state;
@@ -44,6 +45,8 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api", routes::api_routes())
         // WebSocket routes
         .nest("/ws", routes::websocket_routes())
+        // OpenAPI documentation routes
+        .nest("/api-docs", routes::openapi_routes())
         // Static file serving
         .nest("/static", routes::static_routes())
         // Frontend routes (SPA fallback)

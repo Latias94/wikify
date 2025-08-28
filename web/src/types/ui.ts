@@ -2,24 +2,29 @@
  * UI 组件相关类型定义
  */
 
-import { Repository, Session, ChatMessage as ApiChatMessage, SourceDocument } from './api';
+import {
+  Repository,
+  Session,
+  ChatMessage as ApiChatMessage,
+  SourceDocument,
+} from "./api";
 
 // ============================================================================
 // 主题相关类型
 // ============================================================================
 
-export type Theme = 'light' | 'dark' | 'system';
+export type Theme = "light" | "dark" | "system";
 
 export interface ThemeConfig {
   theme: Theme;
-  systemTheme?: 'light' | 'dark';
+  systemTheme?: "light" | "dark";
 }
 
 // ============================================================================
 // 通知相关类型
 // ============================================================================
 
-export type NotificationType = 'success' | 'error' | 'warning' | 'info';
+export type NotificationType = "success" | "error" | "warning" | "info";
 
 export interface Notification {
   id: string;
@@ -59,11 +64,9 @@ export interface RepositoryCardProps {
   onDelete: (repository: Repository) => void;
 }
 
-export interface AddRepositoryFormData {
-  repo_path: string;
-  repo_type: 'local' | 'remote';
-  name?: string;
-  description?: string;
+export interface InitializeRepositoryFormData {
+  repository: string; // 仓库URL或本地路径
+  repo_type: "local" | "remote";
 }
 
 export interface RepositoryStats {
@@ -77,7 +80,7 @@ export interface RepositoryStats {
 // 聊天界面相关类型
 // ============================================================================
 
-export interface UIChatMessage extends Omit<ApiChatMessage, 'timestamp'> {
+export interface UIChatMessage extends Omit<ApiChatMessage, "timestamp"> {
   timestamp: Date;
   isStreaming?: boolean;
   isError?: boolean;
@@ -144,7 +147,7 @@ export interface WikiViewerProps {
   wikiId: string;
   title: string;
   content: string;
-  onExport: (format: 'markdown' | 'html' | 'pdf') => void;
+  onExport: (format: "markdown" | "html" | "pdf") => void;
 }
 
 // ============================================================================
@@ -276,7 +279,7 @@ export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  size?: "sm" | "md" | "lg" | "xl" | "full";
   closeOnOverlayClick?: boolean;
   closeOnEscape?: boolean;
 }
@@ -285,7 +288,7 @@ export interface ConfirmDialogProps extends ModalProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: 'default' | 'destructive';
+  variant?: "default" | "destructive";
   onConfirm: () => void;
 }
 
@@ -315,7 +318,7 @@ export interface TableProps<T = any> {
     selectedRowKeys: string[];
     onChange: (selectedRowKeys: string[], selectedRows: T[]) => void;
   };
-  onSort?: (key: string, direction: 'asc' | 'desc') => void;
+  onSort?: (key: string, direction: "asc" | "desc") => void;
 }
 
 // ============================================================================

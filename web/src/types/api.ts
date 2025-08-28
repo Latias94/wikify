@@ -7,9 +7,14 @@
 // 基础类型
 // ============================================================================
 
-export type RepoType = 'local' | 'git' | 'github';
-export type RepositoryStatus = 'created' | 'indexing' | 'indexed' | 'failed' | 'archived';
-export type MessageRole = 'user' | 'assistant' | 'system';
+export type RepoType = "local" | "git" | "github";
+export type RepositoryStatus =
+  | "created"
+  | "indexing"
+  | "indexed"
+  | "failed"
+  | "archived";
+export type MessageRole = "user" | "assistant" | "system";
 
 // ============================================================================
 // 仓库相关类型
@@ -31,13 +36,12 @@ export interface Repository {
 }
 
 /**
- * 添加仓库请求
+ * 初始化仓库请求 - 与后端 InitializeRepositoryRequest 对齐
  */
-export interface AddRepositoryRequest {
-  repo_path: string;
-  repo_type: RepoType;
-  name?: string;
-  description?: string;
+export interface InitializeRepositoryRequest {
+  repository: string; // 仓库URL或本地路径
+  repo_type?: string | null; // "github", "local", etc.
+  access_token?: string | null;
 }
 
 /**
@@ -212,7 +216,7 @@ export interface GenerateWikiResponse {
 export interface FileTreeNode {
   name: string;
   path: string;
-  type: 'file' | 'directory';
+  type: "file" | "directory";
   size?: number;
   children?: FileTreeNode[];
 }
@@ -235,7 +239,7 @@ export interface FileContentResponse {
  * 健康检查响应
  */
 export interface HealthResponse {
-  status: 'healthy' | 'unhealthy';
+  status: "healthy" | "unhealthy";
   timestamp: string;
   version: string;
 }
@@ -293,7 +297,7 @@ export interface PaginationParams {
   page?: number;
   limit?: number;
   sort?: string;
-  order?: 'asc' | 'desc';
+  order?: "asc" | "desc";
 }
 
 /**

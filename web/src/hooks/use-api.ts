@@ -13,7 +13,7 @@ import { useAppStore } from "@/store/app-store";
 import { useToast } from "@/hooks/use-toast";
 import {
   Repository,
-  AddRepositoryRequest,
+  InitializeRepositoryRequest,
   Session,
   ChatQueryRequest,
   GenerateWikiRequest,
@@ -147,16 +147,17 @@ export function useRepositories() {
 }
 
 /**
- * 添加仓库
+ * 初始化仓库
  */
-export function useAddRepository() {
+export function useInitializeRepository() {
   const queryClient = useQueryClient();
   const addRepository = useAppStore((state) => state.addRepository);
   const { toast } = useToast();
 
   return useMutation(
     createMutationConfig(
-      (data: AddRepositoryRequest) => apiClient.addRepository(data),
+      (data: InitializeRepositoryRequest) =>
+        apiClient.initializeRepository(data),
       {
         onSuccess: (response, variables) => {
           // 刷新仓库列表

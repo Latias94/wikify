@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
-  FolderOpen,
   Github,
   Plus,
   MessageCircle,
@@ -17,14 +16,13 @@ import {
   Loader2,
   Globe,
   Folder,
-  AlertCircle,
-  Search
+  AlertCircle
 } from "lucide-react";
 
 // API hooks
 import {
   useRepositories,
-  useAddRepository,
+  useInitializeRepository,
   useDeleteRepository,
   useCreateSession
 } from "@/hooks/use-api";
@@ -32,107 +30,45 @@ import {
 // Store hooks
 import {
   useRepositories as useRepositoriesStore,
-  useLoadingState,
   useErrors
 } from "@/store/app-store";
 
 // Types
-import { Repository, AddRepositoryRequest } from "@/types/api";
-import { AddRepositoryFormData } from "@/types/ui";
+import { Repository, InitializeRepositoryRequest } from "@/types/api";
+import { InitializeRepositoryFormData } from "@/types/ui";
 
 const RepositoryManager = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Refs
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Form state
-  const [formData, setFormData] = useState<AddRepositoryFormData>({
-    repo_path: '',
+  const [formData, setFormData] = useState<InitializeRepositoryFormData>({
+    repository: '',
     repo_type: 'remote',
-    name: '',
-    description: '',
   });
 
   // API hooks
-  const { data: repositoriesData, isLoading: isLoadingRepos, refetch } = useRepositories();
-  const addRepositoryMutation = useAddRepository();
+  const { isLoading: isLoadingRepos, refetch } = useRepositories();
+  const initializeRepositoryMutation = useInitializeRepository();
   const deleteRepositoryMutation = useDeleteRepository();
   const createSessionMutation = useCreateSession();
 
   // Store state
   const repositories = useRepositoriesStore();
-  const loadingState = useLoadingState();
   const errors = useErrors();
 
   // Derived state
-  const isAdding = addRepositoryMutation.isPending;
+  const isAdding = initializeRepositoryMutation.isPending;
   const hasError = !!errors.repositories;
 
-  // Check if modern directory picker API is supported
-  const supportsDirectoryPicker = () => {
-    return 'showDirectoryPicker' in window &&
-           typeof window.showDirectoryPicker === 'function' &&
-           window.isSecureContext; // Requires HTTPS or localhost
-  };
 
-  // Handle folder selection
-  const handleSelectFolder = async () => {
-    // Option 1: Try using modern File System Access API
-    if (supportsDirectoryPicker()) {
-      try {
-        const dirHandle = await window.showDirectoryPicker!();
-        const folderPath = dirHandle.name;
-        setFormData(prev => ({ ...prev, repo_path: folderPath }));
-        toast({
-          title: "Folder Selected",
-          description: `Selected folder: ${folderPath}`,
-        });
-        return; // Return directly after success, don't execute fallback
-      } catch (error) {
-        const errorName = (error as Error).name;
-        if (errorName === 'AbortError') {
-          // User cancelled the selection, no need to show fallback picker
-          return;
-        } else if (errorName === 'NotAllowedError') {
-          // Permission denied, show user message
-          toast({
-            title: "Permission Denied",
-            description: "Please allow file system access or use manual input",
-            variant: "destructive"
-          });
-          return;
-        }
-        // Other errors, use fallback method
-        console.warn('Directory picker failed, falling back to file input:', error);
-      }
-    }
 
-    // Option 2: Use traditional input[type="file"] with webkitdirectory
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
 
-  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      // Get the first file's path and extract folder path
-      const firstFile = files[0];
-      const pathParts = firstFile.webkitRelativePath.split('/');
-      const folderName = pathParts[0];
-
-      setFormData(prev => ({ ...prev, repo_path: folderName }));
-      toast({
-        title: "Folder Selected",
-        description: `Selected folder: ${folderName}`,
-      });
-    }
-  };
 
   const handleAddRepository = async () => {
-    if (!formData.repo_path.trim()) {
+    if (!formData.repository.trim()) {
       toast({
         title: "Path Required",
         description: "Please enter a repository URL or path",
@@ -141,22 +77,18 @@ const RepositoryManager = () => {
       return;
     }
 
-    const requestData: AddRepositoryRequest = {
-      repo_path: formData.repo_path,
+    const requestData: InitializeRepositoryRequest = {
+      repository: formData.repository,
       repo_type: formData.repo_type === 'remote' ? 'github' : 'local',
-      name: formData.name || undefined,
-      description: formData.description || undefined,
     };
 
     try {
-      await addRepositoryMutation.mutateAsync(requestData);
+      await initializeRepositoryMutation.mutateAsync(requestData);
 
       // Reset form
       setFormData({
-        repo_path: '',
+        repository: '',
         repo_type: 'remote',
-        name: '',
-        description: '',
       });
 
       // Refresh repositories list
@@ -199,7 +131,7 @@ const RepositoryManager = () => {
     }
   };
 
-  const handleRefreshRepository = async (repository: Repository) => {
+  const handleRefreshRepository = async (_repository: Repository) => {
     // TODO: Implement repository refresh/re-indexing
     toast({
       title: "Refresh Repository",
@@ -259,7 +191,7 @@ const RepositoryManager = () => {
       {/* Header */}
       <div className="text-center space-y-4">
         <div className="flex items-center justify-center gap-3">
-          <FolderOpen className="h-8 w-8 text-primary" />
+          <Folder className="h-8 w-8 text-primary" />
           <h1 className="text-3xl font-bold text-foreground">Wikify</h1>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
@@ -304,8 +236,8 @@ const RepositoryManager = () => {
             {formData.repo_type === 'remote' ? (
               <Input
                 placeholder="https://github.com/user/repository"
-                value={formData.repo_path}
-                onChange={(e) => setFormData(prev => ({ ...prev, repo_path: e.target.value }))}
+                value={formData.repository}
+                onChange={(e) => setFormData(prev => ({ ...prev, repository: e.target.value }))}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -315,75 +247,39 @@ const RepositoryManager = () => {
               />
             ) : (
               <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="/path/to/your/project"
-                    value={formData.repo_path}
-                    onChange={(e) => setFormData(prev => ({ ...prev, repo_path: e.target.value }))}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleAddRepository();
-                      }
-                    }}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleSelectFolder}
-                    className="px-3"
-                    title="Select Folder"
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Input
+                  placeholder="/path/to/your/project"
+                  value={formData.repository}
+                  onChange={(e) => setFormData(prev => ({ ...prev, repository: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAddRepository();
+                    }
+                  }}
+                />
                 <p className="text-xs text-muted-foreground">
-                  💡 Click the folder icon to select a local project folder, or enter path manually
-                  {supportsDirectoryPicker() ?
-                    " (Native folder picker supported)" :
-                    " (Compatibility mode)"
-                  }
+                  💡 Enter the full path to your local project folder
                 </p>
               </div>
             )}
 
-            {/* Hidden file input for fallback folder selection */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              {...({ webkitdirectory: true } as React.InputHTMLAttributes<HTMLInputElement>)}
-              onChange={handleFileInputChange}
-              style={{ display: 'none' }}
-              multiple
-            />
 
-            <Input
-              placeholder="Repository name (optional)"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            />
-
-            <Input
-              placeholder="Description (optional)"
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            />
 
             <Button
               onClick={handleAddRepository}
-              disabled={isAdding || !formData.repo_path.trim()}
+              disabled={isAdding || !formData.repository.trim()}
               className="w-full"
             >
               {isAdding ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Adding Repository...
+                  Initializing Repository...
                 </>
               ) : (
                 <>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Repository
+                  Initialize Repository
                 </>
               )}
             </Button>
@@ -439,7 +335,7 @@ const RepositoryManager = () => {
         {!repositories || repositories.length === 0 ? (
           <Card className="shadow-soft">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
+              <Folder className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">No repositories yet</h3>
               <p className="text-muted-foreground mb-4">
                 Add your first repository to start exploring your codebase with AI

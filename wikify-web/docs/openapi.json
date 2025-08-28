@@ -1,0 +1,614 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Wikify Web API",
+    "description": "AI-powered repository documentation and chat system",
+    "contact": {
+      "name": "Wikify Team",
+      "email": "support@wikify.dev"
+    },
+    "license": {
+      "name": "MIT OR Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development server"
+    },
+    {
+      "url": "https://api.wikify.dev",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/api/chat": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Ask a question",
+        "description": "Ask a question about the repository using RAG (Retrieval-Augmented Generation)",
+        "operationId": "chat_query",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Question answered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatQueryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/stream": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Stream chat response",
+        "description": "Ask a question and receive streaming response (not yet implemented)",
+        "operationId": "chat_stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming response started"
+          },
+          "501": {
+            "description": "Not implemented"
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Get server configuration",
+        "description": "Get current server configuration",
+        "operationId": "get_config",
+        "responses": {
+          "200": {
+            "description": "Configuration retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "Check the server health status",
+        "operationId": "health_check",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/{repository_id}": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Get query history",
+        "description": "Get chat history for a specific repository (requires SQLite feature)",
+        "operationId": "get_query_history",
+        "parameters": [
+          {
+            "name": "repository_id",
+            "in": "path",
+            "description": "Repository ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Query history retrieved successfully"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/repositories": {
+      "get": {
+        "tags": [
+          "Repository"
+        ],
+        "summary": "Get all repositories",
+        "description": "Get a list of all repositories (requires SQLite feature)",
+        "operationId": "get_repositories",
+        "responses": {
+          "200": {
+            "description": "Repositories retrieved successfully"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Repository"
+        ],
+        "summary": "Initialize repository",
+        "description": "Initialize a repository for processing and create a new session",
+        "operationId": "initialize_repository",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializeRepositoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Repository initialized successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitializeRepositoryResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/repositories/{session_id}": {
+      "get": {
+        "tags": [
+          "Repository"
+        ],
+        "summary": "Get repository information",
+        "description": "Get information about a repository session",
+        "operationId": "get_repository_info",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Repository information retrieved successfully"
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Get all sessions",
+        "description": "Get a list of all active sessions (requires SQLite feature)",
+        "operationId": "get_sessions",
+        "responses": {
+          "200": {
+            "description": "Sessions retrieved successfully"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/wiki/generate": {
+      "post": {
+        "tags": [
+          "Wiki"
+        ],
+        "summary": "Generate wiki documentation",
+        "description": "Generate comprehensive wiki documentation for a repository",
+        "operationId": "generate_wiki",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateWikiRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Wiki generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateWikiResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Wiki generation failed"
+          }
+        }
+      }
+    },
+    "/api/wiki/{session_id}": {
+      "get": {
+        "tags": [
+          "Wiki"
+        ],
+        "summary": "Get generated wiki",
+        "description": "Retrieve the generated wiki documentation for a session",
+        "operationId": "get_wiki",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wiki retrieved successfully"
+          },
+          "404": {
+            "description": "Wiki not found"
+          }
+        }
+      }
+    },
+    "/api/wiki/{session_id}/export": {
+      "post": {
+        "tags": [
+          "Wiki"
+        ],
+        "summary": "Export wiki",
+        "description": "Export generated wiki in various formats (not yet implemented)",
+        "operationId": "export_wiki",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wiki exported successfully"
+          },
+          "501": {
+            "description": "Not implemented"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatQueryRequest": {
+        "type": "object",
+        "description": "Chat query request",
+        "required": [
+          "session_id",
+          "question"
+        ],
+        "properties": {
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "question": {
+            "type": "string",
+            "example": "How does the authentication work?"
+          },
+          "session_id": {
+            "type": "string",
+            "example": "uuid-string"
+          }
+        }
+      },
+      "ChatQueryResponse": {
+        "type": "object",
+        "description": "Chat query response",
+        "required": [
+          "answer",
+          "sources",
+          "session_id",
+          "timestamp"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "example": "uuid-string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceDocument"
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GenerateWikiRequest": {
+        "type": "object",
+        "description": "Wiki generation request",
+        "required": [
+          "session_id",
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/WikiGenerationConfig"
+          },
+          "session_id": {
+            "type": "string",
+            "example": "uuid-string"
+          }
+        }
+      },
+      "GenerateWikiResponse": {
+        "type": "object",
+        "description": "Wiki generation response",
+        "required": [
+          "wiki_id",
+          "status",
+          "pages_count",
+          "sections_count"
+        ],
+        "properties": {
+          "pages_count": {
+            "type": "integer",
+            "example": 25,
+            "minimum": 0
+          },
+          "sections_count": {
+            "type": "integer",
+            "example": 8,
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "wiki_id": {
+            "type": "string",
+            "example": "uuid-string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "description": "Health check response",
+        "required": [
+          "status",
+          "timestamp",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "healthy"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          }
+        }
+      },
+      "InitializeRepositoryRequest": {
+        "type": "object",
+        "description": "Repository initialization request",
+        "required": [
+          "repository"
+        ],
+        "properties": {
+          "access_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repo_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "github"
+          },
+          "repository": {
+            "type": "string",
+            "example": "https://github.com/user/repo"
+          }
+        }
+      },
+      "InitializeRepositoryResponse": {
+        "type": "object",
+        "description": "Repository initialization response",
+        "required": [
+          "session_id",
+          "status",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Repository initialized successfully"
+          },
+          "session_id": {
+            "type": "string",
+            "example": "uuid-string"
+          },
+          "status": {
+            "type": "string",
+            "example": "success"
+          }
+        }
+      },
+      "SourceDocument": {
+        "type": "object",
+        "description": "Source document information",
+        "required": [
+          "file_path",
+          "content",
+          "similarity_score"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "file_path": {
+            "type": "string",
+            "example": "src/main.rs"
+          },
+          "similarity_score": {
+            "type": "number",
+            "format": "double",
+            "example": 0.85
+          }
+        }
+      },
+      "WikiGenerationConfig": {
+        "type": "object",
+        "description": "Wiki generation configuration",
+        "properties": {
+          "comprehensive_view": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "example": false
+          },
+          "include_diagrams": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "example": true
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "en"
+          },
+          "max_pages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "example": 50,
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "api_key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Repository",
+      "description": "Repository management operations"
+    },
+    {
+      "name": "Chat",
+      "description": "AI chat and query operations"
+    },
+    {
+      "name": "Wiki",
+      "description": "Wiki generation and management"
+    },
+    {
+      "name": "Session",
+      "description": "Session management operations"
+    },
+    {
+      "name": "Configuration",
+      "description": "Server configuration operations"
+    }
+  ]
+}
