@@ -1,0 +1,28 @@
+[package]
+name = "wikify-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "wikify"
+path = "src/main.rs"
+
+[dependencies]
+wikify-core = { path = "../wikify-core" }
+wikify-repo = { path = "../wikify-repo" }
+wikify-indexing = { path = "../wikify-indexing" }
+wikify-rag = { path = "../wikify-rag" }
+wikify-wiki = { path = "../wikify-wiki" }
+
+clap = { version = "4.0", features = ["derive"] }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dirs = "5.0"
+toml = { workspace = true }
+
+[features]
+default = []

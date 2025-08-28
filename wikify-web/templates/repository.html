@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+</head>
+<body>
+    <div class="container">
+        <h1>Repository: {{ repository }}</h1>
+        <p>Session ID: {{ session_id }}</p>
+        <p>Status: {% if is_indexed %}Indexed{% else %}Not Indexed{% endif %}</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,62 @@
+[package]
+name = "wikify-wiki"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Core dependencies
+wikify-core = { path = "../wikify-core" }
+wikify-rag = { path = "../wikify-rag" }
+wikify-indexing = { path = "../wikify-indexing" }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client for API calls
+reqwest = { version = "0.12", features = ["json"] }
+
+# Template engine
+tera = "1.20"
+handlebars = "6.0"
+
+# Markdown processing
+pulldown-cmark = "0.12"
+pulldown-cmark-to-cmark = "18.0"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Logging
+tracing = "0.1"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# File system operations
+walkdir = "2.0"
+dirs = "5.0"
+
+# HTML generation
+maud = "0.26"
+
+# Static file serving
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+
+# Web framework (optional, for serving)
+axum = { version = "0.8", optional = true }
+
+[dev-dependencies]
+tempfile = "3.0"
+
+[features]
+default = []
+server = ["axum"]

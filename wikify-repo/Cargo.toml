@@ -1,0 +1,16 @@
+[package]
+name = "wikify-repo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wikify-core = { path = "../wikify-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+url = { workspace = true }
+
+# Use system git command like DeepWiki does - simple and reliable
+# tokio already includes process support

@@ -1,0 +1,38 @@
+[package]
+name = "wikify-rag"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wikify-core = { path = "../wikify-core" }
+wikify-indexing = { path = "../wikify-indexing" }
+
+# Siumai LLM framework
+siumai = { git = "https://github.com/YumchaLabs/siumai" }
+
+# Cheungfun for vector operations
+cheungfun-core = { git = "https://github.com/YumchaLabs/cheungfun" }
+
+# Async and utilities
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Vector operations and embeddings
+uuid = { workspace = true }
+
+# Text processing
+regex = { workspace = true }
+
+# Storage and persistence
+dirs = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Progress display
+indicatif = "0.17"
+
+# Token counting
+tiktoken-rs = "0.5"

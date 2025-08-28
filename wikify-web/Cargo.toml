@@ -1,0 +1,75 @@
+[package]
+name = "wikify-web"
+version = "0.1.0"
+edition = "2021"
+description = "Web interface for Wikify - AI-powered repository documentation"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "wikify-web"
+path = "src/main.rs"
+
+[dependencies]
+# Core dependencies
+wikify-core = { path = "../wikify-core" }
+wikify-rag = { path = "../wikify-rag" }
+wikify-wiki = { path = "../wikify-wiki" }
+wikify-indexing = { path = "../wikify-indexing" }
+
+# Web framework
+axum = { version = "0.8", features = ["ws", "macros"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Command line parsing
+clap = { version = "4.0", features = ["derive"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# WebSocket
+tokio-tungstenite = "0.24"
+
+# Template engine
+askama = { version = "0.12", features = ["with-axum"] }
+askama_axum = "0.4"
+
+# Static file serving
+include_dir = "0.7"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Environment variables
+dotenvy = "0.15"
+
+# File system operations
+walkdir = "2.0"
+
+# Configuration
+config = "0.14"
+
+# Database (optional for caching)
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"], optional = true }
+
+[features]
+default = ["sqlite"]
+sqlite = ["sqlx"]
