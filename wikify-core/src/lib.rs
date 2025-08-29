@@ -41,16 +41,18 @@ mod tests {
     fn test_wikify_result_ok() {
         let result: WikifyResult<i32> = Ok(42);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        if let Ok(value) = result {
+            assert_eq!(value, 42);
+        }
     }
 
     #[test]
     fn test_wikify_result_err() {
-        let result: WikifyResult<i32> = Err(WikifyError::Repository {
+        let result: WikifyResult<i32> = Err(Box::new(WikifyError::Repository {
             message: "test".to_string(),
             source: None,
             context: crate::error::ErrorContext::new("test"),
-        });
+        }));
         assert!(result.is_err());
     }
 

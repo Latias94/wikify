@@ -25,13 +25,10 @@ pub fn should_traverse_directory<P: AsRef<Path>>(dir_path: P) -> bool {
     let path = dir_path.as_ref();
 
     // Skip common build/cache directories
-    if let Some(dir_name) = path.file_name().and_then(|name| name.to_str()) {
-        match dir_name {
-            ".git" | "node_modules" | "target" | "build" | "dist" | ".venv" | "venv" => {
-                return false
-            }
-            _ => {}
-        }
+    if let Some(".git" | "node_modules" | "target" | "build" | "dist" | ".venv" | "venv") =
+        path.file_name().and_then(|name| name.to_str())
+    {
+        return false;
     }
 
     true

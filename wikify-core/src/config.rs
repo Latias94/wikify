@@ -119,33 +119,33 @@ impl WikifyConfig {
     /// 验证配置
     pub fn validate(&self) -> WikifyResult<()> {
         if self.embedding.dimensions == 0 {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: "Embedding dimensions must be greater than 0".to_string(),
                 source: None,
                 context: crate::ErrorContext::new("config")
                     .with_operation("validate")
                     .with_suggestion("Set embedding.dimensions to a positive value"),
-            });
+            }));
         }
 
         if self.llm.max_tokens == 0 {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: "LLM max_tokens must be greater than 0".to_string(),
                 source: None,
                 context: crate::ErrorContext::new("config")
                     .with_operation("validate")
                     .with_suggestion("Set llm.max_tokens to a positive value"),
-            });
+            }));
         }
 
         if self.repository.max_size_mb == 0 {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: "Repository max_size_mb must be greater than 0".to_string(),
                 source: None,
                 context: crate::ErrorContext::new("config")
                     .with_operation("validate")
                     .with_suggestion("Set repository.max_size_mb to a positive value"),
-            });
+            }));
         }
 
         Ok(())

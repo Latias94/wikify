@@ -104,7 +104,9 @@ impl GiteaApiClient {
             })?;
 
         if !response.status().is_success() {
-            return Err(handle_response_error(response, "gitea_api_request").await);
+            return Err(Box::new(
+                handle_response_error(response, "gitea_api_request").await,
+            ));
         }
 
         Ok(response)
@@ -113,7 +115,7 @@ impl GiteaApiClient {
     /// Decode base64 content from Gitea API
     fn decode_base64_content(&self, content: &str) -> WikifyResult<String> {
         // Remove newlines and whitespace
-        let cleaned_content = content.replace('\n', "").replace('\r', "").replace(' ', "");
+        let cleaned_content = content.replace(['\n', '\r', ' '], "");
 
         let decoded_bytes =
             BASE64
@@ -125,11 +127,13 @@ impl GiteaApiClient {
                         .with_operation("decode_base64_content"),
                 })?;
 
-        String::from_utf8(decoded_bytes).map_err(|e| WikifyError::Repository {
-            message: format!("Content is not valid UTF-8: {}", e),
-            source: Some(Box::new(e)),
-            context: wikify_core::ErrorContext::new("gitea_api_client")
-                .with_operation("decode_base64_content"),
+        String::from_utf8(decoded_bytes).map_err(|e| {
+            Box::new(WikifyError::Repository {
+                message: format!("Content is not valid UTF-8: {}", e),
+                source: Some(Box::new(e)),
+                context: wikify_core::ErrorContext::new("gitea_api_client")
+                    .with_operation("decode_base64_content"),
+            })
         })
     }
 }
@@ -241,13 +245,13 @@ impl RepositoryApiClient for GiteaApiClient {
             })?;
 
         if content_response.encoding != "base64" {
-            return Err(WikifyError::Repository {
+            return Err(Box::new(WikifyError::Repository {
                 message: format!("Unexpected encoding: {}", content_response.encoding),
                 source: None,
                 context: wikify_core::ErrorContext::new("gitea_api_client")
                     .with_operation("get_file_content")
                     .with_suggestion("Expected base64 encoding from Gitea API"),
-            });
+            }));
         }
 
         self.decode_base64_content(&content_response.content)

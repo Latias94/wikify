@@ -349,12 +349,10 @@ async fn load_config(config_path: Option<&PathBuf>) -> WikifyResult<WikifyConfig
             Some(PathBuf::from("wikify.toml")),
         ];
 
-        for path_opt in default_paths.iter() {
-            if let Some(path) = path_opt {
-                if path.exists() {
-                    info!("Loading configuration from {:?}", path);
-                    return WikifyConfig::from_file(path);
-                }
+        for path in default_paths.iter().flatten() {
+            if path.exists() {
+                info!("Loading configuration from {:?}", path);
+                return WikifyConfig::from_file(path);
             }
         }
 
@@ -923,12 +921,12 @@ async fn handle_config(
             set_config_value(key, value).await?;
             println!("✅ Set {} = {}", key, value);
         } else {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: "Invalid format. Use key=value format".to_string(),
                 source: None,
                 context: wikify_core::ErrorContext::new("config_set")
                     .with_suggestion("Example: --set rag.similarity_threshold=0.6"),
-            });
+            }));
         }
     }
 
@@ -1014,12 +1012,12 @@ async fn set_config_value(key: &str, value: &str) -> WikifyResult<()> {
             })?;
         }
         _ => {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: format!("Unknown configuration key: {}", key),
                 source: None,
                 context: wikify_core::ErrorContext::new("config_set")
                     .with_suggestion("Use --show to see available configuration keys"),
-            });
+            }));
         }
     }
 
@@ -1047,12 +1045,12 @@ async fn get_config_value(key: &str) -> WikifyResult<String> {
         ["llm", "model"] => config.llm.model.clone(),
         ["llm", "temperature"] => config.llm.temperature.to_string(),
         _ => {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: format!("Unknown configuration key: {}", key),
                 source: None,
                 context: wikify_core::ErrorContext::new("config_get")
                     .with_suggestion("Use --show to see available configuration keys"),
-            });
+            }));
         }
     };
 
@@ -1082,21 +1080,23 @@ async fn handle_wiki(
         "json" => wikify_wiki::ExportFormat::Json,
         "pdf" => wikify_wiki::ExportFormat::Pdf,
         _ => {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: format!("Unsupported export format: {}", format),
                 source: None,
                 context: wikify_core::ErrorContext::new("wiki_command")
                     .with_suggestion("Supported formats: markdown, html, json, pdf"),
-            });
+            }));
         }
     };
 
     // Create wiki configuration
-    let mut wiki_config = wikify_wiki::WikiConfig::default();
-    wiki_config.force_regenerate = force;
-    wiki_config.language = language;
-    wiki_config.max_pages = max_pages;
-    wiki_config.include_diagrams = diagrams;
+    let wiki_config = wikify_wiki::WikiConfig {
+        force_regenerate: force,
+        language,
+        max_pages,
+        include_diagrams: diagrams,
+        ..Default::default()
+    };
 
     // Create wiki service
     println!("🔧 Creating wiki service...");

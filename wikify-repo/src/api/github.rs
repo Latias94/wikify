@@ -118,7 +118,9 @@ impl GitHubApiClient {
             })?;
 
         if !response.status().is_success() {
-            return Err(handle_response_error(response, "github_api_request").await);
+            return Err(Box::new(
+                handle_response_error(response, "github_api_request").await,
+            ));
         }
 
         Ok(response)
@@ -127,7 +129,7 @@ impl GitHubApiClient {
     /// Decode base64 content from GitHub API
     fn decode_base64_content(&self, content: &str) -> WikifyResult<String> {
         // Remove newlines and whitespace
-        let cleaned_content = content.replace('\n', "").replace('\r', "").replace(' ', "");
+        let cleaned_content = content.replace(['\n', '\r', ' '], "");
 
         let decoded_bytes =
             BASE64
@@ -139,11 +141,13 @@ impl GitHubApiClient {
                         .with_operation("decode_base64_content"),
                 })?;
 
-        String::from_utf8(decoded_bytes).map_err(|e| WikifyError::Repository {
-            message: format!("Content is not valid UTF-8: {}", e),
-            source: Some(Box::new(e)),
-            context: wikify_core::ErrorContext::new("github_api_client")
-                .with_operation("decode_base64_content"),
+        String::from_utf8(decoded_bytes).map_err(|e| {
+            Box::new(WikifyError::Repository {
+                message: format!("Content is not valid UTF-8: {}", e),
+                source: Some(Box::new(e)),
+                context: wikify_core::ErrorContext::new("github_api_client")
+                    .with_operation("decode_base64_content"),
+            })
         })
     }
 }
@@ -255,13 +259,13 @@ impl RepositoryApiClient for GitHubApiClient {
             })?;
 
         if content_response.encoding != "base64" {
-            return Err(WikifyError::Repository {
+            return Err(Box::new(WikifyError::Repository {
                 message: format!("Unexpected encoding: {}", content_response.encoding),
                 source: None,
                 context: wikify_core::ErrorContext::new("github_api_client")
                     .with_operation("get_file_content")
                     .with_suggestion("Expected base64 encoding from GitHub API"),
-            });
+            }));
         }
 
         self.decode_base64_content(&content_response.content)
@@ -298,12 +302,12 @@ impl RepositoryApiClient for GitHubApiClient {
             })?;
 
         if readme_response.encoding != "base64" {
-            return Err(WikifyError::Repository {
+            return Err(Box::new(WikifyError::Repository {
                 message: format!("Unexpected README encoding: {}", readme_response.encoding),
                 source: None,
                 context: wikify_core::ErrorContext::new("github_api_client")
                     .with_operation("get_readme"),
-            });
+            }));
         }
 
         let content = self.decode_base64_content(&readme_response.content)?;

@@ -157,7 +157,7 @@ impl SimpleDatabaseService {
         .bind(&repo.repo_path)
         .bind(&repo.repo_type)
         .bind(&repo.status)
-        .bind(&repo.created_at.to_rfc3339())
+        .bind(repo.created_at.to_rfc3339())
         .bind(repo.last_indexed_at.as_ref().map(|dt| dt.to_rfc3339()))
         .execute(&self.pool)
         .await
@@ -222,8 +222,8 @@ impl SimpleDatabaseService {
         )
         .bind(&session.id)
         .bind(&session.repository_id)
-        .bind(&session.created_at.to_rfc3339())
-        .bind(&session.last_activity.to_rfc3339())
+        .bind(session.created_at.to_rfc3339())
+        .bind(session.last_activity.to_rfc3339())
         .bind(if session.is_active { 1 } else { 0 })
         .execute(&self.pool)
         .await
@@ -287,7 +287,7 @@ impl SimpleDatabaseService {
         .bind(&query.session_id)
         .bind(&query.question)
         .bind(&query.answer)
-        .bind(&query.created_at.to_rfc3339())
+        .bind(query.created_at.to_rfc3339())
         .execute(&self.pool)
         .await
         .map_err(|e| WebError::Database(format!("Failed to save query: {}", e)))?;

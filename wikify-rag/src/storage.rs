@@ -33,7 +33,7 @@ impl PersistentVectorStore {
 
         // Create storage directory
         let storage_dir = config.base_dir.join(&repo_id);
-        std::fs::create_dir_all(&storage_dir).map_err(|e| RagError::Io(e))?;
+        std::fs::create_dir_all(&storage_dir).map_err(RagError::Io)?;
 
         let storage_path = storage_dir.join("vectors.json");
 
@@ -67,10 +67,10 @@ impl PersistentVectorStore {
 
     /// Load vector store from file
     fn load_vector_store(path: &Path, dimension: usize) -> RagResult<VectorStore> {
-        let data = std::fs::read_to_string(path).map_err(|e| RagError::Io(e))?;
+        let data = std::fs::read_to_string(path).map_err(RagError::Io)?;
 
         let chunks: Vec<EmbeddedChunk> =
-            serde_json::from_str(&data).map_err(|e| RagError::Serialization(e))?;
+            serde_json::from_str(&data).map_err(RagError::Serialization)?;
 
         let mut vector_store = VectorStore::new(dimension);
         vector_store.add_chunks(chunks)?;
@@ -88,9 +88,9 @@ impl PersistentVectorStore {
         debug!("Saving vector store to {:?}", self.storage_path);
 
         let chunks = self.vector_store.chunks();
-        let data = serde_json::to_string_pretty(chunks).map_err(|e| RagError::Serialization(e))?;
+        let data = serde_json::to_string_pretty(chunks).map_err(RagError::Serialization)?;
 
-        std::fs::write(&self.storage_path, data).map_err(|e| RagError::Io(e))?;
+        std::fs::write(&self.storage_path, data).map_err(RagError::Io)?;
 
         self.dirty = false;
         info!("Saved {} chunks to storage", chunks.len());
@@ -167,7 +167,7 @@ impl ChatSessionManager {
     /// Create a new chat session manager
     pub fn new(config: crate::types::ChatConfig) -> RagResult<Self> {
         // Create history directory
-        std::fs::create_dir_all(&config.history_dir).map_err(|e| RagError::Io(e))?;
+        std::fs::create_dir_all(&config.history_dir).map_err(RagError::Io)?;
 
         Ok(Self {
             config,
@@ -244,9 +244,9 @@ impl ChatSessionManager {
             .ok_or_else(|| RagError::Config(format!("Session not found: {}", session_id)))?;
 
         let file_path = self.config.history_dir.join(format!("{}.json", session_id));
-        let data = serde_json::to_string_pretty(session).map_err(|e| RagError::Serialization(e))?;
+        let data = serde_json::to_string_pretty(session).map_err(RagError::Serialization)?;
 
-        std::fs::write(file_path, data).map_err(|e| RagError::Io(e))?;
+        std::fs::write(file_path, data).map_err(RagError::Io)?;
 
         debug!("Saved session {} to disk", session_id);
         Ok(())
@@ -263,10 +263,9 @@ impl ChatSessionManager {
             )));
         }
 
-        let data = std::fs::read_to_string(file_path).map_err(|e| RagError::Io(e))?;
+        let data = std::fs::read_to_string(file_path).map_err(RagError::Io)?;
 
-        let session: ChatSession =
-            serde_json::from_str(&data).map_err(|e| RagError::Serialization(e))?;
+        let session: ChatSession = serde_json::from_str(&data).map_err(RagError::Serialization)?;
 
         self.sessions.insert(session_id.to_string(), session);
         info!("Loaded session {} from disk", session_id);
@@ -279,8 +278,8 @@ impl ChatSessionManager {
         let mut session_files = Vec::new();
 
         if self.config.history_dir.exists() {
-            for entry in std::fs::read_dir(&self.config.history_dir).map_err(|e| RagError::Io(e))? {
-                let entry = entry.map_err(|e| RagError::Io(e))?;
+            for entry in std::fs::read_dir(&self.config.history_dir).map_err(RagError::Io)? {
+                let entry = entry.map_err(RagError::Io)?;
                 let path = entry.path();
 
                 if path.extension().and_then(|s| s.to_str()) == Some("json") {

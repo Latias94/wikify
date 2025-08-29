@@ -186,13 +186,13 @@ impl ApiClientFactory {
             "gitlab" => Ok(Box::new(GitLabApiClient::new(config)?)),
             "bitbucket" => Ok(Box::new(BitbucketApiClient::new(config)?)),
             "gitea" => Ok(Box::new(GiteaApiClient::new(config)?)),
-            _ => Err(WikifyError::Repository {
+            _ => Err(Box::new(WikifyError::Repository {
                 message: format!("Unsupported repository type: {}", repo_type),
                 source: None,
                 context: wikify_core::ErrorContext::new("api_client_factory")
                     .with_operation("create_client")
                     .with_suggestion("Supported types: github, gitlab, bitbucket, gitea"),
-            }),
+            })),
         }
     }
 }

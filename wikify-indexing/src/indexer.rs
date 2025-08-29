@@ -177,28 +177,26 @@ impl DocumentIndexer {
     async fn split_with_sentence_splitter(&self, document: Document) -> WikifyResult<Vec<Node>> {
         let input = cheungfun_core::traits::TransformInput::Document(document);
 
-        self.sentence_splitter
-            .transform(input)
-            .await
-            .map_err(|e| WikifyError::Indexing {
+        self.sentence_splitter.transform(input).await.map_err(|e| {
+            Box::new(WikifyError::Indexing {
                 message: format!("Sentence splitting failed: {}", e),
                 source: Some(Box::new(e)),
                 context: ErrorContext::new("document_indexer").with_operation("sentence_split"),
             })
+        })
     }
 
     /// Split document using token splitter
     async fn split_with_token_splitter(&self, document: Document) -> WikifyResult<Vec<Node>> {
         let input = cheungfun_core::traits::TransformInput::Document(document);
 
-        self.token_splitter
-            .transform(input)
-            .await
-            .map_err(|e| WikifyError::Indexing {
+        self.token_splitter.transform(input).await.map_err(|e| {
+            Box::new(WikifyError::Indexing {
                 message: format!("Token splitting failed: {}", e),
                 source: Some(Box::new(e)),
                 context: ErrorContext::new("document_indexer").with_operation("token_split"),
             })
+        })
     }
 
     /// Detect programming language from file extension or language hint
@@ -233,10 +231,12 @@ impl DocumentIndexer {
         self.markdown_parser
             .parse_nodes(&[document], false)
             .await
-            .map_err(|e| WikifyError::Indexing {
-                message: format!("Markdown parsing failed: {}", e),
-                source: Some(Box::new(e)),
-                context: ErrorContext::new("document_indexer").with_operation("markdown_parse"),
+            .map_err(|e| {
+                Box::new(WikifyError::Indexing {
+                    message: format!("Markdown parsing failed: {}", e),
+                    source: Some(Box::new(e)),
+                    context: ErrorContext::new("document_indexer").with_operation("markdown_parse"),
+                })
             })
     }
 

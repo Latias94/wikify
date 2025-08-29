@@ -286,8 +286,7 @@ impl DocumentProcessor {
             .unwrap_or("");
 
         for pattern in &self.excluded_files {
-            if pattern.starts_with('*') {
-                let suffix = &pattern[1..];
+            if let Some(suffix) = pattern.strip_prefix('*') {
                 if file_name.ends_with(suffix) {
                     return false;
                 }

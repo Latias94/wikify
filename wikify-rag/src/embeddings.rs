@@ -99,7 +99,7 @@ impl EmbeddingGenerator {
 
         let mut embedded_chunks = Vec::new();
         let mut processed_count = 0;
-        let total_batches = (nodes.len() + self.config.batch_size - 1) / self.config.batch_size;
+        let total_batches = nodes.len().div_ceil(self.config.batch_size);
         let start_time = std::time::Instant::now();
 
         // Process nodes in batches to avoid rate limits
@@ -172,7 +172,10 @@ impl EmbeddingGenerator {
             }
 
             // Generate embedding for this chunk
-            match self.generate_single_embedding(client, &content).await {
+            match self
+                .generate_single_embedding(client.as_ref(), &content)
+                .await
+            {
                 Ok(embedding) => {
                     let embedded_chunk = EmbeddedChunk {
                         id: Uuid::new_v4(),
@@ -211,7 +214,10 @@ impl EmbeddingGenerator {
             }
 
             // Generate embedding for this chunk
-            match self.generate_single_embedding(client, &content).await {
+            match self
+                .generate_single_embedding(client.as_ref(), &content)
+                .await
+            {
                 Ok(embedding) => {
                     let embedded_chunk = EmbeddedChunk {
                         id: Uuid::new_v4(),
@@ -236,7 +242,7 @@ impl EmbeddingGenerator {
     /// Generate embedding for a single text
     async fn generate_single_embedding(
         &self,
-        client: &Box<dyn LlmClient>,
+        client: &dyn LlmClient,
         text: &str,
     ) -> RagResult<Vec<f32>> {
         if let Some(embedding_client) = client.as_embedding_capability() {

@@ -188,7 +188,7 @@ impl MarkdownOrganizer {
                     page.title, filename, page.description
                 ));
             }
-            content.push_str("\n");
+            content.push('\n');
         }
 
         if !high_pages.is_empty() {
@@ -200,7 +200,7 @@ impl MarkdownOrganizer {
                     page.title, filename, page.description
                 ));
             }
-            content.push_str("\n");
+            content.push('\n');
         }
 
         if !medium_pages.is_empty() {
@@ -212,7 +212,7 @@ impl MarkdownOrganizer {
                     page.title, filename, page.description
                 ));
             }
-            content.push_str("\n");
+            content.push('\n');
         }
 
         if !low_pages.is_empty() {
@@ -247,7 +247,7 @@ impl MarkdownOrganizer {
                         ));
                     }
                 }
-                nav.push_str("\n");
+                nav.push('\n');
             }
         } else {
             // Fallback to importance-based grouping

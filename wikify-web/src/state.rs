@@ -485,10 +485,7 @@ impl AppState {
             .index_repository_with_progress(
                 &repo_path,
                 Some(Box::new(move |stage, percentage, current_item| {
-                    let current_item_display = current_item
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or("Processing...");
+                    let current_item_display = current_item.as_deref().unwrap_or("Processing...");
 
                     info!(
                         "[{}] {}: {:.1}% - {}",
@@ -569,9 +566,7 @@ impl AppState {
                                 )
                                 .await;
                             });
-                        }
-
-                        return; // Early return to avoid re-acquiring the lock
+                        } // Early return to avoid re-acquiring the lock
                     }
                     Err(e) => {
                         error!(
@@ -610,7 +605,7 @@ impl AppState {
         info!("Starting wiki generation task for session: {}", session_id);
 
         // Send progress updates
-        let stages = vec![
+        let stages = [
             "Analyzing repository structure",
             "Generating wiki structure",
             "Creating documentation pages",
@@ -777,7 +772,7 @@ impl AppState {
             name: session
                 .repository
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or(&session.repository)
                 .to_string(),
             repo_path: session.repository.clone(),

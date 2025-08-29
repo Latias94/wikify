@@ -55,7 +55,7 @@ async fn test_logging_initialization() {
     };
 
     // This should not panic
-    let result = init_logging(&config);
+    let _result = init_logging(&config);
     // Note: We can't test this properly in integration tests because
     // tracing subscriber can only be initialized once per process
     // In a real application, this would work fine
@@ -74,10 +74,7 @@ async fn test_retry_mechanism() {
             let count = attempt_count.fetch_add(1, Ordering::SeqCst) + 1;
             async move {
                 if count < 3 {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Temporary failure",
-                    ))
+                    Err(std::io::Error::other("Temporary failure"))
                 } else {
                     Ok("Success")
                 }
@@ -121,7 +118,7 @@ async fn test_timeout_mechanism() {
     let result = with_timeout(slow_operation, 50, "slow_test").await;
     assert!(result.is_err());
 
-    match result.unwrap_err() {
+    match *result.unwrap_err() {
         WikifyError::Timeout {
             operation,
             duration_ms,
@@ -146,7 +143,7 @@ async fn test_config_validation() {
     let result = config.validate();
     assert!(result.is_err());
 
-    match result.unwrap_err() {
+    match *result.unwrap_err() {
         WikifyError::Config { message, .. } => {
             assert!(message.contains("dimensions"));
         }
@@ -208,7 +205,7 @@ async fn test_concurrent_processing() {
     let processor = |item: i32| async move {
         // Simulate some async work
         sleep(Duration::from_millis(10)).await;
-        Ok::<i32, WikifyError>(item * 2)
+        Ok::<i32, Box<WikifyError>>(item * 2)
     };
 
     let results = process_concurrently(items, 3, processor).await;

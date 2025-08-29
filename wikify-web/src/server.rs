@@ -36,7 +36,7 @@ impl WikifyServer {
         // Create TCP listener
         let listener = TcpListener::bind(&address)
             .await
-            .map_err(|e| WebError::Server(e))?;
+            .map_err(WebError::Server)?;
 
         info!("✅ Server listening on http://{}", address);
 
@@ -164,7 +164,7 @@ mod tests {
 
         assert_eq!(builder.config.host, "localhost");
         assert_eq!(builder.config.port, 3000);
-        assert_eq!(builder.config.dev_mode, true);
+        assert!(builder.config.dev_mode);
     }
 
     #[test]
@@ -173,6 +173,6 @@ mod tests {
         let config = WebConfig::from_env();
         assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 8080);
-        assert_eq!(config.dev_mode, false);
+        assert!(!config.dev_mode);
     }
 }

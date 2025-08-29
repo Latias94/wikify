@@ -116,14 +116,14 @@ impl IndexingPipeline {
         let documents = self.processor.process_repository().await?;
 
         if documents.is_empty() {
-            return Err(WikifyError::Indexing {
+            return Err(Box::new(WikifyError::Indexing {
                 message: "No documents found in repository".to_string(),
                 source: None,
                 context: ErrorContext::new("indexing_pipeline")
                     .with_operation("process_documents")
                     .with_suggestion("Check if the repository contains supported file types")
                     .with_suggestion("Verify included_extensions configuration"),
-            });
+            }));
         }
 
         // Apply file limits if configured

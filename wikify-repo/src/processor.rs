@@ -63,13 +63,13 @@ impl RepositoryProcessor {
                 // For local repositories, just validate the path
                 let source_path = Path::new(&repo_info.url);
                 if !source_path.exists() {
-                    return Err(WikifyError::Repository {
+                    return Err(Box::new(WikifyError::Repository {
                         message: format!("Local repository path does not exist: {}", repo_info.url),
                         source: None,
                         context: ErrorContext::new("repository_processor")
                             .with_operation("validate_local_path")
                             .with_suggestion("Check if the path exists and is accessible"),
-                    });
+                    }));
                 }
                 Ok(repo_info.url.clone())
             }
@@ -109,7 +109,7 @@ impl RepositoryProcessor {
 
         // Execute git clone with shallow clone for efficiency
         let output = Command::new("git")
-            .args(&[
+            .args([
                 "clone",
                 "--depth=1",
                 "--single-branch",
@@ -134,13 +134,13 @@ impl RepositoryProcessor {
                 error_msg.to_string()
             };
 
-            return Err(WikifyError::Git {
+            return Err(Box::new(WikifyError::Git {
                 message: format!("Git clone failed: {}", sanitized_error),
                 context: ErrorContext::new("repository_processor")
                     .with_operation("git_clone")
                     .with_suggestion("Check repository URL and access permissions")
                     .with_suggestion("Verify network connectivity"),
-            });
+            }));
         }
 
         info!("Repository cloned successfully");
@@ -161,12 +161,12 @@ impl RepositoryProcessor {
             })?;
 
         if !output.status.success() {
-            return Err(WikifyError::Git {
+            return Err(Box::new(WikifyError::Git {
                 message: "Git command failed".to_string(),
                 context: ErrorContext::new("repository_processor")
                     .with_operation("check_git")
                     .with_suggestion("Ensure git is properly installed"),
-            });
+            }));
         }
 
         Ok(())
@@ -190,12 +190,12 @@ impl RepositoryProcessor {
         match entries.next_entry().await {
             Ok(Some(_)) => Ok(true), // Directory is not empty
             Ok(None) => Ok(false),   // Directory is empty
-            Err(e) => Err(WikifyError::Repository {
+            Err(e) => Err(Box::new(WikifyError::Repository {
                 message: format!("Failed to check directory contents: {}", e),
                 source: Some(Box::new(e)),
                 context: ErrorContext::new("repository_processor")
                     .with_operation("check_directory_contents"),
-            }),
+            })),
         }
     }
 
@@ -260,12 +260,12 @@ impl RepositoryProcessor {
                     })?;
             }
             RepoType::Local => {
-                return Err(WikifyError::Repository {
+                return Err(Box::new(WikifyError::Repository {
                     message: "Local repositories don't need authentication".to_string(),
                     source: None,
                     context: ErrorContext::new("repository_processor")
                         .with_operation("prepare_clone_url"),
-                });
+                }));
             }
         }
 
@@ -349,13 +349,13 @@ impl RepositoryProcessor {
             .collect();
 
         if path_segments.len() < 2 {
-            return Err(WikifyError::Repository {
+            return Err(Box::new(WikifyError::Repository {
                 message: "Invalid repository URL format".to_string(),
                 source: None,
                 context: ErrorContext::new("repository_processor")
                     .with_operation("parse_path_segments")
                     .with_suggestion("URL should be in format: https://host.com/owner/repo"),
-            });
+            }));
         }
 
         let owner = path_segments[path_segments.len() - 2].to_string();
@@ -388,7 +388,7 @@ impl RepositoryProcessor {
             .repository_exists(&repo_info.owner, &repo_info.name)
             .await?;
         if !exists {
-            return Err(WikifyError::Repository {
+            return Err(Box::new(WikifyError::Repository {
                 message: format!(
                     "Repository {}/{} not found or not accessible via API",
                     repo_info.owner, repo_info.name
@@ -397,7 +397,7 @@ impl RepositoryProcessor {
                 context: ErrorContext::new("repository_processor")
                     .with_operation("setup_api_access")
                     .with_suggestion("Check repository URL and access token"),
-            });
+            }));
         }
 
         info!("API access validated for repository: {}", repo_info.url);
@@ -415,13 +415,13 @@ impl RepositoryProcessor {
             RepoType::Bitbucket => "bitbucket",
             RepoType::Gitea => "gitea",
             RepoType::Local => {
-                return Err(WikifyError::Repository {
+                return Err(Box::new(WikifyError::Repository {
                     message: "Local repositories do not support API access".to_string(),
                     source: None,
                     context: ErrorContext::new("repository_processor")
                         .with_operation("create_api_client")
                         .with_suggestion("Use GitClone access mode for local repositories"),
-                });
+                }));
             }
         };
 

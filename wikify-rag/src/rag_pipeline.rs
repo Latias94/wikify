@@ -363,16 +363,12 @@ impl RagPipeline {
 
     /// Get pipeline statistics
     pub fn get_stats(&self) -> Option<PipelineStats> {
-        if let Some(retriever) = &self.retriever {
-            Some(PipelineStats {
-                is_initialized: self.is_initialized,
-                total_chunks: retriever.vector_store().len(),
-                retrieval_stats: retriever.get_stats(),
-                llm_model: self.llm_client.as_ref().map(|c| c.model_info().summary()),
-            })
-        } else {
-            None
-        }
+        self.retriever.as_ref().map(|retriever| PipelineStats {
+            is_initialized: self.is_initialized,
+            total_chunks: retriever.vector_store().len(),
+            retrieval_stats: retriever.get_stats(),
+            llm_model: self.llm_client.as_ref().map(|c| c.model_info().summary()),
+        })
     }
 
     /// Update configuration

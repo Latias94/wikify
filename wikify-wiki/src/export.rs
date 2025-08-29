@@ -141,12 +141,12 @@ impl WikiExporter {
     /// Export wiki as PDF (placeholder implementation)
     async fn export_pdf(&self, _wiki: &WikiStructure, _output_path: &Path) -> WikifyResult<()> {
         // TODO: Implement PDF export using a library like wkhtmltopdf or headless Chrome
-        Err(WikifyError::Config {
+        Err(Box::new(WikifyError::Config {
             message: "PDF export is not yet implemented".to_string(),
             source: None,
             context: ErrorContext::new("wiki_export")
                 .with_suggestion("Use Markdown or HTML export instead"),
-        })
+        }))
     }
 
     /// Generate Markdown index content
@@ -478,12 +478,12 @@ blockquote {
         markdown
             .lines()
             .map(|line| {
-                if line.starts_with("# ") {
-                    format!("<h1>{}</h1>", &line[2..])
-                } else if line.starts_with("## ") {
-                    format!("<h2>{}</h2>", &line[3..])
-                } else if line.starts_with("### ") {
-                    format!("<h3>{}</h3>", &line[4..])
+                if let Some(stripped) = line.strip_prefix("# ") {
+                    format!("<h1>{}</h1>", stripped)
+                } else if let Some(stripped) = line.strip_prefix("## ") {
+                    format!("<h2>{}</h2>", stripped)
+                } else if let Some(stripped) = line.strip_prefix("### ") {
+                    format!("<h3>{}</h3>", stripped)
                 } else if line.trim().is_empty() {
                     "<br>".to_string()
                 } else {

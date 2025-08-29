@@ -922,7 +922,7 @@ async fn save_query_to_database(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+
     use crate::{AppState, WebConfig};
     use axum::http::StatusCode;
     use tower::ServiceExt;
@@ -960,6 +960,7 @@ mod tests {
             last_activity: chrono::Utc::now(),
             is_indexed: false,
             indexing_progress: 0.0,
+            auto_generate_wiki: false,
             rag_pipeline: None,
         };
 

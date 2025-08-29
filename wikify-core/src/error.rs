@@ -7,7 +7,22 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{error, warn};
 
-pub type WikifyResult<T> = Result<T, WikifyError>;
+pub type WikifyResult<T> = Result<T, Box<WikifyError>>;
+
+// Implement From traits for Box<WikifyError> to support ? operator
+impl From<std::io::Error> for Box<WikifyError> {
+    fn from(err: std::io::Error) -> Self {
+        Box::new(WikifyError::Io(err))
+    }
+}
+
+impl From<serde_json::Error> for Box<WikifyError> {
+    fn from(err: serde_json::Error) -> Self {
+        Box::new(WikifyError::Serialization(err))
+    }
+}
+
+// Note: reqwest::Error From implementation should be in packages that use reqwest
 
 /// Error context providing additional information for debugging and recovery
 #[derive(Debug, Clone, Serialize, Deserialize)]

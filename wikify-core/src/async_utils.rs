@@ -113,7 +113,7 @@ where
 {
     match timeout(Duration::from_millis(timeout_ms), future).await {
         Ok(result) => Ok(result),
-        Err(_) => Err(WikifyError::Timeout {
+        Err(_) => Err(Box::new(WikifyError::Timeout {
             operation: operation_name.to_string(),
             duration_ms: timeout_ms,
             context: ErrorContext::new("async_utils")
@@ -122,7 +122,7 @@ where
                 .with_suggestion("Increase timeout duration")
                 .with_suggestion("Check network connectivity")
                 .with_suggestion("Verify service availability"),
-        }),
+        })),
     }
 }
 
@@ -151,13 +151,13 @@ where
         .into_iter()
         .map(|join_result| match join_result {
             Ok(result) => result,
-            Err(join_error) => Err(WikifyError::Internal {
+            Err(join_error) => Err(Box::new(WikifyError::Internal {
                 message: format!("Task join error: {}", join_error),
                 source: Some(Box::new(join_error)),
                 context: ErrorContext::new("async_utils")
                     .with_operation("process_concurrently")
                     .with_suggestion("Check for panics in concurrent tasks"),
-            }),
+            })),
         })
         .collect()
 }

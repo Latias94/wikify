@@ -105,7 +105,9 @@ impl BitbucketApiClient {
             })?;
 
         if !response.status().is_success() {
-            return Err(handle_response_error(response, "bitbucket_api_request").await);
+            return Err(Box::new(
+                handle_response_error(response, "bitbucket_api_request").await,
+            ));
         }
 
         Ok(response)

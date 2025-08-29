@@ -154,7 +154,6 @@ mod tests {
 // Mock tests for API clients (without actual network calls)
 #[cfg(test)]
 mod mock_tests {
-    use super::super::*;
 
     // These tests would use a mock HTTP server to test API client behavior
     // without making actual network requests. For now, we'll keep them as placeholders.

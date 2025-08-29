@@ -46,7 +46,7 @@ impl WikiGenerator {
 
         let mut rag_pipeline = RagPipeline::new(rag_config);
         rag_pipeline.initialize().await.map_err(|e| match e {
-            RagError::Core(core_err) => core_err,
+            RagError::Core(core_err) => *core_err,
             other => WikifyError::Rag {
                 message: format!("Failed to initialize RAG pipeline: {}", other),
                 source: Some(Box::new(other)),
@@ -126,7 +126,7 @@ impl WikiGenerator {
                 .index_repository(repo_path)
                 .await
                 .map_err(|e| match e {
-                    RagError::Core(core_err) => core_err,
+                    RagError::Core(core_err) => *core_err,
                     other => WikifyError::Rag {
                         message: format!("Failed to index repository: {}", other),
                         source: Some(Box::new(other)),
@@ -134,11 +134,11 @@ impl WikiGenerator {
                     },
                 })?;
         } else {
-            return Err(WikifyError::Config {
+            return Err(Box::new(WikifyError::Config {
                 message: "RAG pipeline not initialized".to_string(),
                 source: None,
                 context: ErrorContext::new("wiki_generator"),
-            });
+            }));
         }
 
         // Get repository information
@@ -189,7 +189,7 @@ impl WikiGenerator {
                 })?;
 
             rag_pipeline.ask(query).await.map_err(|e| match e {
-                RagError::Core(core_err) => core_err,
+                RagError::Core(core_err) => *core_err,
                 other => WikifyError::Rag {
                     message: format!("Failed to query RAG pipeline: {}", other),
                     source: Some(Box::new(other)),
@@ -317,7 +317,7 @@ impl WikiGenerator {
                 })?;
 
             rag_pipeline.ask(query).await.map_err(|e| match e {
-                RagError::Core(core_err) => core_err,
+                RagError::Core(core_err) => *core_err,
                 other => WikifyError::Rag {
                     message: format!("Failed to query RAG pipeline: {}", other),
                     source: Some(Box::new(other)),
@@ -637,12 +637,10 @@ Generate detailed, accurate documentation that would be valuable for developers 
                     .any(|excluded| path_str.contains(excluded))
             });
 
-        for entry in walker {
-            if let Ok(entry) = entry {
-                if entry.file_type().is_file() {
-                    if let Some(path_str) = entry.path().strip_prefix(repo_path).ok() {
-                        files.push(path_str.to_string_lossy().to_string());
-                    }
+        for entry in walker.flatten() {
+            if entry.file_type().is_file() {
+                if let Ok(path_str) = entry.path().strip_prefix(repo_path) {
+                    files.push(path_str.to_string_lossy().to_string());
                 }
             }
         }

@@ -18,6 +18,12 @@ pub struct StructuredWikiGenerator {
     markdown_organizer: MarkdownOrganizer,
 }
 
+impl Default for StructuredWikiGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StructuredWikiGenerator {
     /// Create a new structured wiki generator
     pub fn new() -> Self {
@@ -74,7 +80,7 @@ impl StructuredWikiGenerator {
         let repo_info = RepositoryInfo {
             title: repo_path
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or("Repository")
                 .to_string(),
             description: "Repository documentation".to_string(),

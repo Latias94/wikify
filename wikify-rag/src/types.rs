@@ -200,7 +200,13 @@ pub enum RagError {
     Serialization(#[from] serde_json::Error),
 
     #[error("Core error: {0}")]
-    Core(#[from] wikify_core::WikifyError),
+    Core(Box<wikify_core::WikifyError>),
+}
+
+impl From<wikify_core::WikifyError> for RagError {
+    fn from(err: wikify_core::WikifyError) -> Self {
+        RagError::Core(Box::new(err))
+    }
 }
 
 pub type RagResult<T> = Result<T, RagError>;
