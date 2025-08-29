@@ -310,6 +310,38 @@ impl WikiPage {
         let word_count = self.content.split_whitespace().count();
         self.reading_time = ((word_count as f64 / 200.0).ceil() as u32).max(1);
     }
+
+    /// Check if this page has content
+    pub fn has_content(&self) -> bool {
+        !self.content.trim().is_empty()
+    }
+
+    /// Get content length in words
+    pub fn word_count(&self) -> usize {
+        self.content.split_whitespace().count()
+    }
+
+    /// Get content summary (first paragraph or first 200 characters)
+    pub fn get_summary(&self) -> String {
+        if self.content.is_empty() {
+            return "No content available".to_string();
+        }
+
+        // Try to get first paragraph
+        if let Some(first_para) = self.content.split("\n\n").next() {
+            if first_para.len() <= 200 {
+                return first_para.trim().to_string();
+            }
+        }
+
+        // Fallback to first 200 characters
+        let summary = self.content.chars().take(200).collect::<String>();
+        if summary.len() < self.content.len() {
+            format!("{}...", summary.trim())
+        } else {
+            summary.trim().to_string()
+        }
+    }
 }
 
 /// Repository information gathered during analysis
