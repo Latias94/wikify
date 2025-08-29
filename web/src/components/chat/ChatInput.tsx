@@ -79,6 +79,21 @@ const ChatInput = memo(({
     adjustHeight();
   }, [onChange, error, adjustHeight]);
 
+  // 处理发送
+  const handleSend = useCallback(() => {
+    if (!value.trim() || disabled || isLoading) return;
+
+    // 验证消息
+    const validation = validateChatMessage(value);
+    if (!validation.isValid) {
+      setError(validation.error);
+      return;
+    }
+
+    onSend(value.trim());
+    setError(undefined);
+  }, [value, disabled, isLoading, onSend]);
+
   // 处理键盘事件
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
@@ -97,21 +112,6 @@ const ChatInput = memo(({
       handleSend();
     }
   }, [handleSend]); // ✅ 添加handleSend依赖
-
-  // 处理发送
-  const handleSend = useCallback(() => {
-    if (!value.trim() || disabled || isLoading) return;
-
-    // 验证消息
-    const validation = validateChatMessage(value);
-    if (!validation.isValid) {
-      setError(validation.error);
-      return;
-    }
-
-    onSend(value.trim());
-    setError(undefined);
-  }, [value, disabled, isLoading, onSend]);
 
   // 处理停止
   const handleStop = useCallback(() => {

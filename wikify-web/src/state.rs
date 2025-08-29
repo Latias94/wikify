@@ -478,12 +478,29 @@ impl AppState {
             return;
         }
 
+        // Process repository (handle remote repos by cloning or API access)
+        let actual_repo_path = match Self::process_repository(&repo_path).await {
+            Ok(path) => path,
+            Err(e) => {
+                error!(
+                    "Failed to process repository for session {}: {}",
+                    session_id, e
+                );
+                let error_msg = IndexingUpdate::Error {
+                    session_id: session_id.clone(),
+                    error: format!("Failed to process repository: {}", e),
+                };
+                let _ = progress_broadcaster.send(error_msg);
+                return;
+            }
+        };
+
         // Index the repository with progress reporting
         let session_id_clone = session_id.clone();
         let progress_broadcaster_clone = progress_broadcaster.clone();
         let indexing_result = rag_pipeline
             .index_repository_with_progress(
-                &repo_path,
+                &actual_repo_path,
                 Some(Box::new(move |stage, percentage, current_item| {
                     let current_item_display = current_item.as_deref().unwrap_or("Processing...");
 
@@ -556,12 +573,14 @@ impl AppState {
                             let wiki_cache_clone = wiki_cache.clone();
                             let progress_broadcaster_clone = progress_broadcaster.clone();
 
+                            let sessions_clone = sessions.clone();
                             tokio::spawn(async move {
                                 Self::perform_wiki_generation_task(
                                     session_id_for_wiki,
                                     repo_path_for_wiki,
                                     wiki_service_clone,
                                     wiki_cache_clone,
+                                    sessions_clone,
                                     progress_broadcaster_clone,
                                 )
                                 .await;
@@ -600,6 +619,7 @@ impl AppState {
         repo_path: String,
         wiki_service: Arc<RwLock<WikiService>>,
         wiki_cache: Arc<RwLock<HashMap<String, CachedWiki>>>,
+        sessions: Arc<RwLock<HashMap<String, RepositorySession>>>,
         progress_broadcaster: broadcast::Sender<IndexingUpdate>,
     ) {
         info!("Starting wiki generation task for session: {}", session_id);
@@ -629,11 +649,23 @@ impl AppState {
         // Create wiki configuration
         let wiki_config = wikify_wiki::WikiConfig::default();
 
+        // Process repository (handle remote repos by cloning or API access)
+        let actual_repo_path = match Self::process_repository(&repo_path).await {
+            Ok(path) => path,
+            Err(e) => {
+                error!(
+                    "Failed to process repository for wiki generation in session {}: {}",
+                    session_id, e
+                );
+                return;
+            }
+        };
+
         // Generate wiki
         let wiki_result = {
             let mut wiki_service_guard = wiki_service.write().await;
             wiki_service_guard
-                .generate_wiki(&repo_path, &wiki_config)
+                .generate_wiki(&actual_repo_path, &wiki_config)
                 .await
         };
 
@@ -652,6 +684,18 @@ impl AppState {
                 {
                     let mut cache = wiki_cache.write().await;
                     cache.insert(session_id.clone(), cached_wiki);
+                }
+
+                // Update session status to indicate wiki is available
+                {
+                    let mut sessions_guard = sessions.write().await;
+                    if let Some(session) = sessions_guard.get_mut(&session_id) {
+                        session.last_activity = chrono::Utc::now();
+                        info!(
+                            "Updated session {} activity after wiki generation",
+                            session_id
+                        );
+                    }
                 }
 
                 // Send completion notification
@@ -866,20 +910,56 @@ impl AppState {
         Ok(response)
     }
 
-    /// Generate wiki for repository
+    /// Generate wiki for repository using session ID as cache key
+    pub async fn generate_wiki_for_session(
+        &self,
+        session_id: &str,
+        repo_path: &str,
+        config: wikify_wiki::WikiConfig,
+    ) -> WebResult<wikify_wiki::WikiStructure> {
+        // Process repository (handle remote repos by cloning or API access)
+        let actual_repo_path = Self::process_repository(repo_path).await?;
+
+        let mut wiki_service = self.wiki_service.write().await;
+
+        let wiki = wiki_service
+            .generate_wiki(&actual_repo_path, &config)
+            .await
+            .map_err(|e| WebError::WikiGeneration(format!("Failed to generate wiki: {}", e)))?;
+
+        // Cache the generated wiki using session_id as key
+        let cached_wiki = CachedWiki {
+            wiki: wiki.clone(),
+            generated_at: chrono::Utc::now(),
+            repository: repo_path.to_string(),
+            config,
+        };
+
+        {
+            let mut cache = self.wiki_cache.write().await;
+            cache.insert(session_id.to_string(), cached_wiki);
+        }
+
+        Ok(wiki)
+    }
+
+    /// Generate wiki for repository (legacy method, kept for compatibility)
     pub async fn generate_wiki(
         &self,
         repo_path: &str,
         config: wikify_wiki::WikiConfig,
     ) -> WebResult<wikify_wiki::WikiStructure> {
+        // Process repository (handle remote repos by cloning or API access)
+        let actual_repo_path = Self::process_repository(repo_path).await?;
+
         let mut wiki_service = self.wiki_service.write().await;
 
         let wiki = wiki_service
-            .generate_wiki(repo_path, &config)
+            .generate_wiki(&actual_repo_path, &config)
             .await
             .map_err(|e| WebError::WikiGeneration(format!("Failed to generate wiki: {}", e)))?;
 
-        // Cache the generated wiki
+        // Cache the generated wiki using repo_path as key (legacy behavior)
         let cached_wiki = CachedWiki {
             wiki: wiki.clone(),
             generated_at: chrono::Utc::now(),
@@ -1024,5 +1104,46 @@ impl AppState {
     /// Get a receiver for indexing progress updates (for testing and WebSocket connections)
     pub fn subscribe_to_progress(&self) -> broadcast::Receiver<IndexingUpdate> {
         self.progress_broadcaster.subscribe()
+    }
+
+    /// Process repository (handle remote repos by cloning or API access)
+    async fn process_repository(repo_path: &str) -> WebResult<String> {
+        use std::path::PathBuf;
+        use wikify_core::types::RepoAccessMode;
+        use wikify_repo::processor::RepositoryProcessor;
+
+        // If it's a local path, return as-is
+        if !repo_path.starts_with("http") {
+            return Ok(repo_path.to_string());
+        }
+
+        // For remote repositories, use RepositoryProcessor to clone them
+        let data_dir = PathBuf::from("./data"); // Use relative data directory
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|e| WebError::Repository(format!("Failed to create data directory: {}", e)))?;
+
+        let processor = RepositoryProcessor::new(&data_dir);
+
+        // Parse repository URL with Git clone mode (for now)
+        let mut repo_info =
+            RepositoryProcessor::parse_repo_url_with_mode(repo_path, RepoAccessMode::GitClone)
+                .map_err(|e| {
+                    WebError::Repository(format!("Failed to parse repository URL: {}", e))
+                })?;
+
+        // Set access token if available from environment
+        if repo_info.repo_type == wikify_core::types::RepoType::GitHub {
+            repo_info.access_token = std::env::var("GITHUB_TOKEN").ok();
+        } else if repo_info.repo_type == wikify_core::types::RepoType::GitLab {
+            repo_info.access_token = std::env::var("GITLAB_TOKEN").ok();
+        }
+
+        // Process (clone) the repository
+        let local_path = processor
+            .process_repository(&repo_info)
+            .await
+            .map_err(|e| WebError::Repository(format!("Failed to process repository: {}", e)))?;
+
+        Ok(local_path)
     }
 }

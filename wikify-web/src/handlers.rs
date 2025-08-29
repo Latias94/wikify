@@ -398,17 +398,46 @@ pub async fn get_repositories(
     if let Some(database) = &state.database {
         match database.get_repositories().await {
             Ok(repositories) => {
+                // Get current session states from memory
+                let sessions = state.sessions.read().await;
+
                 let repos_json: Vec<serde_json::Value> = repositories
                     .into_iter()
                     .map(|repo| {
+                        // Check if there's a corresponding session with updated status
+                        let current_status = if let Some(session) = sessions.get(&repo.id) {
+                            if session.is_indexed {
+                                "indexed"
+                            } else if session.indexing_progress > 0.0 {
+                                "indexing"
+                            } else {
+                                "created"
+                            }
+                        } else {
+                            // Use database status as fallback
+                            &repo.status
+                        };
+
+                        let indexing_progress = sessions
+                            .get(&repo.id)
+                            .map(|s| s.indexing_progress)
+                            .unwrap_or(0.0);
+
+                        let last_activity = sessions
+                            .get(&repo.id)
+                            .map(|s| s.last_activity.to_rfc3339())
+                            .unwrap_or_else(|| repo.created_at.to_rfc3339());
+
                         serde_json::json!({
                             "id": repo.id,
                             "name": repo.name,
                             "repo_path": repo.repo_path,
                             "repo_type": repo.repo_type,
-                            "status": repo.status,
+                            "status": current_status,
+                            "indexing_progress": indexing_progress,
                             "created_at": repo.created_at,
                             "last_indexed_at": repo.last_indexed_at,
+                            "last_activity": last_activity,
                         })
                     })
                     .collect();
@@ -714,7 +743,10 @@ pub async fn generate_wiki(
     }
 
     // Generate wiki
-    match state.generate_wiki(&session.repository, wiki_config).await {
+    match state
+        .generate_wiki_for_session(&request.session_id, &session.repository, wiki_config)
+        .await
+    {
         Ok(wiki) => {
             let response = GenerateWikiResponse {
                 wiki_id: wiki.id.clone(),
@@ -750,14 +782,14 @@ pub async fn get_wiki(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // Get session info
-    let session = match state.get_session(&session_id).await {
+    // Get session info (verify session exists)
+    let _session = match state.get_session(&session_id).await {
         Some(session) => session,
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    // Get cached wiki
-    match state.get_cached_wiki(&session.repository).await {
+    // Get cached wiki using session_id as key
+    match state.get_cached_wiki(&session_id).await {
         Some(cached_wiki) => Ok(Json(serde_json::to_value(&cached_wiki.wiki).unwrap())),
         None => Err(StatusCode::NOT_FOUND),
     }

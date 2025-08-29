@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.dependencies]
-# 核心RAG功能
+# RAG
 cheungfun = { git = "https://github.com/YumchaLabs/cheungfun" }
 siumai = "0.9.1"
 

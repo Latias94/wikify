@@ -179,10 +179,24 @@ export interface WikiPage {
   id: string;
   title: string;
   content: string;
+  description: string;
+  importance: "Critical" | "High" | "Medium" | "Low";
   file_paths: string[];
-  importance: "High" | "Medium" | "Low";
   related_pages: string[];
-  sections: WikiSection[];
+  parent_section?: string;
+  tags: string[];
+  reading_time: number;
+  generated_at: string;
+  source_documents: DocumentInfo[];
+}
+
+/**
+ * 文档信息
+ */
+export interface DocumentInfo {
+  path: string;
+  title: string;
+  relevance_score: number;
 }
 
 /**
@@ -191,8 +205,11 @@ export interface WikiPage {
 export interface WikiSection {
   id: string;
   title: string;
-  content: string;
-  subsections: WikiSection[];
+  description: string;
+  pages: string[]; // 包含的页面ID列表
+  subsections: string[]; // 子章节ID列表
+  importance: "Critical" | "High" | "Medium" | "Low";
+  order: number;
 }
 
 /**
@@ -207,13 +224,21 @@ export interface WikiStructure {
 }
 
 /**
+ * Wiki 生成配置
+ */
+export interface WikiGenerationConfig {
+  language?: string;
+  max_pages?: number;
+  include_diagrams?: boolean;
+  comprehensive_view?: boolean;
+}
+
+/**
  * Wiki 生成请求
  */
 export interface GenerateWikiRequest {
   session_id: string;
-  title?: string;
-  description?: string;
-  sections?: string[];
+  config: WikiGenerationConfig;
 }
 
 /**
@@ -222,7 +247,8 @@ export interface GenerateWikiRequest {
 export interface GenerateWikiResponse {
   wiki_id: string;
   status: string;
-  message: string;
+  pages_count: number;
+  sections_count: number;
 }
 
 // ============================================================================

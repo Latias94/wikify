@@ -189,6 +189,9 @@ pub enum WebError {
     #[error("RAG query error: {0}")]
     RagQuery(String),
 
+    #[error("Repository error: {0}")]
+    Repository(String),
+
     #[error("Database error: {0}")]
     Database(String),
 

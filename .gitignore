@@ -3,3 +3,5 @@
 .vscode
 
 test_output/
+/data
+wikify-web/data

@@ -42,6 +42,7 @@ import { InitializeRepositoryFormData } from "@/types/ui";
 
 // Components
 import IndexingProgress from "@/components/IndexingProgress";
+import WikiGenerationDialog from "@/components/WikiGenerationDialog";
 
 const RepositoryManager = () => {
   const navigate = useNavigate();
@@ -59,6 +60,10 @@ const RepositoryManager = () => {
   // Local loading state for immediate feedback
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reindexingRepos, setReindexingRepos] = useState<Set<string>>(new Set());
+
+  // Wiki generation dialog state
+  const [showWikiDialog, setShowWikiDialog] = useState(false);
+  const [selectedRepoForWiki, setSelectedRepoForWiki] = useState<Repository | null>(null);
 
   // API hooks
   const { isLoading: isLoadingRepos, refetch } = useRepositories();
@@ -183,6 +188,20 @@ const RepositoryManager = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleGenerateWiki = (repository: Repository) => {
+    if (repository.status !== 'indexed') {
+      toast({
+        title: "Repository Not Ready",
+        description: "Please wait for the repository to finish indexing before generating wiki.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSelectedRepoForWiki(repository);
+    setShowWikiDialog(true);
   };
 
   const handleRefreshRepository = async (repository: Repository) => {
@@ -568,7 +587,18 @@ const RepositoryManager = () => {
                         disabled={repo.status !== 'indexed'}
                       >
                         <BookOpen className="h-4 w-4" />
-                        Wiki
+                        View Wiki
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex items-center gap-1"
+                        onClick={() => handleGenerateWiki(repo)}
+                        disabled={repo.status !== 'indexed'}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Generate
                       </Button>
 
                       <Button
@@ -609,6 +639,16 @@ const RepositoryManager = () => {
           </div>
         )}
       </div>
+
+      {/* Wiki Generation Dialog */}
+      {selectedRepoForWiki && (
+        <WikiGenerationDialog
+          open={showWikiDialog}
+          onOpenChange={setShowWikiDialog}
+          sessionId={selectedRepoForWiki.id}
+          repositoryName={selectedRepoForWiki.name}
+        />
+      )}
     </div>
   );
 };

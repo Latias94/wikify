@@ -80,9 +80,6 @@ const Index = () => {
       {/* Main content */}
       <main className="py-8">
         <div className="container space-y-6">
-          {/* 简化的后端连接状态 - 只在有问题时显示 */}
-          <BackendConnectionStatus compact />
-
           <RepositoryManager />
         </div>
       </main>

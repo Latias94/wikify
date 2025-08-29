@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use wikify_core::{ErrorContext, WikifyError, WikifyResult};
 use wikify_rag::RagPipeline;
 
-use tracing::info;
+use tracing::{error, info};
 
 /// Structured wiki generator that creates hierarchical content
 pub struct StructuredWikiGenerator {
@@ -302,32 +302,139 @@ impl StructuredWikiGenerator {
                 .cmp(&wiki_structure.pages[a].importance)
         });
 
-        // Generate content for high-importance pages first
+        // Generate content for pages concurrently (grouped by importance for better resource management)
+
+        // Group pages by importance to control concurrency
+        let mut high_priority_tasks = Vec::new();
+        let mut medium_priority_tasks = Vec::new();
+        let mut low_priority_tasks = Vec::new();
+
         for index in page_indices {
-            let page = wiki_structure.pages[index].clone(); // Clone to avoid borrow issues
-            info!(
-                "Generating content for {} page: {}",
-                page.importance.as_str(),
-                page.title
-            );
+            let page = wiki_structure.pages[index].clone();
+            let task_data = (index, page);
 
-            let content = self
-                .generate_page_content(&page, repo_info, config, rag_pipeline)
+            match task_data.1.importance {
+                ImportanceLevel::Critical | ImportanceLevel::High => {
+                    high_priority_tasks.push(task_data);
+                }
+                ImportanceLevel::Medium => {
+                    medium_priority_tasks.push(task_data);
+                }
+                ImportanceLevel::Low => {
+                    low_priority_tasks.push(task_data);
+                }
+            }
+        }
+
+        // Process high priority pages first (concurrently within group)
+        if !high_priority_tasks.is_empty() {
+            info!(
+                "🚀 Generating {} high-priority pages concurrently...",
+                high_priority_tasks.len()
+            );
+            let results = self
+                .generate_pages_concurrently(high_priority_tasks, repo_info, config, rag_pipeline)
                 .await?;
+            for (index, content) in results {
+                wiki_structure.pages[index].content = content;
+                wiki_structure.pages[index].estimate_reading_time();
+                wiki_structure.pages[index].generated_at = chrono::Utc::now();
+            }
+        }
 
-            // Update the page with generated content
-            wiki_structure.pages[index].content = content;
-            wiki_structure.pages[index].estimate_reading_time();
-            wiki_structure.pages[index].generated_at = chrono::Utc::now();
-
+        // Process medium priority pages
+        if !medium_priority_tasks.is_empty() {
             info!(
-                "✅ Generated {} words for page: {}",
-                wiki_structure.pages[index].word_count(),
-                page.title
+                "🚀 Generating {} medium-priority pages concurrently...",
+                medium_priority_tasks.len()
             );
+            let results = self
+                .generate_pages_concurrently(medium_priority_tasks, repo_info, config, rag_pipeline)
+                .await?;
+            for (index, content) in results {
+                wiki_structure.pages[index].content = content;
+                wiki_structure.pages[index].estimate_reading_time();
+                wiki_structure.pages[index].generated_at = chrono::Utc::now();
+            }
+        }
+
+        // Process low priority pages
+        if !low_priority_tasks.is_empty() {
+            info!(
+                "🚀 Generating {} low-priority pages concurrently...",
+                low_priority_tasks.len()
+            );
+            let results = self
+                .generate_pages_concurrently(low_priority_tasks, repo_info, config, rag_pipeline)
+                .await?;
+            for (index, content) in results {
+                wiki_structure.pages[index].content = content;
+                wiki_structure.pages[index].estimate_reading_time();
+                wiki_structure.pages[index].generated_at = chrono::Utc::now();
+            }
         }
 
         Ok(wiki_structure)
+    }
+
+    /// Generate multiple pages concurrently
+    async fn generate_pages_concurrently(
+        &self,
+        page_tasks: Vec<(usize, WikiPage)>,
+        repo_info: &RepositoryInfo,
+        config: &WikiConfig,
+        rag_pipeline: &RagPipeline,
+    ) -> WikifyResult<Vec<(usize, String)>> {
+        use futures::future::join_all;
+
+        // Create concurrent tasks
+        let tasks: Vec<_> = page_tasks
+            .into_iter()
+            .map(|(index, page)| {
+                let page_title = page.title.clone();
+                let page_importance = page.importance.as_str();
+
+                async move {
+                    info!(
+                        "🔄 Generating content for {} page: {}",
+                        page_importance, page_title
+                    );
+
+                    let content_result = self
+                        .generate_page_content(&page, repo_info, config, rag_pipeline)
+                        .await;
+
+                    match content_result {
+                        Ok(content) => {
+                            let word_count = content.split_whitespace().count();
+                            info!("✅ Generated {} words for page: {}", word_count, page_title);
+                            Ok((index, content))
+                        }
+                        Err(e) => {
+                            error!(
+                                "❌ Failed to generate content for page {}: {}",
+                                page_title, e
+                            );
+                            Err(e)
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        // Execute all tasks concurrently
+        let results = join_all(tasks).await;
+
+        // Collect successful results and handle errors
+        let mut successful_results = Vec::new();
+        for result in results {
+            match result {
+                Ok((index, content)) => successful_results.push((index, content)),
+                Err(e) => return Err(e), // Fail fast on any error
+            }
+        }
+
+        Ok(successful_results)
     }
 
     /// Generate markdown content directly for a specific page

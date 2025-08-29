@@ -144,12 +144,6 @@ const WikiViewer = ({ className }: WikiViewerProps) => {
         return null;
       };
 
-      // 在所有页面中查找section
-      for (const page of wiki.pages) {
-        const section = findSection(page.sections);
-        if (section) return section;
-      }
-      
       // 在根级sections中查找
       const section = findSection(wiki.sections);
       if (section) return section;
@@ -312,6 +306,7 @@ const WikiViewer = ({ className }: WikiViewerProps) => {
                       <SectionItem
                         key={section.id}
                         section={section}
+                        wiki={wiki}
                         isSelected={selectedSectionId === section.id}
                         expandedSections={expandedSections}
                         onSectionSelect={handleSectionSelect}
@@ -457,7 +452,8 @@ const PageItem = ({
   onSectionSelect,
   onToggleExpanded
 }: PageItemProps) => {
-  const hasSubsections = page.sections.length > 0;
+  // Pages don't have subsections in the new structure
+  const hasSubsections = false;
   const isExpanded = expandedSections.has(page.id);
 
   return (
@@ -504,35 +500,14 @@ const PageItem = ({
       </div>
 
       {/* Page Sections */}
-      <AnimatePresence>
-        {hasSubsections && isExpanded && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="ml-6 space-y-1"
-          >
-            {page.sections.map((section) => (
-              <SectionItem
-                key={section.id}
-                section={section}
-                isSelected={selectedSectionId === section.id}
-                expandedSections={expandedSections}
-                onSectionSelect={onSectionSelect}
-                onToggleExpanded={onToggleExpanded}
-                level={1}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Pages don't have subsections in the new structure */}
     </div>
   );
 };
 
 interface SectionItemProps {
   section: WikiSection;
+  wiki: WikiStructure;
   isSelected: boolean;
   expandedSections: Set<string>;
   onSectionSelect: (sectionId: string) => void;
@@ -542,13 +517,19 @@ interface SectionItemProps {
 
 const SectionItem = ({
   section,
+  wiki,
   isSelected,
   expandedSections,
   onSectionSelect,
   onToggleExpanded,
   level
 }: SectionItemProps) => {
-  const hasSubsections = section.subsections.length > 0;
+  // Find actual subsection objects from IDs
+  const subsections = section.subsections
+    .map(id => wiki.sections.find(s => s.id === id))
+    .filter(Boolean) as WikiSection[];
+
+  const hasSubsections = subsections.length > 0;
   const isExpanded = expandedSections.has(section.id);
   const indent = level * 16; // 16px per level
 
@@ -595,10 +576,11 @@ const SectionItem = ({
             transition={{ duration: 0.2 }}
             className="space-y-1"
           >
-            {section.subsections.map((subsection) => (
+            {subsections.map((subsection) => (
               <SectionItem
                 key={subsection.id}
                 section={subsection}
+                wiki={wiki}
                 isSelected={selectedSectionId === subsection.id}
                 expandedSections={expandedSections}
                 onSectionSelect={onSectionSelect}

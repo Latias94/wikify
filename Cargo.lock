@@ -749,7 +749,7 @@ checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
 [[package]]
 name = "cheungfun"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#fcfccc1b1d1901b902c6cbc79fdda44c858468e8"
+source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
 dependencies = [
  "cheungfun-agents",
  "cheungfun-core",
@@ -761,7 +761,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-agents"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#fcfccc1b1d1901b902c6cbc79fdda44c858468e8"
+source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -786,7 +786,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-core"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#fcfccc1b1d1901b902c6cbc79fdda44c858468e8"
+source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -803,6 +803,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "sha2",
  "siumai",
  "sqlx",
  "strum",
@@ -816,7 +817,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-indexing"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#fcfccc1b1d1901b902c6cbc79fdda44c858468e8"
+source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -860,7 +861,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-integrations"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#fcfccc1b1d1901b902c6cbc79fdda44c858468e8"
+source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -878,7 +879,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-query"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#fcfccc1b1d1901b902c6cbc79fdda44c858468e8"
+source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2043,9 +2044,9 @@ dependencies = [
 
 [[package]]
 name = "getopts"
-version = "0.2.23"
+version = "0.2.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cba6ae63eb948698e300f645f87c70f76630d505f23b8907cf1e193ee85048c1"
+checksum = "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df"
 dependencies = [
  "unicode-width",
 ]
@@ -7084,6 +7085,7 @@ dependencies = [
  "wikify-core",
  "wikify-indexing",
  "wikify-rag",
+ "wikify-repo",
  "wikify-wiki",
 ]
 
@@ -7095,6 +7097,7 @@ dependencies = [
  "axum",
  "chrono",
  "dirs",
+ "futures",
  "handlebars",
  "maud",
  "pulldown-cmark",

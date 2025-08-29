@@ -1193,3 +1193,53 @@ async fn test_save_generated_markdown() {
         std::fs::remove_dir_all(&repo_path).ok();
     }
 }
+
+/// Test GitHub URL processing (without actual cloning)
+#[tokio::test]
+async fn test_github_url_processing() {
+    let (_server_url, state) = create_test_server().await;
+
+    println!("Testing GitHub URL processing...");
+
+    // Test URL parsing and validation
+    let github_url = "https://github.com/rust-lang/rust";
+
+    // This should not fail immediately - the error should come from git clone, not path parsing
+    let result = state.initialize_rag(github_url, false).await;
+
+    match result {
+        Ok(session_id) => {
+            println!("✅ GitHub URL processed successfully: {}", session_id);
+
+            // Wait a bit for processing to start
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            // Check session status
+            if let Some(session) = state.get_session(&session_id).await {
+                println!(
+                    "📊 Session status: indexed={}, progress={:.1}%",
+                    session.is_indexed,
+                    session.indexing_progress * 100.0
+                );
+            }
+        }
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            println!("⚠️  GitHub URL processing failed: {}", error_msg);
+
+            // The error should NOT be about "文件名、目录名或卷标语法不正确" anymore
+            // It should be a proper git clone error or network error
+            assert!(
+                !error_msg.contains("文件名、目录名或卷标语法不正确"),
+                "Should not have Windows path syntax error for GitHub URLs"
+            );
+
+            // Expected errors for GitHub URLs without proper setup:
+            // - Git not found
+            // - Network issues
+            // - Authentication issues
+            // - Repository not found
+            println!("✅ Error is properly handled (not a path syntax error)");
+        }
+    }
+}

@@ -94,9 +94,12 @@ export interface ChatErrorMessage extends BaseWebSocketMessage {
 export interface WikiGenerateMessage extends BaseWebSocketMessage {
   type: "WikiGenerate";
   session_id: string;
-  title?: string;
-  description?: string;
-  sections?: string[];
+  config: {
+    language?: string;
+    max_pages?: number;
+    include_diagrams?: boolean;
+    comprehensive_view?: boolean;
+  };
 }
 
 /**

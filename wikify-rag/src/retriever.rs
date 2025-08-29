@@ -96,13 +96,20 @@ impl DocumentRetriever {
             metadata: std::collections::HashMap::new(),
             embedding: None,
             sparse_embedding: None,
-            relationships: std::collections::HashMap::new(),
+            relationships: cheungfun_core::relationships::NodeRelationships::new(),
             source_document_id: uuid::Uuid::new_v4(),
             chunk_info: cheungfun_core::types::ChunkInfo {
-                start_offset: 0,
-                end_offset: query.len(),
+                start_char_idx: Some(0),
+                end_char_idx: Some(query.len()),
                 chunk_index: 0,
             },
+            hash: None,
+            mimetype: "text/plain".to_string(),
+            excluded_embed_metadata_keys: std::collections::HashSet::new(),
+            excluded_llm_metadata_keys: std::collections::HashSet::new(),
+            text_template: "{content}\n\n{metadata_str}".to_string(),
+            metadata_separator: "\n".to_string(),
+            metadata_template: "{key}: {value}".to_string(),
         };
 
         let embedded_chunks = self

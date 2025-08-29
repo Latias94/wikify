@@ -322,7 +322,12 @@ export function useWikiWebSocket(
 
   // 生成 Wiki
   const generateWiki = useCallback(
-    (title?: string, description?: string, sections?: string[]) => {
+    (config?: {
+      language?: string;
+      max_pages?: number;
+      include_diagrams?: boolean;
+      comprehensive_view?: boolean;
+    }) => {
       if (!wsRef.current || !sessionId) {
         console.error("WebSocket not connected or session not available");
         return;
@@ -331,9 +336,12 @@ export function useWikiWebSocket(
       const wikiMessage: WikiGenerateMessage = {
         type: "WikiGenerate",
         session_id: sessionId,
-        title,
-        description,
-        sections,
+        config: config || {
+          language: "en",
+          max_pages: 50,
+          include_diagrams: true,
+          comprehensive_view: false,
+        },
         timestamp: new Date().toISOString(),
       };
 
