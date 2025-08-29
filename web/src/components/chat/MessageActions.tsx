@@ -4,7 +4,6 @@
  */
 
 import { memo, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -115,13 +114,10 @@ const MessageActions = memo(({
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.15 }}
+    <div
       className={cn(
         "flex items-center gap-1",
+        "min-w-[120px] h-[28px] justify-end", // 固定最小宽度和高度，右对齐
         className
       )}
     >
@@ -172,7 +168,7 @@ const MessageActions = memo(({
           </Tooltip>
         ))}
       </TooltipProvider>
-    </motion.div>
+    </div>
   );
 });
 

@@ -299,6 +299,18 @@ export class ApiClient {
   }
 
   /**
+   * 重新索引仓库
+   */
+  async reindexRepository(
+    sessionId: string
+  ): Promise<InitializeRepositoryResponse> {
+    return this.request<InitializeRepositoryResponse>({
+      method: "POST",
+      url: `/repositories/${sessionId}/reindex`,
+    });
+  }
+
+  /**
    * 删除仓库
    */
   async deleteRepository(repositoryId: string): Promise<void> {
@@ -453,12 +465,14 @@ export class ApiClient {
 export function createMutationConfig<TData, TVariables>(
   mutationFn: (variables: TVariables) => Promise<TData>,
   options?: {
+    mutationKey?: string[];
     onSuccess?: (data: TData, variables: TVariables) => void;
     onError?: (error: ApiClientError, variables: TVariables) => void;
   }
 ) {
   return {
     mutationFn,
+    mutationKey: options?.mutationKey,
     onSuccess: options?.onSuccess,
     onError: options?.onError,
   };

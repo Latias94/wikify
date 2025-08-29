@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use tokio::process::Command;
 use tracing::info;
 use url::Url;
-use wikify_core::{ErrorContext, RepoInfo, RepoType, WikifyError, WikifyResult};
+use wikify_core::{ErrorContext, RepoAccessMode, RepoInfo, RepoType, WikifyError, WikifyResult};
+
+use crate::api::{ApiClientConfig, ApiClientFactory, RepositoryApiClient};
 
 /// Repository processor that handles cloning and basic operations
 pub struct RepositoryProcessor {
@@ -19,6 +21,14 @@ impl RepositoryProcessor {
     pub fn new<P: AsRef<Path>>(base_path: P) -> Self {
         Self {
             base_path: base_path.as_ref().to_path_buf(),
+        }
+    }
+
+    /// Process a repository based on its access mode
+    pub async fn process_repository(&self, repo_info: &RepoInfo) -> WikifyResult<String> {
+        match repo_info.access_mode {
+            RepoAccessMode::GitClone => self.clone_repository(repo_info).await,
+            RepoAccessMode::Api => self.setup_api_access(repo_info).await,
         }
     }
 
@@ -204,8 +214,9 @@ impl RepositoryProcessor {
 
         // Format URL with token based on repository type (like DeepWiki)
         match repo_info.repo_type {
-            RepoType::GitHub => {
+            RepoType::GitHub | RepoType::Gitea => {
                 // Format: https://{token}@github.com/owner/repo.git
+                // Gitea uses the same authentication format as GitHub
                 url.set_username(token)
                     .map_err(|_| WikifyError::Repository {
                         message: "Failed to set username in URL".to_string(),
@@ -272,8 +283,16 @@ impl RepositoryProcessor {
         }
     }
 
-    /// Extract repository information from URL
+    /// Extract repository information from URL with default access mode
     pub fn parse_repo_url(url: &str) -> WikifyResult<RepoInfo> {
+        Self::parse_repo_url_with_mode(url, RepoAccessMode::GitClone)
+    }
+
+    /// Extract repository information from URL with specified access mode
+    pub fn parse_repo_url_with_mode(
+        url: &str,
+        access_mode: RepoAccessMode,
+    ) -> WikifyResult<RepoInfo> {
         if !url.starts_with("http") {
             // Assume local path
             let path = Path::new(url);
@@ -290,6 +309,7 @@ impl RepositoryProcessor {
                 url: url.to_string(),
                 access_token: None,
                 local_path: Some(url.to_string()),
+                access_mode: RepoAccessMode::GitClone, // Local repos always use git clone
             });
         }
 
@@ -313,14 +333,11 @@ impl RepositoryProcessor {
             "bitbucket.org" => RepoType::Bitbucket,
             _ if host.contains("gitlab") => RepoType::GitLab,
             _ if host.contains("github") => RepoType::GitHub,
+            _ if host.contains("gitea") => RepoType::Gitea,
             _ => {
-                return Err(WikifyError::Repository {
-                    message: format!("Unsupported host: {}", host),
-                    source: None,
-                    context: ErrorContext::new("repository_processor")
-                        .with_operation("determine_repo_type")
-                        .with_suggestion("Supported hosts: github.com, gitlab.com, bitbucket.org"),
-                })
+                // For unknown hosts, try to detect based on common patterns
+                // Many self-hosted Git services use standard paths
+                RepoType::Gitea // Default to Gitea for unknown hosts as it's GitHub-compatible
             }
         };
 
@@ -351,6 +368,129 @@ impl RepositoryProcessor {
             url: url.to_string(),
             access_token: None,
             local_path: None,
+            access_mode,
         })
+    }
+
+    /// Setup API access for a repository (no local cloning)
+    async fn setup_api_access(&self, repo_info: &RepoInfo) -> WikifyResult<String> {
+        info!("Setting up API access for repository: {}", repo_info.url);
+
+        // For API access, we don't clone the repository locally
+        // Instead, we return a virtual path that indicates API access
+        let api_path = format!("api://{}/{}", repo_info.owner, repo_info.name);
+
+        // Validate that we can access the repository via API
+        let api_client = self.create_api_client(repo_info)?;
+
+        // Test repository access
+        let exists = api_client
+            .repository_exists(&repo_info.owner, &repo_info.name)
+            .await?;
+        if !exists {
+            return Err(WikifyError::Repository {
+                message: format!(
+                    "Repository {}/{} not found or not accessible via API",
+                    repo_info.owner, repo_info.name
+                ),
+                source: None,
+                context: ErrorContext::new("repository_processor")
+                    .with_operation("setup_api_access")
+                    .with_suggestion("Check repository URL and access token"),
+            });
+        }
+
+        info!("API access validated for repository: {}", repo_info.url);
+        Ok(api_path)
+    }
+
+    /// Create an API client for the repository
+    pub fn create_api_client(
+        &self,
+        repo_info: &RepoInfo,
+    ) -> WikifyResult<Box<dyn RepositoryApiClient>> {
+        let repo_type_str = match repo_info.repo_type {
+            RepoType::GitHub => "github",
+            RepoType::GitLab => "gitlab",
+            RepoType::Bitbucket => "bitbucket",
+            RepoType::Gitea => "gitea",
+            RepoType::Local => {
+                return Err(WikifyError::Repository {
+                    message: "Local repositories do not support API access".to_string(),
+                    source: None,
+                    context: ErrorContext::new("repository_processor")
+                        .with_operation("create_api_client")
+                        .with_suggestion("Use GitClone access mode for local repositories"),
+                });
+            }
+        };
+
+        let config = match repo_info.repo_type {
+            RepoType::GitHub => ApiClientConfig::github(repo_info.access_token.clone()),
+            RepoType::GitLab => {
+                // Extract base URL for GitLab if it's not gitlab.com
+                let base_url = if repo_info.url.contains("gitlab.com") {
+                    None
+                } else {
+                    // Extract domain from URL for self-hosted GitLab
+                    url::Url::parse(&repo_info.url).ok().and_then(|url| {
+                        url.host_str()
+                            .map(|host| format!("{}://{}/api/v4", url.scheme(), host))
+                    })
+                };
+                ApiClientConfig::gitlab(base_url, repo_info.access_token.clone())
+            }
+            RepoType::Bitbucket => ApiClientConfig::bitbucket(repo_info.access_token.clone()),
+            RepoType::Gitea => {
+                // Extract base URL for Gitea instance
+                let base_url = url::Url::parse(&repo_info.url)
+                    .ok()
+                    .and_then(|url| {
+                        url.host_str()
+                            .map(|host| format!("{}://{}", url.scheme(), host))
+                    })
+                    .unwrap_or_else(|| repo_info.url.clone());
+                ApiClientConfig::gitea(base_url, repo_info.access_token.clone())
+            }
+            RepoType::Local => unreachable!(), // Already handled above
+        };
+
+        ApiClientFactory::create_client(repo_type_str, config)
+    }
+
+    /// Get file tree using API
+    pub async fn get_api_file_tree(
+        &self,
+        repo_info: &RepoInfo,
+        branch: Option<&str>,
+    ) -> WikifyResult<Vec<crate::api::RepositoryFile>> {
+        let api_client = self.create_api_client(repo_info)?;
+        api_client
+            .get_file_tree(&repo_info.owner, &repo_info.name, branch)
+            .await
+    }
+
+    /// Get file content using API
+    pub async fn get_api_file_content(
+        &self,
+        repo_info: &RepoInfo,
+        path: &str,
+        branch: Option<&str>,
+    ) -> WikifyResult<String> {
+        let api_client = self.create_api_client(repo_info)?;
+        api_client
+            .get_file_content(&repo_info.owner, &repo_info.name, path, branch)
+            .await
+    }
+
+    /// Get repository metadata using API
+    pub async fn get_api_repository_metadata(
+        &self,
+        repo_info: &RepoInfo,
+    ) -> WikifyResult<crate::api::RepositoryMetadata> {
+        let api_client = self.create_api_client(repo_info)?;
+        api_client
+            .get_repository_metadata(&repo_info.owner, &repo_info.name)
+            .await
     }
 }

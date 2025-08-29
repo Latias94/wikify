@@ -5,7 +5,7 @@
 use crate::{handlers, openapi, websocket, AppState};
 use axum::{
     response::Json,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::services::ServeDir;
@@ -22,6 +22,14 @@ pub fn api_routes() -> Router<AppState> {
         .route(
             "/repositories/{session_id}",
             get(handlers::get_repository_info),
+        )
+        .route(
+            "/repositories/{session_id}",
+            delete(handlers::delete_repository),
+        )
+        .route(
+            "/repositories/{session_id}/reindex",
+            post(handlers::reindex_repository),
         )
         // RAG endpoints
         .route("/chat", post(handlers::chat_query))

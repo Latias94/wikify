@@ -42,6 +42,9 @@ uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
 fastrand = "2.0"
+base64 = "0.22"
+urlencoding = "2.1"
+log = "0.4"
 
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls"] }
 

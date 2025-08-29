@@ -3,13 +3,17 @@
  * 与后端 WebSocket 协议保持一致
  */
 
-import { SourceDocument } from './api';
+import { SourceDocument } from "./api";
 
 // ============================================================================
 // WebSocket 连接状态
 // ============================================================================
 
-export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+export type WebSocketStatus =
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error";
 
 export interface WebSocketState {
   status: WebSocketStatus;
@@ -22,19 +26,18 @@ export interface WebSocketState {
 // 基础消息类型
 // ============================================================================
 
-export type WebSocketMessageType = 
-  | 'Chat'
-  | 'ChatResponse' 
-  | 'ChatError'
-  | 'WikiGenerate'
-  | 'WikiProgress'
-  | 'WikiComplete'
-  | 'WikiError'
-  | 'IndexProgress'
-  | 'IndexComplete'
-  | 'IndexError'
-  | 'Ping'
-  | 'Pong';
+export type WebSocketMessageType =
+  | "Chat"
+  | "ChatResponse"
+  | "ChatError"
+  | "WikiGenerate"
+  | "WikiProgress"
+  | "WikiComplete"
+  | "WikiError"
+  | "index_progress"
+  | "error"
+  | "Ping"
+  | "Pong";
 
 /**
  * WebSocket 消息基础结构
@@ -53,7 +56,7 @@ export interface BaseWebSocketMessage {
  * 聊天请求消息
  */
 export interface ChatMessage extends BaseWebSocketMessage {
-  type: 'Chat';
+  type: "Chat";
   session_id: string;
   question: string;
   context?: string;
@@ -63,7 +66,7 @@ export interface ChatMessage extends BaseWebSocketMessage {
  * 聊天响应消息
  */
 export interface ChatResponseMessage extends BaseWebSocketMessage {
-  type: 'ChatResponse';
+  type: "ChatResponse";
   session_id: string;
   answer: string;
   sources: SourceDocument[];
@@ -75,7 +78,7 @@ export interface ChatResponseMessage extends BaseWebSocketMessage {
  * 聊天错误消息
  */
 export interface ChatErrorMessage extends BaseWebSocketMessage {
-  type: 'ChatError';
+  type: "ChatError";
   session_id: string;
   error: string;
   details?: Record<string, any>;
@@ -89,7 +92,7 @@ export interface ChatErrorMessage extends BaseWebSocketMessage {
  * Wiki 生成请求消息
  */
 export interface WikiGenerateMessage extends BaseWebSocketMessage {
-  type: 'WikiGenerate';
+  type: "WikiGenerate";
   session_id: string;
   title?: string;
   description?: string;
@@ -100,7 +103,7 @@ export interface WikiGenerateMessage extends BaseWebSocketMessage {
  * Wiki 生成进度消息
  */
 export interface WikiProgressMessage extends BaseWebSocketMessage {
-  type: 'WikiProgress';
+  type: "WikiProgress";
   session_id: string;
   progress: number; // 0-100
   current_step: string;
@@ -112,7 +115,7 @@ export interface WikiProgressMessage extends BaseWebSocketMessage {
  * Wiki 生成完成消息
  */
 export interface WikiCompleteMessage extends BaseWebSocketMessage {
-  type: 'WikiComplete';
+  type: "WikiComplete";
   session_id: string;
   wiki_id: string;
   title: string;
@@ -124,7 +127,7 @@ export interface WikiCompleteMessage extends BaseWebSocketMessage {
  * Wiki 生成错误消息
  */
 export interface WikiErrorMessage extends BaseWebSocketMessage {
-  type: 'WikiError';
+  type: "WikiError";
   session_id: string;
   error: string;
   details?: Record<string, any>;
@@ -138,34 +141,33 @@ export interface WikiErrorMessage extends BaseWebSocketMessage {
  * 索引进度消息
  */
 export interface IndexProgressMessage extends BaseWebSocketMessage {
-  type: 'IndexProgress';
-  repository_id: string;
-  progress: number; // 0-100
+  type: "index_progress";
+  session_id: string;
+  progress: number; // 0.0-1.0 range
   current_file?: string;
-  processed_files: number;
+  files_processed: number;
   total_files: number;
-  status: 'processing' | 'embedding' | 'storing';
 }
 
 /**
- * 索引完成消息
+ * 索引完成消息 (实际上是进度消息的特殊情况，progress = 1.0)
  */
 export interface IndexCompleteMessage extends BaseWebSocketMessage {
-  type: 'IndexComplete';
-  repository_id: string;
+  type: "index_progress";
+  session_id: string;
+  progress: 1.0;
+  current_file?: string; // Contains completion summary
+  files_processed: number;
   total_files: number;
-  total_chunks: number;
-  duration_ms: number;
 }
 
 /**
  * 索引错误消息
  */
 export interface IndexErrorMessage extends BaseWebSocketMessage {
-  type: 'IndexError';
-  repository_id: string;
-  error: string;
-  details?: Record<string, any>;
+  type: "error";
+  message: string;
+  code?: string;
 }
 
 // ============================================================================
@@ -176,14 +178,14 @@ export interface IndexErrorMessage extends BaseWebSocketMessage {
  * Ping 消息
  */
 export interface PingMessage extends BaseWebSocketMessage {
-  type: 'Ping';
+  type: "Ping";
 }
 
 /**
  * Pong 消息
  */
 export interface PongMessage extends BaseWebSocketMessage {
-  type: 'Pong';
+  type: "Pong";
 }
 
 // ============================================================================
@@ -193,7 +195,7 @@ export interface PongMessage extends BaseWebSocketMessage {
 /**
  * 所有 WebSocket 消息类型的联合
  */
-export type WebSocketMessage = 
+export type WebSocketMessage =
   | ChatMessage
   | ChatResponseMessage
   | ChatErrorMessage
@@ -210,15 +212,12 @@ export type WebSocketMessage =
 /**
  * 客户端发送的消息类型
  */
-export type ClientMessage = 
-  | ChatMessage
-  | WikiGenerateMessage
-  | PingMessage;
+export type ClientMessage = ChatMessage | WikiGenerateMessage | PingMessage;
 
 /**
  * 服务端发送的消息类型
  */
-export type ServerMessage = 
+export type ServerMessage =
   | ChatResponseMessage
   | ChatErrorMessage
   | WikiProgressMessage

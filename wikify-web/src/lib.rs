@@ -31,13 +31,49 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 /// Create the main application router
 pub fn create_app(state: AppState) -> Router {
-    // Configure CORS
-    let cors = CorsLayer::new()
-        .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
-        .allow_origin("http://127.0.0.1:3000".parse::<HeaderValue>().unwrap())
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_credentials(true)
-        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+    // Configure CORS with environment variable support
+    let cors = {
+        // Get allowed origins from environment variable or use defaults
+        let allowed_origins = std::env::var("WIKIFY_CORS_ORIGINS").unwrap_or_else(|_| {
+            // Default origins for development (Vite default port)
+            "http://localhost:5173,http://127.0.0.1:5173".to_string()
+        });
+
+        let cors_layer = CorsLayer::new()
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
+            .allow_credentials(true)
+            .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+
+        // Parse and add each origin
+        let origins: Vec<HeaderValue> = allowed_origins
+            .split(',')
+            .filter_map(|origin| {
+                let origin = origin.trim();
+                if origin.is_empty() {
+                    return None;
+                }
+                match origin.parse::<HeaderValue>() {
+                    Ok(header_value) => {
+                        tracing::info!("Added CORS origin: {}", origin);
+                        Some(header_value)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Invalid CORS origin format '{}': {}", origin, e);
+                        None
+                    }
+                }
+            })
+            .collect();
+
+        // Add all origins at once
+        cors_layer.allow_origin(origins)
+    };
 
     // Create the main router
     Router::new()
@@ -158,6 +194,9 @@ pub enum WebError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
 }
 
 /// Result type for web operations

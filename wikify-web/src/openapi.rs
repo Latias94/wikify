@@ -8,9 +8,9 @@ use utoipa::{
 };
 
 use crate::handlers::{
-    ChatQueryRequest, ChatQueryResponse, GenerateWikiRequest, GenerateWikiResponse, HealthResponse,
-    InitializeRepositoryRequest, InitializeRepositoryResponse, SourceDocument,
-    WikiGenerationConfig,
+    ChatQueryRequest, ChatQueryResponse, DeleteRepositoryResponse, GenerateWikiRequest,
+    GenerateWikiResponse, HealthResponse, InitializeRepositoryRequest,
+    InitializeRepositoryResponse, SourceDocument, WikiGenerationConfig,
 };
 
 /// Main OpenAPI specification for Wikify Web Server
@@ -39,6 +39,8 @@ use crate::handlers::{
         // Repository management
         crate::handlers::initialize_repository,
         crate::handlers::get_repository_info,
+        crate::handlers::delete_repository,
+        crate::handlers::reindex_repository,
 
         // Chat endpoints
         crate::handlers::chat_query,
@@ -65,6 +67,7 @@ use crate::handlers::{
             HealthResponse,
             InitializeRepositoryRequest,
             InitializeRepositoryResponse,
+            DeleteRepositoryResponse,
             ChatQueryRequest,
             ChatQueryResponse,
             SourceDocument,

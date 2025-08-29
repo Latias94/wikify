@@ -12,6 +12,7 @@ pub struct RepoInfo {
     pub url: String,
     pub access_token: Option<String>,
     pub local_path: Option<String>,
+    pub access_mode: RepoAccessMode,
 }
 
 /// Supported repository types
@@ -20,7 +21,17 @@ pub enum RepoType {
     GitHub,
     GitLab,
     Bitbucket,
+    Gitea,
     Local,
+}
+
+/// Repository access mode
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RepoAccessMode {
+    /// Clone the entire repository using git
+    GitClone,
+    /// Access files via API without cloning
+    Api,
 }
 
 /// Document information

@@ -71,7 +71,7 @@ cargo run --bin wikify-web -- --config ./config.toml
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
-| `WIKIFY_CORS_ORIGINS` | Allowed origins (comma-separated) | `http://localhost:3000,http://localhost:5173,...` | `https://app.example.com,https://admin.example.com` |
+| `WIKIFY_CORS_ORIGINS` | Allowed origins (comma-separated) | `http://localhost:5173,http://127.0.0.1:5173` | `https://app.example.com,https://admin.example.com` |
 | `WIKIFY_CORS_CREDENTIALS` | Allow credentials | `true` | `true`, `false` |
 | `WIKIFY_CORS_METHODS` | Allowed HTTP methods (comma-separated) | `GET,POST,PUT,DELETE,OPTIONS` | `GET,POST` |
 | `WIKIFY_CORS_HEADERS` | Allowed headers (comma-separated) | `Authorization,Accept,Content-Type` | `Content-Type,X-API-Key` |
@@ -89,7 +89,7 @@ WIKIFY_DEV_MODE=true
 
 # CORS - Development (permissive for local development)
 WIKIFY_CORS_DEV_ALLOW_ALL=true
-WIKIFY_CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173
+WIKIFY_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 WIKIFY_CORS_CREDENTIALS=true
 WIKIFY_CORS_METHODS=GET,POST,PUT,DELETE,OPTIONS
 WIKIFY_CORS_HEADERS=Authorization,Accept,Content-Type,X-Requested-With

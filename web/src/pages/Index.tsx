@@ -2,14 +2,21 @@ import { useState, useEffect } from "react";
 import RepositoryManager from "@/components/RepositoryManager";
 import ThemeToggle from "@/components/ThemeToggle";
 import { BackendConnectionSettings } from "@/components/BackendConnectionSettings";
+import BackendConnectionStatus from "@/components/BackendConnectionStatus";
+import { ServerStatusBar } from "@/components/ServerStatusBar";
 import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Settings, Server } from "lucide-react";
 import { backendConnection, BackendEndpoint } from "@/lib/backend-connection";
 import { apiClient } from "@/lib/api-client";
 
 const Index = () => {
-  const [showBackendSettings, setShowBackendSettings] = useState(false);
   const [currentBackend, setCurrentBackend] = useState<BackendEndpoint | null>(null);
+  const [statusBarMode, setStatusBarMode] = useState<'header' | 'bottom' | 'hidden'>('header'); // 状态栏模式
 
   useEffect(() => {
     // Initialize backend connection on app start
@@ -46,15 +53,26 @@ const Index = () => {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowBackendSettings(!showBackendSettings)}
-            >
-              <Settings size={16} />
-            </Button>
-            <ThemeToggle />
+          <div className="flex items-center gap-4">
+            {/* 后端连接状态 */}
+            <BackendConnectionStatus compact />
+
+            <div className="flex items-center gap-2">
+              {/* Server Settings Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <Server size={16} className="mr-1" />
+                    <Settings size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-96 p-0">
+                  <BackendConnectionSettings onConnectionChange={handleConnectionChange} compact />
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </header>
@@ -62,9 +80,9 @@ const Index = () => {
       {/* Main content */}
       <main className="py-8">
         <div className="container space-y-6">
-          {showBackendSettings && (
-            <BackendConnectionSettings onConnectionChange={handleConnectionChange} />
-          )}
+          {/* 简化的后端连接状态 - 只在有问题时显示 */}
+          <BackendConnectionStatus compact />
+
           <RepositoryManager />
         </div>
       </main>

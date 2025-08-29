@@ -11,7 +11,8 @@ use axum::{
     response::Response,
 };
 use serde::{Deserialize, Serialize};
-use tokio::time::{interval, Duration};
+use tokio::sync::broadcast;
+use tokio::time::Duration;
 use tracing::{error, info, warn};
 
 /// WebSocket message types
@@ -168,45 +169,133 @@ async fn handle_wiki_socket(mut socket: WebSocket, state: AppState) {
 }
 
 /// Handle indexing WebSocket connection
-async fn handle_index_socket(mut socket: WebSocket, _state: AppState) {
+async fn handle_index_socket(mut socket: WebSocket, state: AppState) {
     info!("New indexing WebSocket connection established");
 
-    // Send periodic progress updates
-    let mut interval = interval(Duration::from_millis(500));
+    // Subscribe to progress updates
+    let mut progress_receiver = state.progress_broadcaster.subscribe();
 
     loop {
         tokio::select! {
-            _ = interval.tick() => {
-                // Send progress update (placeholder)
-                let progress = WsMessage::IndexProgress {
-                    session_id: "current".to_string(),
-                    progress: 0.5,
-                    files_processed: 50,
-                    total_files: 100,
-                    current_file: Some("src/main.rs".to_string()),
-                };
+            // Receive progress updates from the broadcaster
+            update_result = progress_receiver.recv() => {
+                match update_result {
+                    Ok(update) => {
+                        // Convert to WebSocket message format based on update type
+                        let ws_message = match update {
+                            crate::state::IndexingUpdate::Progress {
+                                session_id,
+                                percentage,
+                                files_processed,
+                                total_files,
+                                current_item,
+                                ..
+                            } => {
+                                WsMessage::IndexProgress {
+                                    session_id,
+                                    progress: percentage / 100.0, // Convert to 0.0-1.0 range
+                                    files_processed: files_processed.unwrap_or(0),
+                                    total_files: total_files.unwrap_or(0),
+                                    current_file: current_item,
+                                }
+                            }
+                            crate::state::IndexingUpdate::Complete {
+                                session_id,
+                                total_files,
+                                total_chunks,
+                                ..
+                            } => {
+                                // Send a completion message
+                                WsMessage::IndexProgress {
+                                    session_id,
+                                    progress: 1.0,
+                                    files_processed: total_files,
+                                    total_files,
+                                    current_file: Some(format!("Completed! Processed {} files into {} chunks", total_files, total_chunks)),
+                                }
+                            }
+                            crate::state::IndexingUpdate::Error { session_id: _, error } => {
+                                WsMessage::Error {
+                                    message: error,
+                                    code: Some("INDEXING_ERROR".to_string()),
+                                }
+                            }
+                            crate::state::IndexingUpdate::WikiGenerationStarted { session_id } => {
+                                WsMessage::WikiProgress {
+                                    session_id,
+                                    progress: 0.0,
+                                    current_step: "Starting wiki generation...".to_string(),
+                                    total_steps: 5,
+                                    completed_steps: 0,
+                                }
+                            }
+                            crate::state::IndexingUpdate::WikiGenerationProgress { session_id, stage, percentage } => {
+                                WsMessage::WikiProgress {
+                                    session_id,
+                                    progress: percentage / 100.0,
+                                    current_step: stage,
+                                    total_steps: 5,
+                                    completed_steps: (percentage / 20.0) as usize, // 5 steps, so each is 20%
+                                }
+                            }
+                            crate::state::IndexingUpdate::WikiGenerationComplete { session_id, wiki_id, pages_count, sections_count } => {
+                                WsMessage::WikiComplete {
+                                    session_id,
+                                    wiki_id,
+                                    pages_count,
+                                    sections_count,
+                                }
+                            }
+                            crate::state::IndexingUpdate::WikiGenerationError { session_id: _, error } => {
+                                WsMessage::Error {
+                                    message: format!("Wiki generation failed: {}", error),
+                                    code: Some("WIKI_GENERATION_ERROR".to_string()),
+                                }
+                            }
+                        };
 
-                if let Ok(msg) = serde_json::to_string(&progress) {
-                    if socket.send(Message::Text(msg.into())).await.is_err() {
+                        if let Ok(msg) = serde_json::to_string(&ws_message) {
+                            if socket.send(Message::Text(msg.into())).await.is_err() {
+                                info!("Client disconnected during update");
+                                break;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!("WebSocket client lagged behind, skipped {} messages", skipped);
+                        // Continue receiving
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        info!("Progress broadcaster closed");
                         break;
                     }
                 }
             }
+            // Handle incoming WebSocket messages
             msg = socket.recv() => {
                 match msg {
                     Some(Ok(Message::Close(_))) => {
-                        info!("Indexing WebSocket connection closed");
+                        info!("Indexing WebSocket connection closed by client");
                         break;
+                    }
+                    Some(Ok(Message::Ping(data))) => {
+                        if socket.send(Message::Pong(data)).await.is_err() {
+                            break;
+                        }
                     }
                     Some(Err(e)) => {
                         error!("Indexing WebSocket error: {}", e);
                         break;
                     }
-                    _ => {}
+                    _ => {
+                        // Ignore other message types
+                    }
                 }
             }
         }
     }
+
+    info!("Indexing WebSocket connection terminated");
 }
 
 /// Handle individual chat messages

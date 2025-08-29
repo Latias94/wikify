@@ -227,6 +227,43 @@
             "description": "Session not found"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Repository"
+        ],
+        "summary": "Delete repository",
+        "description": "Delete a repository and all associated data including sessions, vector data, and database records",
+        "operationId": "delete_repository",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session ID of the repository to delete",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Repository deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteRepositoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
       }
     },
     "/api/sessions": {
@@ -396,6 +433,29 @@
           "timestamp": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DeleteRepositoryResponse": {
+        "type": "object",
+        "description": "Repository deletion response",
+        "required": [
+          "status",
+          "message",
+          "deleted_session_id"
+        ],
+        "properties": {
+          "deleted_session_id": {
+            "type": "string",
+            "example": "uuid-string"
+          },
+          "message": {
+            "type": "string",
+            "example": "Repository deleted successfully"
+          },
+          "status": {
+            "type": "string",
+            "example": "success"
           }
         }
       },

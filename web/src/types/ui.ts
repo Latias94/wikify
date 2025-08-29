@@ -67,6 +67,7 @@ export interface RepositoryCardProps {
 export interface InitializeRepositoryFormData {
   repository: string; // 仓库URL或本地路径
   repo_type: "local" | "remote";
+  auto_generate_wiki?: boolean; // 是否在索引完成后自动生成wiki
 }
 
 export interface RepositoryStats {

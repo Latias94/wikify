@@ -36,9 +36,10 @@ import { backendConnection, BackendEndpoint, ConnectionStatus } from '@/lib/back
 
 interface BackendConnectionSettingsProps {
   onConnectionChange?: (endpoint: BackendEndpoint | null) => void;
+  compact?: boolean; // 新增：紧凑模式，适合下拉菜单
 }
 
-export function BackendConnectionSettings({ onConnectionChange }: BackendConnectionSettingsProps) {
+export function BackendConnectionSettings({ onConnectionChange, compact = false }: BackendConnectionSettingsProps) {
   const { toast } = useToast();
   const [endpoints, setEndpoints] = useState<BackendEndpoint[]>([]);
   const [connectionStatuses, setConnectionStatuses] = useState<ConnectionStatus[]>([]);
@@ -172,6 +173,157 @@ export function BackendConnectionSettings({ onConnectionChange }: BackendConnect
     }
   };
 
+  // 紧凑模式：适合下拉菜单
+  if (compact) {
+    return (
+      <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Server size={16} />
+            <span className="font-medium text-sm">Backend Servers</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={checkAllConnections}
+              disabled={isChecking}
+            >
+              {isChecking ? (
+                <RefreshCw size={12} className="animate-spin" />
+              ) : (
+                <RefreshCw size={12} />
+              )}
+            </Button>
+
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <Plus size={12} />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Custom Backend</DialogTitle>
+                  <DialogDescription>
+                    Add a custom backend server endpoint
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium">Name</label>
+                    <Input
+                      placeholder="My Custom Backend"
+                      value={newEndpoint.name}
+                      onChange={(e) => setNewEndpoint(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-sm font-medium">Host</label>
+                      <Input
+                        placeholder="localhost"
+                        value={newEndpoint.host}
+                        onChange={(e) => setNewEndpoint(prev => ({ ...prev, host: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Port</label>
+                      <Input
+                        placeholder="8080"
+                        value={newEndpoint.port}
+                        onChange={(e) => setNewEndpoint(prev => ({ ...prev, port: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <Button onClick={addCustomEndpoint} className="w-full">
+                    Add Endpoint
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {endpoints.map((endpoint) => {
+            const status = connectionStatuses.find(s => s.endpoint.id === endpoint.id);
+            const isCurrent = currentEndpoint?.id === endpoint.id;
+
+            return (
+              <div
+                key={endpoint.id}
+                className={`p-2 border rounded text-xs transition-colors ${
+                  isCurrent ? 'border-primary bg-primary/5' : 'border-border'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {isCurrent ? (
+                      <Zap size={12} className="text-primary flex-shrink-0" />
+                    ) : status?.isConnected ? (
+                      <Wifi size={12} className="text-green-500 flex-shrink-0" />
+                    ) : (
+                      <WifiOff size={12} className="text-muted-foreground flex-shrink-0" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{endpoint.name}</div>
+                      <div className="text-muted-foreground truncate">
+                        {endpoint.apiUrl.replace('http://', '').replace('/api', '')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {getStatusBadge(status)}
+
+                    {!isCurrent && status?.isConnected && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => switchToEndpoint(endpoint)}
+                        className="h-6 px-2 text-xs"
+                      >
+                        Switch
+                      </Button>
+                    )}
+
+                    {!endpoint.isDefault && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeEndpoint(endpoint.id)}
+                        className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 size={10} />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {status?.error && (
+                  <div className="mt-1 text-xs text-destructive">
+                    {status.error}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {currentEndpoint && (
+          <div className="pt-2 border-t">
+            <div className="text-xs font-medium mb-1">Current: {currentEndpoint.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {currentEndpoint.apiUrl.replace('http://', '').replace('/api', '')}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 原始的完整模式
   return (
     <Card>
       <CardHeader>
@@ -199,7 +351,7 @@ export function BackendConnectionSettings({ onConnectionChange }: BackendConnect
               )}
               Check All
             </Button>
-            
+
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm">

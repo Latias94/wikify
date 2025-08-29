@@ -204,6 +204,17 @@ impl SimpleDatabaseService {
         Ok(repositories)
     }
 
+    /// 删除仓库信息
+    pub async fn delete_repository(&self, repository_id: &str) -> WebResult<()> {
+        sqlx::query("DELETE FROM repositories WHERE id = ?")
+            .bind(repository_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| WebError::Database(format!("Failed to delete repository: {}", e)))?;
+
+        Ok(())
+    }
+
     /// 保存会话
     pub async fn save_session(&self, session: &SimpleSession) -> WebResult<()> {
         sqlx::query(
@@ -254,6 +265,17 @@ impl SimpleDatabaseService {
         }
 
         Ok(sessions)
+    }
+
+    /// 删除会话信息
+    pub async fn delete_session(&self, session_id: &str) -> WebResult<()> {
+        sqlx::query("DELETE FROM sessions WHERE id = ?")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| WebError::Database(format!("Failed to delete session: {}", e)))?;
+
+        Ok(())
     }
 
     /// 保存查询记录
@@ -312,6 +334,20 @@ impl SimpleDatabaseService {
         }
 
         Ok(queries)
+    }
+
+    /// 删除查询历史
+    pub async fn delete_query_history(&self, repository_id: &str) -> WebResult<()> {
+        // Delete query history for sessions associated with this repository
+        sqlx::query(
+            "DELETE FROM query_history WHERE session_id IN (SELECT id FROM sessions WHERE repository_id = ?)"
+        )
+        .bind(repository_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| WebError::Database(format!("Failed to delete query history: {}", e)))?;
+
+        Ok(())
     }
 }
 

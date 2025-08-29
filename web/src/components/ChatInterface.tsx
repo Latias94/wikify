@@ -164,18 +164,11 @@ const ChatInterface = () => {
       navigate('/');
       return;
     }
-    
-    // 检查会话是否匹配
-    if (activeSession?.id !== sessionId) {
-      toast({
-        title: "Session Not Found", 
-        description: "The requested chat session was not found",
-        variant: "destructive"
-      });
-      navigate('/');
-      return;
-    }
-  }, [sessionId, activeSession, navigate, toast]);
+
+    // 在 Wikify 中，sessionId 就是 repository 的 ID
+    // 我们不需要预先设置 activeSession，直接使用 sessionId 进行聊天
+    console.log('Starting chat with session ID:', sessionId);
+  }, [sessionId, navigate, toast]);
 
   // 如果没有会话ID，显示错误
   if (!sessionId) {
@@ -192,20 +185,7 @@ const ChatInterface = () => {
     );
   }
 
-  // 如果会话不存在，显示错误
-  if (!activeSession) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">会话未找到</h2>
-          <p className="text-muted-foreground">请求的聊天会话不存在。</p>
-          <Button onClick={handleGoBack} className="mt-4">
-            返回首页
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // 在 Wikify 中，我们直接使用 sessionId，不需要检查 activeSession
 
   return (
     <motion.div 

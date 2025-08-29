@@ -14,14 +14,14 @@ import {
   WebSocketEventHandlers,
   PingMessage,
   PongMessage,
-} from '@/types/websocket';
+} from "@/types/websocket";
 
 // ============================================================================
 // 配置和常量
 // ============================================================================
 
 const DEFAULT_CONFIG: Required<WebSocketConfig> = {
-  url: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080/ws',
+  url: import.meta.env.VITE_WS_BASE_URL || "ws://localhost:8080/ws",
   reconnectInterval: 3000,
   maxReconnectAttempts: 5,
   heartbeatInterval: 30000,
@@ -44,15 +44,15 @@ export class WebSocketClient {
   private options: Required<WebSocketOptions>;
   private state: WebSocketState;
   private handlers: WebSocketEventHandlers = {};
-  
+
   // 重连相关
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
-  
+
   // 心跳相关
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private lastPongTime = 0;
-  
+
   // 消息队列
   private messageQueue: ClientMessage[] = [];
   private isConnecting = false;
@@ -67,15 +67,15 @@ export class WebSocketClient {
       ...config,
       url: `${DEFAULT_CONFIG.url}/${endpoint}`,
     };
-    
+
     this.options = { ...DEFAULT_OPTIONS, ...options };
-    
+
     this.state = {
-      status: 'disconnected',
+      status: "disconnected",
       reconnectAttempts: 0,
     };
 
-    this.log('WebSocket client created', { endpoint, config: this.config });
+    this.log("WebSocket client created", { endpoint, config: this.config });
   }
 
   // ============================================================================
@@ -93,20 +93,20 @@ export class WebSocketClient {
       }
 
       if (this.isConnecting) {
-        reject(new Error('Connection already in progress'));
+        reject(new Error("Connection already in progress"));
         return;
       }
 
       this.isConnecting = true;
-      this.updateState({ status: 'connecting' });
-      this.log('Connecting to WebSocket server...');
+      this.updateState({ status: "connecting" });
+      this.log("Connecting to WebSocket server...");
 
       try {
         this.ws = new WebSocket(this.config.url);
         this.setupEventListeners(resolve, reject);
       } catch (error) {
         this.isConnecting = false;
-        this.updateState({ status: 'error', error: (error as Error).message });
+        this.updateState({ status: "error", error: (error as Error).message });
         reject(error);
       }
     });
@@ -116,18 +116,18 @@ export class WebSocketClient {
    * 断开连接
    */
   disconnect(): void {
-    this.log('Disconnecting from WebSocket server...');
-    
+    this.log("Disconnecting from WebSocket server...");
+
     // 清理定时器
     this.clearTimers();
-    
+
     // 关闭连接
     if (this.ws) {
-      this.ws.close(1000, 'Client disconnect');
+      this.ws.close(1000, "Client disconnect");
       this.ws = null;
     }
-    
-    this.updateState({ status: 'disconnected' });
+
+    this.updateState({ status: "disconnected" });
     this.isConnecting = false;
     this.reconnectAttempts = 0;
   }
@@ -135,11 +135,14 @@ export class WebSocketClient {
   /**
    * 设置事件监听器
    */
-  private setupEventListeners(resolve: () => void, reject: (error: Error) => void): void {
+  private setupEventListeners(
+    resolve: () => void,
+    reject: (error: Error) => void
+  ): void {
     if (!this.ws) return;
 
     const connectTimeout = setTimeout(() => {
-      reject(new Error('Connection timeout'));
+      reject(new Error("Connection timeout"));
       this.handleConnectionError();
     }, this.config.timeout);
 
@@ -147,23 +150,23 @@ export class WebSocketClient {
       clearTimeout(connectTimeout);
       this.isConnecting = false;
       this.reconnectAttempts = 0;
-      
-      this.updateState({ 
-        status: 'connected', 
+
+      this.updateState({
+        status: "connected",
         lastConnected: new Date(),
-        error: undefined 
+        error: undefined,
       });
-      
-      this.log('WebSocket connected successfully');
-      
+
+      this.log("WebSocket connected successfully");
+
       // 发送队列中的消息
       this.flushMessageQueue();
-      
+
       // 启动心跳
       if (this.options.heartbeat) {
         this.startHeartbeat();
       }
-      
+
       this.handlers.onConnect?.();
       resolve();
     };
@@ -171,14 +174,17 @@ export class WebSocketClient {
     this.ws.onclose = (event) => {
       clearTimeout(connectTimeout);
       this.isConnecting = false;
-      
-      this.log('WebSocket connection closed', { code: event.code, reason: event.reason });
-      
+
+      this.log("WebSocket connection closed", {
+        code: event.code,
+        reason: event.reason,
+      });
+
       this.clearTimers();
-      this.updateState({ status: 'disconnected' });
-      
+      this.updateState({ status: "disconnected" });
+
       this.handlers.onDisconnect?.();
-      
+
       // 自动重连
       if (this.options.autoReconnect && event.code !== 1000) {
         this.scheduleReconnect();
@@ -187,13 +193,13 @@ export class WebSocketClient {
 
     this.ws.onerror = (event) => {
       clearTimeout(connectTimeout);
-      this.log('WebSocket error occurred', event);
-      
-      const error = new Error('WebSocket connection error');
-      this.updateState({ status: 'error', error: error.message });
-      
+      this.log("WebSocket error occurred", event);
+
+      const error = new Error("WebSocket connection error");
+      this.updateState({ status: "error", error: error.message });
+
       this.handlers.onError?.(event);
-      
+
       if (this.isConnecting) {
         reject(error);
       }
@@ -217,18 +223,18 @@ export class WebSocketClient {
         ...message,
         timestamp: new Date().toISOString(),
       });
-      
+
       this.ws.send(messageStr);
-      this.log('Message sent', message);
+      this.log("Message sent", message);
     } else {
       // 连接未就绪，加入队列
       this.messageQueue.push(message);
-      this.log('Message queued (connection not ready)', message);
-      
+      this.log("Message queued (connection not ready)", message);
+
       // 尝试连接
-      if (this.state.status === 'disconnected') {
-        this.connect().catch(error => {
-          this.log('Failed to connect for queued message', error);
+      if (this.state.status === "disconnected") {
+        this.connect().catch((error) => {
+          this.log("Failed to connect for queued message", error);
         });
       }
     }
@@ -240,18 +246,18 @@ export class WebSocketClient {
   private handleMessage(data: string): void {
     try {
       const message: ServerMessage = JSON.parse(data);
-      this.log('Message received', message);
-      
+      this.log("Message received", message);
+
       // 处理心跳响应
-      if (message.type === 'Pong') {
+      if (message.type === "Pong") {
         this.lastPongTime = Date.now();
         return;
       }
-      
+
       // 路由消息到对应的处理器
       this.routeMessage(message);
     } catch (error) {
-      this.log('Failed to parse message', { data, error });
+      this.log("Failed to parse message", { data, error });
     }
   }
 
@@ -260,32 +266,35 @@ export class WebSocketClient {
    */
   private routeMessage(message: ServerMessage): void {
     switch (message.type) {
-      case 'ChatResponse':
+      case "ChatResponse":
         this.handlers.onChatResponse?.(message);
         break;
-      case 'ChatError':
+      case "ChatError":
         this.handlers.onChatError?.(message);
         break;
-      case 'WikiProgress':
+      case "WikiProgress":
         this.handlers.onWikiProgress?.(message);
         break;
-      case 'WikiComplete':
+      case "WikiComplete":
         this.handlers.onWikiComplete?.(message);
         break;
-      case 'WikiError':
+      case "WikiError":
         this.handlers.onWikiError?.(message);
         break;
-      case 'IndexProgress':
+      case "index_progress":
         this.handlers.onIndexProgress?.(message);
         break;
-      case 'IndexComplete':
-        this.handlers.onIndexComplete?.(message);
-        break;
-      case 'IndexError':
-        this.handlers.onIndexError?.(message);
+      case "error":
+        // 检查是否是索引错误（通过 code 字段）
+        if (message.code === "INDEXING_ERROR") {
+          this.handlers.onIndexError?.(message);
+        } else {
+          // 其他错误类型的处理
+          console.error("WebSocket error:", message);
+        }
         break;
       default:
-        this.log('Unknown message type', message);
+        this.log("Unknown message type", message);
     }
   }
 
@@ -310,8 +319,8 @@ export class WebSocketClient {
    */
   private handleConnectionError(): void {
     this.isConnecting = false;
-    this.updateState({ status: 'error' });
-    
+    this.updateState({ status: "error" });
+
     if (this.options.autoReconnect) {
       this.scheduleReconnect();
     }
@@ -322,24 +331,26 @@ export class WebSocketClient {
    */
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
-      this.log('Max reconnect attempts reached, giving up');
+      this.log("Max reconnect attempts reached, giving up");
       return;
     }
 
     this.reconnectAttempts++;
     this.updateState({ reconnectAttempts: this.reconnectAttempts });
-    
+
     const delay = Math.min(
       this.config.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1),
       30000 // 最大 30 秒
     );
-    
-    this.log(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
-    
+
+    this.log(
+      `Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`
+    );
+
     this.reconnectTimer = setTimeout(() => {
       this.log(`Reconnect attempt ${this.reconnectAttempts}`);
-      this.connect().catch(error => {
-        this.log('Reconnect failed', error);
+      this.connect().catch((error) => {
+        this.log("Reconnect failed", error);
       });
     }, delay);
   }
@@ -355,16 +366,19 @@ export class WebSocketClient {
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         const pingMessage: PingMessage = {
-          type: 'Ping',
+          type: "Ping",
           timestamp: new Date().toISOString(),
         };
-        
+
         this.send(pingMessage);
-        
+
         // 检查上次 pong 的时间
         const now = Date.now();
-        if (this.lastPongTime > 0 && now - this.lastPongTime > this.config.heartbeatInterval * 2) {
-          this.log('Heartbeat timeout, reconnecting...');
+        if (
+          this.lastPongTime > 0 &&
+          now - this.lastPongTime > this.config.heartbeatInterval * 2
+        ) {
+          this.log("Heartbeat timeout, reconnecting...");
           this.handleConnectionError();
         }
       }
@@ -383,7 +397,7 @@ export class WebSocketClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    
+
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -402,7 +416,7 @@ export class WebSocketClient {
    */
   private log(message: string, data?: any): void {
     if (this.options.debug) {
-      console.log(`[WebSocket] ${message}`, data || '');
+      console.log(`[WebSocket] ${message}`, data || "");
     }
   }
 

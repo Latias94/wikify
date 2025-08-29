@@ -81,11 +81,22 @@ const ChatInput = memo(({
 
   // 处理键盘事件
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter') {
+      // 检查IME输入状态
+      if (e.nativeEvent.isComposing) {
+        return;
+      }
+
+      if (e.shiftKey) {
+        // Shift+Enter 允许换行
+        return;
+      }
+
+      // Enter 发送消息
       e.preventDefault();
       handleSend();
     }
-  }, []);
+  }, [handleSend]); // ✅ 添加handleSend依赖
 
   // 处理发送
   const handleSend = useCallback(() => {

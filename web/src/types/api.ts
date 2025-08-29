@@ -42,6 +42,7 @@ export interface InitializeRepositoryRequest {
   repository: string; // 仓库URL或本地路径
   repo_type?: string | null; // "github", "local", etc.
   access_token?: string | null;
+  auto_generate_wiki?: boolean | null; // 是否在索引完成后自动生成wiki，默认为true
 }
 
 /**
@@ -116,6 +117,12 @@ export interface SourceDocument {
   file_path: string;
   content: string;
   similarity_score: number;
+  // 扩展字段：位置信息
+  start_line?: number;
+  end_line?: number;
+  chunk_index?: number;
+  // 元数据
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -172,8 +179,20 @@ export interface WikiPage {
   id: string;
   title: string;
   content: string;
-  order: number;
-  parent_id?: string;
+  file_paths: string[];
+  importance: "High" | "Medium" | "Low";
+  related_pages: string[];
+  sections: WikiSection[];
+}
+
+/**
+ * Wiki 章节
+ */
+export interface WikiSection {
+  id: string;
+  title: string;
+  content: string;
+  subsections: WikiSection[];
 }
 
 /**
@@ -184,7 +203,7 @@ export interface WikiStructure {
   title: string;
   description: string;
   pages: WikiPage[];
-  root_sections: string[];
+  sections: WikiSection[];
 }
 
 /**

@@ -30,6 +30,8 @@ pub struct InitializeRepositoryRequest {
     #[schema(example = "github")]
     pub repo_type: Option<String>, // "github", "local", etc.
     pub access_token: Option<String>,
+    #[schema(example = true)]
+    pub auto_generate_wiki: Option<bool>, // Whether to automatically generate wiki after indexing
 }
 
 /// Repository initialization response
@@ -41,6 +43,17 @@ pub struct InitializeRepositoryResponse {
     pub status: String,
     #[schema(example = "Repository initialized successfully")]
     pub message: String,
+}
+
+/// Repository deletion response
+#[derive(Serialize, ToSchema)]
+pub struct DeleteRepositoryResponse {
+    #[schema(example = "success")]
+    pub status: String,
+    #[schema(example = "Repository deleted successfully")]
+    pub message: String,
+    #[schema(example = "uuid-string")]
+    pub deleted_session_id: String,
 }
 
 /// Chat query request
@@ -132,10 +145,11 @@ pub async fn health_check() -> Json<HealthResponse> {
     path = "/api/repositories",
     tag = "Repository",
     summary = "Initialize repository",
-    description = "Initialize a repository for processing and create a new session",
+    description = "Initialize a repository for processing and create a new session. If the repository is already being indexed by another session, an error will be returned.",
     request_body = InitializeRepositoryRequest,
     responses(
         (status = 200, description = "Repository initialized successfully", body = InitializeRepositoryResponse),
+        (status = 409, description = "Repository is already being indexed by another session"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -143,15 +157,28 @@ pub async fn initialize_repository(
     State(state): State<AppState>,
     JsonExtractor(request): JsonExtractor<InitializeRepositoryRequest>,
 ) -> Result<Json<InitializeRepositoryResponse>, StatusCode> {
-    match state.initialize_rag(&request.repository).await {
+    let auto_generate_wiki = request.auto_generate_wiki.unwrap_or(true); // Default to true
+    match state
+        .initialize_rag(&request.repository, auto_generate_wiki)
+        .await
+    {
         Ok(session_id) => Ok(Json(InitializeRepositoryResponse {
             session_id,
             status: "success".to_string(),
             message: "Repository initialized successfully".to_string(),
         })),
         Err(e) => {
-            tracing::error!("Failed to initialize repository: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error_msg = e.to_string();
+            tracing::error!("Failed to initialize repository: {}", error_msg);
+
+            // Check if it's a concurrency/conflict error
+            if error_msg.contains("already being indexed")
+                || error_msg.contains("already in progress")
+            {
+                Err(StatusCode::CONFLICT)
+            } else {
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         }
     }
 }
@@ -189,6 +216,166 @@ pub async fn get_repository_info(
             Ok(Json(info))
         }
         None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+/// Reindex repository
+#[utoipa::path(
+    post,
+    path = "/api/repositories/{session_id}/reindex",
+    tag = "Repository",
+    summary = "Reindex repository",
+    description = "Reindex an existing repository. If the repository is currently being indexed, returns a conflict error. If already indexed, resets the state and starts reindexing.",
+    params(
+        ("session_id" = String, Path, description = "Session ID of the repository to reindex")
+    ),
+    responses(
+        (status = 200, description = "Repository reindexing started successfully", body = InitializeRepositoryResponse),
+        (status = 404, description = "Repository not found"),
+        (status = 409, description = "Repository is currently being indexed"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn reindex_repository(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<InitializeRepositoryResponse>, StatusCode> {
+    use tracing::{error, info};
+
+    info!("Reindexing repository for session: {}", session_id);
+
+    // Check if session exists
+    {
+        let sessions = state.sessions.read().await;
+        if !sessions.contains_key(&session_id) {
+            error!("Session not found for reindexing: {}", session_id);
+            return Err(StatusCode::NOT_FOUND);
+        }
+    }
+
+    // Check if already indexing using IndexingManager
+    if state.indexing_manager.is_indexing(&session_id).await {
+        error!("Repository is already being indexed: {}", session_id);
+        return Err(StatusCode::CONFLICT);
+    }
+
+    // Reset session state for reindexing
+    {
+        let mut sessions = state.sessions.write().await;
+        if let Some(session) = sessions.get_mut(&session_id) {
+            session.is_indexed = false;
+            session.indexing_progress = 0.0;
+            session.rag_pipeline = None;
+            session.last_activity = chrono::Utc::now();
+            info!("Reset session state for reindexing: {}", session_id);
+        }
+    }
+
+    // Get repository path for reindexing
+    let repo_path = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&session_id)
+            .map(|session| session.repository.clone())
+            .ok_or_else(|| {
+                error!("Session not found when getting repo path: {}", session_id);
+                StatusCode::NOT_FOUND
+            })?
+    };
+
+    // Start reindexing using IndexingManager for concurrency control
+    let sessions = state.sessions.clone();
+    let progress_broadcaster = state.progress_broadcaster.clone();
+    let wiki_service = state.wiki_service.clone();
+    let wiki_cache = state.wiki_cache.clone();
+    let session_id_for_task = session_id.clone();
+    let repo_path_for_task = repo_path.clone();
+
+    match state
+        .indexing_manager
+        .start_indexing_with_repo_check(session_id.clone(), repo_path_for_task.clone(), move || {
+            let session_id_clone = session_id_for_task.clone();
+            let repo_path = repo_path_for_task.clone();
+            let sessions = sessions.clone();
+            let progress_broadcaster = progress_broadcaster.clone();
+            let wiki_service = wiki_service.clone();
+            let wiki_cache = wiki_cache.clone();
+
+            async move {
+                crate::state::AppState::perform_indexing_task(
+                    session_id_clone,
+                    repo_path,
+                    sessions,
+                    progress_broadcaster,
+                    wiki_service,
+                    wiki_cache,
+                )
+                .await;
+            }
+        })
+        .await
+    {
+        Ok(()) => {
+            info!("Repository reindexing started for session: {}", session_id);
+        }
+        Err(e) => {
+            error!(
+                "Failed to start reindexing for session {}: {}",
+                session_id, e
+            );
+
+            // Check if it's a concurrency/conflict error
+            if e.contains("already being indexed") || e.contains("already in progress") {
+                return Err(StatusCode::CONFLICT);
+            } else {
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+    }
+
+    let response = InitializeRepositoryResponse {
+        session_id: session_id.clone(),
+        status: "success".to_string(),
+        message: "Repository reindexing started".to_string(),
+    };
+
+    info!("Repository reindexing started for session: {}", session_id);
+    Ok(Json(response))
+}
+
+/// Delete repository
+#[utoipa::path(
+    delete,
+    path = "/api/repositories/{session_id}",
+    tag = "Repository",
+    summary = "Delete repository",
+    description = "Delete a repository and all associated data including sessions, vector data, and database records",
+    params(
+        ("session_id" = String, Path, description = "Session ID of the repository to delete")
+    ),
+    responses(
+        (status = 200, description = "Repository deleted successfully", body = DeleteRepositoryResponse),
+        (status = 404, description = "Repository not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn delete_repository(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<DeleteRepositoryResponse>, StatusCode> {
+    match state.delete_repository(&session_id).await {
+        Ok(()) => Ok(Json(DeleteRepositoryResponse {
+            status: "success".to_string(),
+            message: "Repository deleted successfully".to_string(),
+            deleted_session_id: session_id,
+        })),
+        Err(e) => {
+            tracing::error!("Failed to delete repository {}: {}", session_id, e);
+            match e {
+                crate::WebError::NotFound(_) => Err(StatusCode::NOT_FOUND),
+                _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+            }
+        }
     }
 }
 
@@ -731,4 +918,102 @@ async fn save_query_to_database(
     database.save_query(&query).await?;
     tracing::debug!("Query saved to database: {}", query.id);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{AppState, WebConfig};
+    use axum::http::StatusCode;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_delete_repository_not_found() {
+        let state = AppState::new(WebConfig::default()).await.unwrap();
+        let app = crate::routes::api_routes().with_state(state);
+
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("DELETE")
+                    .uri("/repositories/non-existent-session")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_delete_repository_success() {
+        let state = AppState::new(WebConfig::default()).await.unwrap();
+
+        // Create a mock session directly (without indexing)
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let session = crate::state::RepositorySession {
+            id: session_id.clone(),
+            repository: "./mock-repo".to_string(),
+            repo_type: "local".to_string(),
+            created_at: chrono::Utc::now(),
+            last_activity: chrono::Utc::now(),
+            is_indexed: false,
+            indexing_progress: 0.0,
+            rag_pipeline: None,
+        };
+
+        // Insert the session manually
+        {
+            let mut sessions = state.sessions.write().await;
+            sessions.insert(session_id.clone(), session);
+        }
+
+        // Verify it exists
+        assert!(state.get_session(&session_id).await.is_some());
+
+        // Now delete it
+        let result = state.delete_repository(&session_id).await;
+        assert!(result.is_ok());
+
+        // Verify it's gone
+        assert!(state.get_session(&session_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_indexing_progress_broadcast() {
+        let state = AppState::new(WebConfig::default()).await.unwrap();
+
+        // Subscribe to progress updates
+        let mut progress_receiver = state.subscribe_to_progress();
+
+        // Send a test progress update
+        let test_progress = crate::state::IndexingUpdate::Progress {
+            session_id: "test-session".to_string(),
+            stage: "Testing".to_string(),
+            percentage: 50.0,
+            current_item: Some("test-file.rs".to_string()),
+            files_processed: Some(5),
+            total_files: Some(10),
+        };
+
+        // Send the progress update
+        let _ = state.progress_broadcaster.send(test_progress.clone());
+
+        // Receive and verify the progress update
+        let received = progress_receiver.recv().await.unwrap();
+        match received {
+            crate::state::IndexingUpdate::Progress {
+                session_id,
+                stage,
+                percentage,
+                ..
+            } => {
+                assert_eq!(session_id, "test-session");
+                assert_eq!(stage, "Testing");
+                assert_eq!(percentage, 50.0);
+            }
+            _ => panic!("Expected Progress update"),
+        }
+    }
 }

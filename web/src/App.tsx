@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { ChatInterface } from "./components/ChatInterface";
+import { WikiViewer } from "./components/WikiViewer";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,7 +29,8 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/chat/:repoId" element={<ChatInterface />} />
+          <Route path="/chat/:sessionId" element={<ChatInterface />} />
+          <Route path="/wiki/:sessionId" element={<WikiViewer />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

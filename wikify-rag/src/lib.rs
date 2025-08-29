@@ -6,6 +6,7 @@
 
 pub mod chat;
 pub mod embeddings;
+pub mod indexing_manager;
 pub mod llm_client;
 pub mod rag_pipeline;
 pub mod retriever;
@@ -15,6 +16,7 @@ pub mod types;
 
 pub use chat::*;
 pub use embeddings::*;
+pub use indexing_manager::*;
 pub use llm_client::*;
 pub use rag_pipeline::*;
 pub use retriever::*;

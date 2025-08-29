@@ -7,7 +7,7 @@ use crate::types::{EmbeddedChunk, EmbeddingConfig, RagError, RagResult};
 use cheungfun_core::Node;
 use indicatif::{ProgressBar, ProgressStyle};
 use siumai::prelude::*;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Embedding generator that converts text chunks to vector embeddings
@@ -47,9 +47,17 @@ impl EmbeddingGenerator {
                     })?;
 
                 self.client = Some(Box::new(client));
+
+                // Log detailed configuration
+                let base_url = std::env::var("OPENAI_BASE_URL")
+                    .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+
                 info!(
-                    "Initialized OpenAI embedding client with model: {}",
-                    self.config.model
+                    "🔧 Initialized OpenAI embedding client - Provider: OpenAI, Model: {}, Endpoint: {}, Dimensions: {}, Batch Size: {}",
+                    self.config.model,
+                    base_url,
+                    self.config.dimension,
+                    self.config.batch_size
                 );
             }
             provider => {
@@ -71,7 +79,13 @@ impl EmbeddingGenerator {
             ));
         }
 
-        info!("Generating embeddings for {} nodes", nodes.len());
+        info!(
+            "🚀 Starting embedding generation - Provider: {}, Model: {}, Nodes: {}, Batch Size: {}",
+            self.config.provider,
+            self.config.model,
+            nodes.len(),
+            self.config.batch_size
+        );
 
         // Create progress bar
         let pb = ProgressBar::new(nodes.len() as u64);
@@ -85,12 +99,36 @@ impl EmbeddingGenerator {
 
         let mut embedded_chunks = Vec::new();
         let mut processed_count = 0;
+        let total_batches = (nodes.len() + self.config.batch_size - 1) / self.config.batch_size;
+        let start_time = std::time::Instant::now();
 
         // Process nodes in batches to avoid rate limits
-        for batch in nodes.chunks(self.config.batch_size) {
+        for (batch_index, batch) in nodes.chunks(self.config.batch_size).enumerate() {
+            let batch_start = std::time::Instant::now();
+
+            info!(
+                "📦 Processing batch {}/{} - Provider: {}, Model: {}, Batch size: {}",
+                batch_index + 1,
+                total_batches,
+                self.config.provider,
+                self.config.model,
+                batch.len()
+            );
+
             let batch_chunks = self
                 .process_batch_with_progress(batch, &pb, &mut processed_count)
                 .await?;
+
+            let batch_duration = batch_start.elapsed();
+            info!(
+                "✅ Batch {}/{} completed - Generated: {} embeddings, Duration: {:?}, Rate: {:.2} embeddings/sec",
+                batch_index + 1,
+                total_batches,
+                batch_chunks.len(),
+                batch_duration,
+                batch_chunks.len() as f64 / batch_duration.as_secs_f64()
+            );
+
             embedded_chunks.extend(batch_chunks);
 
             // Small delay to avoid rate limits
@@ -99,8 +137,17 @@ impl EmbeddingGenerator {
             }
         }
 
+        let total_duration = start_time.elapsed();
         pb.finish_with_message("✅ Embeddings generated");
-        info!("Generated {} embeddings", embedded_chunks.len());
+
+        info!(
+            "🎉 Embedding generation completed - Provider: {}, Model: {}, Total: {} embeddings, Duration: {:?}, Average rate: {:.2} embeddings/sec",
+            self.config.provider,
+            self.config.model,
+            embedded_chunks.len(),
+            total_duration,
+            embedded_chunks.len() as f64 / total_duration.as_secs_f64()
+        );
         Ok(embedded_chunks)
     }
 
@@ -193,19 +240,51 @@ impl EmbeddingGenerator {
         text: &str,
     ) -> RagResult<Vec<f32>> {
         if let Some(embedding_client) = client.as_embedding_capability() {
+            let start_time = std::time::Instant::now();
+
+            debug!(
+                "📡 Calling embedding API - Provider: {}, Model: {}, Text length: {} chars",
+                self.config.provider,
+                self.config.model,
+                text.len()
+            );
+
             let response = embedding_client
                 .embed(vec![text.to_string()])
                 .await
-                .map_err(|e| RagError::Embedding(format!("Embedding API call failed: {}", e)))?;
+                .map_err(|e| {
+                    error!(
+                        "❌ Embedding API call failed - Provider: {}, Model: {}, Error: {}",
+                        self.config.provider, self.config.model, e
+                    );
+                    RagError::Embedding(format!("Embedding API call failed: {}", e))
+                })?;
+
+            let duration = start_time.elapsed();
 
             if let Some(embedding) = response.embeddings.first() {
+                debug!(
+                    "✅ Embedding generated - Provider: {}, Model: {}, Dimension: {}, Duration: {:?}",
+                    self.config.provider,
+                    self.config.model,
+                    embedding.len(),
+                    duration
+                );
                 Ok(embedding.clone())
             } else {
+                error!(
+                    "❌ No embedding data returned - Provider: {}, Model: {}",
+                    self.config.provider, self.config.model
+                );
                 Err(RagError::Embedding(
                     "No embedding data returned".to_string(),
                 ))
             }
         } else {
+            error!(
+                "❌ Provider does not support embeddings - Provider: {}",
+                self.config.provider
+            );
             Err(RagError::Config(format!(
                 "Provider {} does not support embeddings",
                 self.config.provider

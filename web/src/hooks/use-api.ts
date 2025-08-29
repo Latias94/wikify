@@ -154,30 +154,39 @@ export function useInitializeRepository() {
   const addRepository = useAppStore((state) => state.addRepository);
   const { toast } = useToast();
 
-  return useMutation(
-    createMutationConfig(
-      (data: InitializeRepositoryRequest) =>
-        apiClient.initializeRepository(data),
-      {
-        onSuccess: (response, variables) => {
-          // 刷新仓库列表
-          queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
+  return useMutation({
+    mutationFn: (data: InitializeRepositoryRequest) =>
+      apiClient.initializeRepository(data),
+    onSuccess: (response, variables) => {
+      // 刷新仓库列表
+      queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
 
-          toast({
-            title: "Repository added",
-            description: `${variables.repo_path} has been added successfully.`,
-          });
-        },
-        onError: (error) => {
-          toast({
-            title: "Failed to add repository",
-            description: error.message,
-            variant: "destructive",
-          });
-        },
+      toast({
+        title: "Repository indexing started",
+        description: `${variables.repository} has been added and indexing has started. You can monitor the progress below.`,
+      });
+    },
+    onError: (error: any) => {
+      let title = "Failed to add repository";
+      let description = error.message;
+
+      // Handle specific error cases
+      if (error.status === 409) {
+        title = "Repository already being indexed";
+        description =
+          "This repository is currently being indexed by another session. Please wait for it to complete or try again later.";
       }
-    )
-  );
+
+      toast({
+        title,
+        description,
+        variant: "destructive",
+      });
+    },
+    // 防止重复请求的配置
+    retry: false,
+    gcTime: 0, // 立即清理缓存
+  });
 }
 
 /**
@@ -194,6 +203,52 @@ export function useRepository(sessionId: string) {
       }
     )
   );
+}
+
+/**
+ * 重新索引仓库
+ */
+export function useReindexRepository() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: (sessionId: string) => apiClient.reindexRepository(sessionId),
+    onSuccess: (response, sessionId) => {
+      // 刷新仓库列表
+      queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
+
+      toast({
+        title: "Repository reindexing started",
+        description:
+          "The repository is being reindexed. You can monitor the progress.",
+      });
+    },
+    onError: (error: any) => {
+      let title = "Failed to reindex repository";
+      let description = error.message;
+
+      // Handle specific error cases
+      if (error.status === 409) {
+        title = "Repository is being indexed";
+        description =
+          "The repository is currently being indexed. Please wait for it to complete.";
+      } else if (error.status === 404) {
+        title = "Repository not found";
+        description =
+          "The repository session was not found. Please try refreshing the page.";
+      }
+
+      toast({
+        title,
+        description,
+        variant: "destructive",
+      });
+    },
+    // 防止重复请求的配置
+    retry: false,
+    gcTime: 0,
+  });
 }
 
 /**

@@ -80,6 +80,7 @@ mod tests {
             url: "https://github.com/test/repo".to_string(),
             access_token: None,
             local_path: Some("/tmp/test".to_string()),
+            access_mode: RepoAccessMode::GitClone,
         };
 
         assert_eq!(repo_info.name, "test-repo");

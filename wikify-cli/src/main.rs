@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use tracing::info;
 use wikify_core::{
     init_logging, log_operation_error, log_operation_start, log_operation_success, LoggingConfig,
-    WikifyConfig, WikifyError, WikifyResult,
+    RepoAccessMode, WikifyConfig, WikifyError, WikifyResult,
 };
 use wikify_indexing::create_deepwiki_compatible_pipeline;
 use wikify_rag::{
@@ -46,6 +46,10 @@ enum Commands {
         /// Output directory
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Use API mode instead of git clone
+        #[arg(long)]
+        api_mode: bool,
     },
 
     /// Ask questions about a repository
@@ -59,6 +63,10 @@ enum Commands {
         /// Access token for private repositories
         #[arg(short, long)]
         token: Option<String>,
+
+        /// Use API mode instead of git clone
+        #[arg(long)]
+        api_mode: bool,
 
         /// Similarity threshold for document retrieval (0.0-1.0)
         #[arg(long, default_value = "0.3")]
@@ -100,6 +108,10 @@ enum Commands {
         /// Access token for private repositories
         #[arg(short, long)]
         token: Option<String>,
+
+        /// Use API mode instead of git clone
+        #[arg(long)]
+        api_mode: bool,
     },
 
     /// Interactive chat mode
@@ -110,6 +122,10 @@ enum Commands {
         /// Access token for private repositories
         #[arg(short, long)]
         token: Option<String>,
+
+        /// Use API mode instead of git clone
+        #[arg(long)]
+        api_mode: bool,
 
         /// Resume existing session by ID
         #[arg(long)]
@@ -226,13 +242,15 @@ async fn main() -> WikifyResult<()> {
             repo,
             token,
             output,
+            api_mode,
         } => {
-            handle_generate(repo, token, output, &config).await?;
+            handle_generate(repo, token, output, api_mode, &config).await?;
         }
         Commands::Ask {
             repo,
             question,
             token,
+            api_mode,
             threshold,
             top_k,
             max_context,
@@ -244,6 +262,7 @@ async fn main() -> WikifyResult<()> {
                 repo,
                 question,
                 token,
+                api_mode,
                 threshold,
                 top_k,
                 max_context,
@@ -259,12 +278,14 @@ async fn main() -> WikifyResult<()> {
             topic,
             max_iterations,
             token,
+            api_mode,
         } => {
-            handle_research(repo, topic, max_iterations, token, &config).await?;
+            handle_research(repo, topic, max_iterations, token, api_mode, &config).await?;
         }
         Commands::Chat {
             repo,
             token,
+            api_mode,
             session,
             list_sessions,
             show_sources,
@@ -273,6 +294,7 @@ async fn main() -> WikifyResult<()> {
             handle_chat(
                 repo,
                 token,
+                api_mode,
                 session,
                 list_sessions,
                 show_sources,
@@ -345,15 +367,22 @@ async fn handle_generate(
     repo: String,
     token: Option<String>,
     output: Option<PathBuf>,
+    api_mode: bool,
     config: &WikifyConfig,
 ) -> WikifyResult<()> {
     log_operation_start!("generate_wiki", repo = %repo);
 
     // Parse repository information
-    let mut repo_info = RepositoryProcessor::parse_repo_url(&repo).map_err(|e| {
-        log_operation_error!("parse_repo_url", e, repo = %repo);
-        e
-    })?;
+    let access_mode = if api_mode {
+        RepoAccessMode::Api
+    } else {
+        RepoAccessMode::GitClone
+    };
+    let mut repo_info =
+        RepositoryProcessor::parse_repo_url_with_mode(&repo, access_mode).map_err(|e| {
+            log_operation_error!("parse_repo_url", e, repo = %repo);
+            e
+        })?;
     repo_info.access_token = token;
 
     // Initialize repository processor
@@ -365,11 +394,14 @@ async fn handle_generate(
     );
     let processor = RepositoryProcessor::new(&data_dir);
 
-    // Clone repository with error handling
-    let repo_path = processor.clone_repository(&repo_info).await.map_err(|e| {
-        log_operation_error!("clone_repository", e, repo = %repo);
-        e
-    })?;
+    // Process repository with error handling (clone or API setup)
+    let repo_path = processor
+        .process_repository(&repo_info)
+        .await
+        .map_err(|e| {
+            log_operation_error!("process_repository", e, repo = %repo);
+            e
+        })?;
 
     info!(repo_path = %repo_path, "Repository cloned successfully");
 
@@ -426,6 +458,7 @@ async fn handle_ask(
     repo: String,
     question: String,
     _token: Option<String>,
+    _api_mode: bool,
     threshold: f32,
     top_k: usize,
     max_context: usize,
@@ -455,11 +488,14 @@ async fn handle_ask(
     // Get repository path
     println!("📁 Processing repository...");
     let processor = RepositoryProcessor::new(&config.storage.data_dir);
-    let repo_path = processor.clone_repository(&repo_info).await.map_err(|e| {
-        println!("❌ Failed to process repository: {}", e);
-        log_operation_error!("clone_repository", e, repo = %repo);
-        e
-    })?;
+    let repo_path = processor
+        .process_repository(&repo_info)
+        .await
+        .map_err(|e| {
+            println!("❌ Failed to process repository: {}", e);
+            log_operation_error!("process_repository", e, repo = %repo);
+            e
+        })?;
     println!("✅ Repository processed: {}", repo_path);
 
     println!("🤖 Initializing RAG system...");
@@ -590,6 +626,7 @@ async fn handle_research(
     topic: String,
     max_iterations: usize,
     _token: Option<String>,
+    _api_mode: bool,
     _config: &WikifyConfig,
 ) -> WikifyResult<()> {
     info!("Starting deep research on topic: {}", topic);
@@ -605,6 +642,7 @@ async fn handle_research(
 async fn handle_chat(
     repo: String,
     _token: Option<String>,
+    _api_mode: bool,
     session: Option<String>,
     list_sessions: bool,
     show_sources: bool,
@@ -623,10 +661,13 @@ async fn handle_chat(
 
     // Get repository path
     let processor = RepositoryProcessor::new(&config.storage.data_dir);
-    let repo_path = processor.clone_repository(&repo_info).await.map_err(|e| {
-        log_operation_error!("clone_repository", e, repo = %repo);
-        e
-    })?;
+    let repo_path = processor
+        .process_repository(&repo_info)
+        .await
+        .map_err(|e| {
+            log_operation_error!("process_repository", e, repo = %repo);
+            e
+        })?;
 
     println!("🤖 Initializing chat system...");
 

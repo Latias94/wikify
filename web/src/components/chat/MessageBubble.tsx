@@ -47,13 +47,29 @@ const MessageBubble = memo(({
   const [showActions, setShowActions] = useState(false);
   const [showSources, setShowSources] = useState(false);
 
+  // 防护性检查：确保 message 对象存在且有必要的字段
+  if (!message || !message.content) {
+    console.warn('MessageBubble: Invalid message object', message);
+    return null;
+  }
+
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(message.content).then(() => {
+    const content = message?.content || '';
+    if (!content) {
+      toast({
+        title: "复制失败",
+        description: "消息内容为空",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    navigator.clipboard.writeText(content).then(() => {
       toast({
         title: "已复制",
         description: "消息已复制到剪贴板",
       });
-      onCopy?.(message.content);
+      onCopy?.(content);
     }).catch(() => {
       toast({
         title: "复制失败",
@@ -61,7 +77,7 @@ const MessageBubble = memo(({
         variant: "destructive"
       });
     });
-  }, [message.content, toast, onCopy]);
+  }, [message?.content, toast, onCopy]);
 
   const handleRetry = useCallback(() => {
     onRetry?.(message);
@@ -114,25 +130,19 @@ const MessageBubble = memo(({
         </Avatar>
 
         {/* 消息内容 */}
-        <div className="flex flex-col gap-2 w-full min-w-0">
+        <div className="flex flex-col gap-2 w-full min-w-0 overflow-hidden">
           {/* 消息主体 */}
           <div className={cn(
-            "relative rounded-lg px-4 py-3 max-w-none",
+            "relative rounded-lg px-4 py-3 w-full overflow-hidden",
             message.role === 'user'
               ? "bg-primary text-primary-foreground ml-auto"
               : "bg-muted/50 text-foreground",
             message.isError && "bg-destructive/10 border border-destructive/20"
           )}>
-            {message.isStreaming ? (
-              <StreamingContent 
-                content={message.content}
-                className="prose prose-sm dark:prose-invert max-w-none"
-              />
-            ) : (
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                {message.content}
-              </div>
-            )}
+            <StreamingContent
+              content={message.content || ''}
+              className="prose prose-sm dark:prose-invert max-w-none"
+            />
 
             {/* 流式指示器 */}
             {message.isStreaming && (
@@ -150,7 +160,7 @@ const MessageBubble = memo(({
 
           {/* 源文档 */}
           {message.sources && message.sources.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-2 w-full max-w-full overflow-hidden">
               <Button
                 variant="ghost"
                 size="sm"
@@ -161,12 +171,12 @@ const MessageBubble = memo(({
                 {message.sources.length} 个相关文档
                 {showSources ? " (隐藏)" : " (显示)"}
               </Button>
-              
+
               <AnimatePresence>
                 {showSources && (
-                  <SourceDocuments 
+                  <SourceDocuments
                     sources={message.sources}
-                    className="ml-0"
+                    className="ml-0 w-full max-w-full"
                   />
                 )}
               </AnimatePresence>
@@ -174,21 +184,24 @@ const MessageBubble = memo(({
           )}
 
           {/* 消息元信息 */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-muted-foreground min-h-[20px]">
             <span>{formatRelativeTime(message.timestamp)}</span>
-            
-            {/* 消息操作 */}
-            <AnimatePresence>
-              {(showActions || isLast) && (
-                <MessageActions
-                  message={message}
-                  onCopy={handleCopy}
-                  onRetry={message.role === 'user' ? handleRetry : undefined}
-                  onRegenerate={message.role === 'assistant' ? handleRegenerate : undefined}
-                  className="opacity-0 group-hover/message:opacity-100 transition-opacity"
-                />
-              )}
-            </AnimatePresence>
+
+            {/* 消息操作 - 始终保留空间，只控制透明度 */}
+            <div className="flex items-center">
+              <MessageActions
+                message={message}
+                onCopy={handleCopy}
+                onRetry={message.role === 'user' ? handleRetry : undefined}
+                onRegenerate={message.role === 'assistant' ? handleRegenerate : undefined}
+                className={cn(
+                  "transition-opacity duration-200 ease-in-out",
+                  (showActions || isLast)
+                    ? "opacity-100"
+                    : "opacity-0 pointer-events-none"
+                )}
+              />
+            </div>
           </div>
         </div>
       </div>

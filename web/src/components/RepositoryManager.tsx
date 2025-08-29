@@ -5,11 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Github,
   Plus,
   MessageCircle,
+  BookOpen,
   RefreshCw,
   Trash2,
   CheckCircle,
@@ -23,8 +26,8 @@ import {
 import {
   useRepositories,
   useInitializeRepository,
-  useDeleteRepository,
-  useCreateSession
+  useReindexRepository,
+  useDeleteRepository
 } from "@/hooks/use-api";
 
 // Store hooks
@@ -37,6 +40,9 @@ import {
 import { Repository, InitializeRepositoryRequest } from "@/types/api";
 import { InitializeRepositoryFormData } from "@/types/ui";
 
+// Components
+import IndexingProgress from "@/components/IndexingProgress";
+
 const RepositoryManager = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -47,20 +53,25 @@ const RepositoryManager = () => {
   const [formData, setFormData] = useState<InitializeRepositoryFormData>({
     repository: '',
     repo_type: 'remote',
+    auto_generate_wiki: true, // 默认启用自动生成wiki
   });
+
+  // Local loading state for immediate feedback
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reindexingRepos, setReindexingRepos] = useState<Set<string>>(new Set());
 
   // API hooks
   const { isLoading: isLoadingRepos, refetch } = useRepositories();
   const initializeRepositoryMutation = useInitializeRepository();
+  const reindexRepositoryMutation = useReindexRepository();
   const deleteRepositoryMutation = useDeleteRepository();
-  const createSessionMutation = useCreateSession();
 
   // Store state
   const repositories = useRepositoriesStore();
   const errors = useErrors();
 
   // Derived state
-  const isAdding = initializeRepositoryMutation.isPending;
+  const isAdding = isSubmitting; // Use local state instead of mutation pending
   const hasError = !!errors.repositories;
 
 
@@ -68,6 +79,11 @@ const RepositoryManager = () => {
 
 
   const handleAddRepository = async () => {
+    // 防止重复提交
+    if (isSubmitting) {
+      return;
+    }
+
     if (!formData.repository.trim()) {
       toast({
         title: "Path Required",
@@ -80,22 +96,41 @@ const RepositoryManager = () => {
     const requestData: InitializeRepositoryRequest = {
       repository: formData.repository,
       repo_type: formData.repo_type === 'remote' ? 'github' : 'local',
+      auto_generate_wiki: formData.auto_generate_wiki,
     };
 
-    try {
-      await initializeRepositoryMutation.mutateAsync(requestData);
+    // Set local loading state for immediate feedback
+    setIsSubmitting(true);
 
-      // Reset form
-      setFormData({
-        repository: '',
-        repo_type: 'remote',
+    try {
+      // Fire and forget - don't wait for the full indexing process
+      initializeRepositoryMutation.mutate(requestData, {
+        onSuccess: () => {
+          // Reset form immediately after successful request
+          setFormData({
+            repository: '',
+            repo_type: 'remote',
+            auto_generate_wiki: true,
+          });
+
+          // Refresh repositories list
+          refetch();
+        },
+        onSettled: () => {
+          // Always reset loading state after request completes (success or error)
+          setIsSubmitting(false);
+        }
       });
 
-      // Refresh repositories list
-      refetch();
+      // Reset loading state after a short delay to show immediate feedback
+      setTimeout(() => {
+        setIsSubmitting(false);
+      }, 1000); // 1 second loading feedback
+
     } catch (error) {
       // Error is handled by the mutation's onError callback
       console.error('Failed to add repository:', error);
+      setIsSubmitting(false);
     }
   };
 
@@ -119,24 +154,103 @@ const RepositoryManager = () => {
     }
 
     try {
-      const session = await createSessionMutation.mutateAsync({
-        repositoryId: repository.id,
-        name: `Chat with ${repository.name}`,
-      });
-
-      // Navigate to chat interface
-      navigate(`/chat/${session.id}`);
+      // In Wikify, the repository.id is the session_id
+      // No need to create a separate session
+      navigate(`/chat/${repository.id}`);
     } catch (error) {
-      console.error('Failed to create session:', error);
+      console.error('Failed to navigate to chat:', error);
     }
   };
 
-  const handleRefreshRepository = async (_repository: Repository) => {
-    // TODO: Implement repository refresh/re-indexing
-    toast({
-      title: "Refresh Repository",
-      description: "Repository refresh functionality will be implemented soon.",
-    });
+  const handleStartWiki = async (repository: Repository) => {
+    if (repository.status !== 'indexed') {
+      toast({
+        title: "Repository Not Ready",
+        description: "Please wait for the repository to finish indexing before viewing the wiki.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Navigate to wiki page using repository.id as session_id
+      navigate(`/wiki/${repository.id}`);
+    } catch (error) {
+      console.error('Failed to navigate to wiki:', error);
+      toast({
+        title: "Navigation Error",
+        description: "Failed to open wiki page. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRefreshRepository = async (repository: Repository) => {
+    // 防止重复提交
+    if (reindexingRepos.has(repository.id)) {
+      return;
+    }
+
+    // 如果正在索引，不允许重新索引
+    if (repository.status === 'indexing') {
+      toast({
+        title: "Repository is indexing",
+        description: "Please wait for the current indexing to complete.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // 如果已经索引完成，需要用户确认
+    if (repository.status === 'indexed') {
+      const confirmed = window.confirm(
+        `Are you sure you want to reindex "${repository.name}"?\n\n` +
+        "This will reset the current index and start the indexing process again. " +
+        "The repository will be unavailable for chat during reindexing."
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Set local loading state
+    setReindexingRepos(prev => new Set(prev).add(repository.id));
+
+    try {
+      // Fire and forget - don't wait for the full reindexing process
+      reindexRepositoryMutation.mutate(repository.id, {
+        onSuccess: () => {
+          // Refresh repositories list
+          refetch();
+        },
+        onSettled: () => {
+          // Always reset loading state after request completes
+          setReindexingRepos(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(repository.id);
+            return newSet;
+          });
+        }
+      });
+
+      // Reset loading state after a short delay
+      setTimeout(() => {
+        setReindexingRepos(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(repository.id);
+          return newSet;
+        });
+      }, 1000); // 1 second loading feedback
+
+    } catch (error) {
+      console.error('Failed to reindex repository:', error);
+      setReindexingRepos(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(repository.id);
+        return newSet;
+      });
+    }
   };
 
   const getStatusIcon = (status: Repository['status']) => {
@@ -264,7 +378,24 @@ const RepositoryManager = () => {
               </div>
             )}
 
-
+            {/* Auto Generate Wiki Option */}
+            <div className="flex items-center justify-between space-x-2 p-3 border rounded-lg bg-muted/50">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-wiki" className="text-sm font-medium">
+                  Auto-generate Wiki
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Automatically generate wiki documentation after indexing completes
+                </p>
+              </div>
+              <Switch
+                id="auto-wiki"
+                checked={formData.auto_generate_wiki || false}
+                onCheckedChange={(checked) =>
+                  setFormData(prev => ({ ...prev, auto_generate_wiki: checked }))
+                }
+              />
+            </div>
 
             <Button
               onClick={handleAddRepository}
@@ -274,15 +405,19 @@ const RepositoryManager = () => {
               {isAdding ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Initializing Repository...
+                  Starting Indexing...
                 </>
               ) : (
                 <>
                   <Plus className="h-4 w-4 mr-2" />
-                  Initialize Repository
+                  Add Repository
                 </>
               )}
             </Button>
+
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              💡 You can add multiple repositories. Indexing runs in the background.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -392,6 +527,25 @@ const RepositoryManager = () => {
                             </>
                           )}
                         </div>
+
+                        {/* 索引进度显示 */}
+                        {repo.status === 'indexing' && (
+                          <div className="mt-4">
+                            <IndexingProgress
+                              sessionId={repo.id}
+                              onComplete={() => {
+                                // 刷新仓库列表
+                                refetch();
+                              }}
+                              onError={(error) => {
+                                console.error('Indexing error:', error);
+                                // 刷新仓库列表以更新状态
+                                refetch();
+                              }}
+                              className="border-0 shadow-none bg-muted/30"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                     
@@ -400,23 +554,39 @@ const RepositoryManager = () => {
                         size="sm"
                         className="flex items-center gap-1"
                         onClick={() => handleStartChat(repo)}
-                        disabled={repo.status !== 'indexed' || createSessionMutation.isPending}
+                        disabled={repo.status !== 'indexed'}
                       >
-                        {createSessionMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <MessageCircle className="h-4 w-4" />
-                        )}
+                        <MessageCircle className="h-4 w-4" />
                         Chat
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex items-center gap-1"
+                        onClick={() => handleStartWiki(repo)}
+                        disabled={repo.status !== 'indexed'}
+                      >
+                        <BookOpen className="h-4 w-4" />
+                        Wiki
                       </Button>
 
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleRefreshRepository(repo)}
-                        disabled={repo.status === 'indexing'}
+                        disabled={repo.status === 'indexing' || reindexingRepos.has(repo.id)}
+                        title={
+                          repo.status === 'indexing'
+                            ? "Repository is currently being indexed"
+                            : reindexingRepos.has(repo.id)
+                            ? "Starting reindex..."
+                            : repo.status === 'indexed'
+                            ? "Reindex repository (will require confirmation)"
+                            : "Start indexing repository"
+                        }
                       >
-                        <RefreshCw className="h-4 w-4" />
+                        <RefreshCw className={`h-4 w-4 ${reindexingRepos.has(repo.id) ? 'animate-spin' : ''}`} />
                       </Button>
 
                       <Button
