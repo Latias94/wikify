@@ -30,6 +30,18 @@ import {
   ApiResponse,
   PaginationParams,
   PaginatedResponse,
+  // 认证相关类型
+  AuthStatusResponse,
+  LoginRequest,
+  RegisterRequest,
+  AuthResponse,
+  RefreshTokenRequest,
+  CreateApiKeyRequest,
+  ApiKeyResponse,
+  ApiKeysResponse,
+  // 研究相关类型
+  DeepResearchRequest,
+  DeepResearchResponse,
 } from "@/types/api";
 import { backendConnection } from "@/lib/backend-connection";
 
@@ -237,6 +249,141 @@ export class ApiClient {
     return this.request<HealthResponse>({
       method: "GET",
       url: "/health",
+    });
+  }
+
+  // ============================================================================
+  // 认证 API
+  // ============================================================================
+
+  /**
+   * 获取认证状态
+   */
+  async getAuthStatus(): Promise<AuthStatusResponse> {
+    return this.request<AuthStatusResponse>({
+      method: "GET",
+      url: "/auth/status",
+    });
+  }
+
+  /**
+   * 用户注册
+   */
+  async register(data: RegisterRequest): Promise<AuthResponse> {
+    return this.request<AuthResponse>({
+      method: "POST",
+      url: "/auth/register",
+      data,
+    });
+  }
+
+  /**
+   * 用户登录
+   */
+  async login(data: LoginRequest): Promise<AuthResponse> {
+    return this.request<AuthResponse>({
+      method: "POST",
+      url: "/auth/login",
+      data,
+    });
+  }
+
+  /**
+   * 刷新 Token
+   */
+  async refreshToken(data: RefreshTokenRequest): Promise<AuthResponse> {
+    return this.request<AuthResponse>({
+      method: "POST",
+      url: "/auth/refresh",
+      data,
+    });
+  }
+
+  /**
+   * 用户登出
+   */
+  async logout(): Promise<void> {
+    return this.request<void>({
+      method: "POST",
+      url: "/auth/logout",
+    });
+  }
+
+  /**
+   * 获取当前用户信息
+   */
+  async getCurrentUser(): Promise<AuthResponse> {
+    return this.request<AuthResponse>({
+      method: "GET",
+      url: "/auth/me",
+    });
+  }
+
+  /**
+   * 创建 API Key
+   */
+  async createApiKey(data: CreateApiKeyRequest): Promise<ApiKeyResponse> {
+    return this.request<ApiKeyResponse>({
+      method: "POST",
+      url: "/auth/api-keys",
+      data,
+    });
+  }
+
+  /**
+   * 获取 API Keys 列表
+   */
+  async getApiKeys(): Promise<ApiKeysResponse> {
+    return this.request<ApiKeysResponse>({
+      method: "GET",
+      url: "/auth/api-keys",
+    });
+  }
+
+  /**
+   * 删除 API Key
+   */
+  async deleteApiKey(keyId: string): Promise<void> {
+    return this.request<void>({
+      method: "DELETE",
+      url: `/auth/api-keys/${keyId}`,
+    });
+  }
+
+  // ============================================================================
+  // 深度研究 API
+  // ============================================================================
+
+  /**
+   * 开始深度研究
+   */
+  async startDeepResearch(
+    request: DeepResearchRequest
+  ): Promise<DeepResearchResponse> {
+    return this.request<DeepResearchResponse>({
+      method: "POST",
+      url: "/research/deep",
+      data: request,
+    });
+  }
+
+  /**
+   * 获取研究状态
+   */
+  async getResearchStatus(researchId: string): Promise<DeepResearchResponse> {
+    return this.request<DeepResearchResponse>({
+      method: "GET",
+      url: `/research/${researchId}`,
+    });
+  }
+
+  /**
+   * 停止研究
+   */
+  async stopResearch(researchId: string): Promise<void> {
+    return this.request<void>({
+      method: "POST",
+      url: `/research/${researchId}/stop`,
     });
   }
 

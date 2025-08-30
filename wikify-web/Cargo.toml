@@ -44,14 +44,13 @@ argon2 = "0.5"
 rand = "0.8"
 sha2 = "0.10"
 async-trait = "0.1"
-axum-extra = { version = "0.9", features = ["typed-header"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
 
 # WebSocket
-tokio-tungstenite = "0.24"
+tokio-tungstenite = "0.27"
 
 # Template engine
-askama = { version = "0.12", features = ["with-axum"] }
-askama_axum = "0.4"
+askama = "0.14"
 
 # Static file serving
 include_dir = "0.7"

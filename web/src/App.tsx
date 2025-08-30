@@ -5,8 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import LoginPage from "./pages/Login";
+import RegisterPage from "./pages/Register";
+import ResearchPage from "./pages/Research";
 import { ChatInterface } from "./components/ChatInterface";
 import { WikiViewer } from "./components/WikiViewer";
+import { AuthProvider, AuthModeDetector, OpenSourceBadge } from "./components/AuthProvider";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,13 +31,21 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/chat/:sessionId" element={<ChatInterface />} />
-          <Route path="/wiki/:sessionId" element={<WikiViewer />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <AuthModeDetector>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/chat/:sessionId" element={<ChatInterface />} />
+              <Route path="/wiki/:sessionId" element={<WikiViewer />} />
+              <Route path="/research/:repositoryId" element={<ResearchPage />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+            <OpenSourceBadge />
+          </AuthModeDetector>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

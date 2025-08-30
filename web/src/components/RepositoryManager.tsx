@@ -19,7 +19,8 @@ import {
   Loader2,
   Globe,
   Folder,
-  AlertCircle
+  AlertCircle,
+  Brain
 } from "lucide-react";
 
 // API hooks
@@ -202,6 +203,28 @@ const RepositoryManager = () => {
 
     setSelectedRepoForWiki(repository);
     setShowWikiDialog(true);
+  };
+
+  const handleStartResearch = async (repository: Repository) => {
+    if (repository.status !== 'indexed') {
+      toast({
+        title: "Repository Not Ready",
+        description: "Please wait for the repository to finish indexing before starting research.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      navigate(`/research/${repository.id}`);
+    } catch (error) {
+      console.error('Failed to navigate to research:', error);
+      toast({
+        title: "Navigation Error",
+        description: "Failed to open research page. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleRefreshRepository = async (repository: Repository) => {
@@ -577,6 +600,17 @@ const RepositoryManager = () => {
                       >
                         <MessageCircle className="h-4 w-4" />
                         Chat
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex items-center gap-1"
+                        onClick={() => handleStartResearch(repo)}
+                        disabled={repo.status !== 'indexed'}
+                      >
+                        <Brain className="h-4 w-4" />
+                        Research
                       </Button>
 
                       <Button

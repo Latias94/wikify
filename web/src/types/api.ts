@@ -277,6 +277,72 @@ export interface FileContentResponse {
 }
 
 // ============================================================================
+// 智能研究相关类型
+// ============================================================================
+
+/**
+ * 研究阶段类型
+ */
+export type ResearchStageType = "plan" | "update" | "conclusion";
+
+/**
+ * 研究阶段
+ */
+export interface ResearchStage {
+  id: string;
+  title: string;
+  content: string;
+  iteration: number;
+  type: ResearchStageType;
+  timestamp: string;
+  confidence?: number;
+}
+
+/**
+ * 深度研究请求
+ */
+export interface DeepResearchRequest {
+  repository_id: string;
+  session_id?: string;
+  query: string;
+  max_iterations?: number;
+  research_strategy?: "comprehensive" | "focused" | "exploratory";
+}
+
+/**
+ * 深度研究响应
+ */
+export interface DeepResearchResponse {
+  research_id: string;
+  session_id: string;
+  status: "planning" | "researching" | "completed" | "failed";
+  current_iteration: number;
+  max_iterations: number;
+  stages: ResearchStage[];
+  progress: {
+    current_stage: string;
+    completion_percentage: number;
+    estimated_time_remaining?: number;
+  };
+  final_conclusion?: string;
+  confidence_score?: number;
+}
+
+/**
+ * 研究进度更新
+ */
+export interface ResearchProgressUpdate {
+  research_id: string;
+  stage: ResearchStage;
+  progress: {
+    current_stage: string;
+    completion_percentage: number;
+    estimated_time_remaining?: number;
+  };
+  is_complete: boolean;
+}
+
+// ============================================================================
 // 系统相关类型
 // ============================================================================
 
@@ -307,6 +373,132 @@ export interface Config {
     max_size_mb: number;
     excluded_dirs: string[];
   };
+}
+
+// ============================================================================
+// 认证相关类型
+// ============================================================================
+
+/**
+ * 权限模式
+ */
+export type AuthMode = "open" | "private" | "enterprise";
+
+/**
+ * 用户权限
+ */
+export type Permission =
+  | "Query"
+  | "GenerateWiki"
+  | "DeepResearch"
+  | "Export"
+  | "ManageSession"
+  | "Admin";
+
+/**
+ * 用户类型
+ */
+export type UserType = "Anonymous" | "Registered" | "Admin";
+
+/**
+ * 认证状态响应
+ */
+export interface AuthStatusResponse {
+  auth_mode: AuthMode;
+  auth_required: boolean;
+  registration_enabled: boolean;
+  features: {
+    research_engine: boolean;
+    wiki_generation: boolean;
+    multi_language: boolean;
+  };
+}
+
+/**
+ * 用户注册请求
+ */
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+  display_name?: string;
+}
+
+/**
+ * 用户登录请求
+ */
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+/**
+ * 认证响应
+ */
+export interface AuthResponse {
+  user: UserInfo;
+  tokens: TokenPair;
+}
+
+/**
+ * 用户信息
+ */
+export interface UserInfo {
+  id: string;
+  username: string;
+  email?: string;
+  display_name?: string;
+  user_type: UserType;
+  permissions: Permission[];
+  is_admin: boolean;
+  created_at: string;
+  last_login?: string;
+}
+
+/**
+ * Token 对
+ */
+export interface TokenPair {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+}
+
+/**
+ * Token 刷新请求
+ */
+export interface RefreshTokenRequest {
+  refresh_token: string;
+}
+
+/**
+ * API Key 创建请求
+ */
+export interface CreateApiKeyRequest {
+  name: string;
+  permissions: Permission[];
+  expires_at?: string;
+}
+
+/**
+ * API Key 响应
+ */
+export interface ApiKeyResponse {
+  id: string;
+  key?: string; // 只在创建时返回
+  name: string;
+  permissions: Permission[];
+  created_at: string;
+  expires_at?: string;
+  last_used?: string;
+}
+
+/**
+ * API Key 列表响应
+ */
+export interface ApiKeysResponse {
+  api_keys: ApiKeyResponse[];
 }
 
 // ============================================================================

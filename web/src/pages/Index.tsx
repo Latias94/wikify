@@ -13,6 +13,8 @@ import {
 import { Settings, Server } from "lucide-react";
 import { backendConnection, BackendEndpoint } from "@/lib/backend-connection";
 import { apiClient } from "@/lib/api-client";
+import { UserMenu } from "@/components/auth/UserMenu";
+import { AuthRequired } from "@/components/AuthProvider";
 
 const Index = () => {
   const [currentBackend, setCurrentBackend] = useState<BackendEndpoint | null>(null);
@@ -72,6 +74,9 @@ const Index = () => {
               </DropdownMenu>
 
               <ThemeToggle />
+
+              {/* 用户菜单 */}
+              <UserMenu />
             </div>
           </div>
         </div>
@@ -80,7 +85,26 @@ const Index = () => {
       {/* Main content */}
       <main className="py-8">
         <div className="container space-y-6">
-          <RepositoryManager />
+          <AuthRequired
+            fallback={
+              <div className="text-center py-12">
+                <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
+                <p className="text-muted-foreground mb-6">
+                  Please sign in to access Wikify features.
+                </p>
+                <div className="flex justify-center gap-4">
+                  <Button asChild>
+                    <a href="/login">Sign In</a>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <a href="/register">Sign Up</a>
+                  </Button>
+                </div>
+              </div>
+            }
+          >
+            <RepositoryManager />
+          </AuthRequired>
         </div>
       </main>
     </div>
