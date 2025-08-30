@@ -1126,10 +1126,14 @@ pub async fn spa_fallback() -> Html<&'static str> {
         .header { text-align: center; margin-bottom: 2rem; }
         .status { background: #d4edda; color: #155724; padding: 1rem; border-radius: 4px; margin-bottom: 2rem; }
         .api-list { background: #f8f9fa; padding: 1rem; border-radius: 4px; }
-        .api-list h3 { margin-top: 0; }
-        .api-list ul { margin: 0; }
-        .api-list li { margin: 0.5rem 0; }
-        .api-list code { background: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 3px; }
+        .api-list h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; color: #495057; }
+        .api-list h3:first-child { margin-top: 0; }
+        .api-list ul { margin: 0; padding-left: 1.5rem; }
+        .api-list li { margin: 0.3rem 0; }
+        .api-list code { background: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 3px; font-family: 'Courier New', monospace; }
+        .api-list a { color: #007bff; text-decoration: none; }
+        .api-list a:hover { text-decoration: underline; }
+        .api-list strong a { font-weight: bold; }
     </style>
 </head>
 <body>
@@ -1144,19 +1148,57 @@ pub async fn spa_fallback() -> Html<&'static str> {
         </div>
 
         <div class="api-list">
-            <h3>Available API Endpoints:</h3>
+            <h3>📚 API Documentation:</h3>
             <ul>
-                <li><code>GET /api/health</code> - Health check</li>
-                <li><code>POST /api/repositories</code> - Initialize repository</li>
-                <li><code>POST /api/chat</code> - Chat with repository</li>
-                <li><code>POST /api/wiki/generate</code> - Generate wiki</li>
-                <li><code>GET /ws/chat</code> - WebSocket chat</li>
-                <li><code>GET /ws/wiki</code> - WebSocket wiki generation</li>
+                <li><strong><a href="/api-docs/docs/" target="_blank">🔗 Interactive API Documentation (Swagger UI)</a></strong></li>
+                <li><a href="/api-docs/openapi.json" target="_blank">📄 OpenAPI Specification (JSON)</a></li>
+                <li><a href="/api-docs/openapi.yaml" target="_blank">📄 OpenAPI Specification (YAML)</a></li>
+            </ul>
+
+            <h3>🔑 Key API Endpoints:</h3>
+            <ul>
+                <li><strong>Authentication:</strong>
+                    <ul>
+                        <li><code>POST /api/auth/register</code> - User registration</li>
+                        <li><code>POST /api/auth/login</code> - User login</li>
+                        <li><code>POST /api/auth/refresh</code> - Refresh access token</li>
+                    </ul>
+                </li>
+                <li><strong>Repository Management:</strong>
+                    <ul>
+                        <li><code>POST /api/repositories</code> - Initialize repository</li>
+                        <li><code>GET /api/repositories</code> - List repositories</li>
+                        <li><code>POST /api/repositories/{id}/reindex</code> - Reindex repository</li>
+                        <li><code>DELETE /api/repositories/{id}</code> - Delete repository</li>
+                    </ul>
+                </li>
+                <li><strong>AI Chat & Research:</strong>
+                    <ul>
+                        <li><code>POST /api/chat</code> - Chat with repository</li>
+                        <li><code>POST /api/research/deep</code> - Start deep research</li>
+                        <li><code>GET /api/research/{id}</code> - Get research status</li>
+                    </ul>
+                </li>
+                <li><strong>Wiki Generation:</strong>
+                    <ul>
+                        <li><code>POST /api/wiki/generate</code> - Generate wiki</li>
+                        <li><code>GET /api/wiki/{id}</code> - Get wiki content</li>
+                    </ul>
+                </li>
+                <li><strong>WebSocket Streams:</strong>
+                    <ul>
+                        <li><code>GET /ws/chat</code> - Real-time chat streaming</li>
+                        <li><code>GET /ws/wiki</code> - Real-time wiki generation</li>
+                        <li><code>GET /ws/research</code> - Real-time research progress</li>
+                    </ul>
+                </li>
             </ul>
         </div>
 
-        <div style="text-align: center; margin-top: 2rem; color: #666;">
-            <p>Frontend interface coming soon...</p>
+        <div style="text-align: center; margin-top: 2rem; padding: 1rem; background: #e3f2fd; border-radius: 4px;">
+            <p><strong>🎉 Wikify is now fully operational!</strong></p>
+            <p>Access the web interface at <a href="/" target="_blank">http://localhost:8080</a></p>
+            <p>For complete API documentation, visit <a href="/api-docs/docs/" target="_blank">Swagger UI</a></p>
         </div>
     </div>
 </body>

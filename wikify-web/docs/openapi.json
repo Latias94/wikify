@@ -23,6 +23,129 @@
     }
   ],
   "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "User login",
+        "description": "Authenticate user with username and password",
+        "operationId": "login_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Refresh access token",
+        "description": "Refresh access token using a valid refresh token",
+        "operationId": "refresh_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token refreshed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Invalid or expired refresh token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register a new user",
+        "description": "Create a new user account with username, email, and password",
+        "operationId": "register_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "409": {
+            "description": "Username or email already exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/api/chat": {
       "post": {
         "tags": [
@@ -171,7 +294,7 @@
           "Repository"
         ],
         "summary": "Initialize repository",
-        "description": "Initialize a repository for processing and create a new session",
+        "description": "Initialize a repository for processing and create a new session. If the repository is already being indexed by another session, an error will be returned.",
         "operationId": "initialize_repository",
         "requestBody": {
           "content": {
@@ -193,6 +316,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Repository is already being indexed by another session"
           },
           "500": {
             "description": "Internal server error"
@@ -259,6 +385,525 @@
           },
           "404": {
             "description": "Repository not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/repositories/{session_id}/reindex": {
+      "post": {
+        "tags": [
+          "Repository"
+        ],
+        "summary": "Reindex repository",
+        "description": "Reindex an existing repository. If the repository is currently being indexed, returns a conflict error. If already indexed, resets the state and starts reindexing.",
+        "operationId": "reindex_repository",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session ID of the repository to reindex",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Repository reindexing started successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitializeRepositoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository not found"
+          },
+          "409": {
+            "description": "Repository is currently being indexed"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/history": {
+      "get": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Get research history",
+        "operationId": "get_research_history",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by status",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "template_id",
+            "in": "query",
+            "description": "Filter by template ID",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "Filter by date from (ISO 8601)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "Filter by date to (ISO 8601)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Limit number of results",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset for pagination",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchHistoryRecord"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/history/{session_id}": {
+      "get": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Get specific research record",
+        "operationId": "get_research_record",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Research session ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchHistoryRecord"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Record not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Delete research record",
+        "operationId": "delete_research_record",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Research session ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record deleted successfully"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Record not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/iterate/{session_id}": {
+      "post": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Execute one research iteration",
+        "operationId": "research_iteration",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Research session ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research iteration completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchProgressResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Research session not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/progress/{session_id}": {
+      "get": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Get research progress",
+        "operationId": "get_research_progress",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Research session ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research progress retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchProgressResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Research session not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/start": {
+      "post": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Start a deep research session",
+        "operationId": "start_research",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartResearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Research started successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchProgressResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/start-from-template": {
+      "post": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Start research from template",
+        "operationId": "start_research_from_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartResearchFromTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Research started from template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchProgressResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Template not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/statistics": {
+      "get": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Get research statistics (admin only)",
+        "operationId": "get_research_statistics",
+        "responses": {
+          "200": {
+            "description": "Research statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchStatistics"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied (admin only)"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/templates": {
+      "get": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "List all research templates",
+        "operationId": "list_research_templates",
+        "responses": {
+          "200": {
+            "description": "List of research templates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchTemplate"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/templates/category/{category}": {
+      "get": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "List templates by category",
+        "operationId": "list_templates_by_category",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "description": "Template category",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of templates in category",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchTemplate"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid category"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/research/templates/{template_id}": {
+      "get": {
+        "tags": [
+          "crate::handlers"
+        ],
+        "summary": "Get specific research template",
+        "operationId": "get_research_template",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "description": "Template ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchTemplate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found"
           },
           "500": {
             "description": "Internal server error"
@@ -383,6 +1028,27 @@
   },
   "components": {
     "schemas": {
+      "AuthResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TokenPair",
+            "description": "Authentication tokens"
+          },
+          {
+            "type": "object",
+            "required": [
+              "user"
+            ],
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo",
+                "description": "User information"
+              }
+            }
+          }
+        ],
+        "description": "User registration/login response"
+      },
       "ChatQueryRequest": {
         "type": "object",
         "description": "Chat query request",
@@ -542,6 +1208,13 @@
               "null"
             ]
           },
+          "auto_generate_wiki": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "example": true
+          },
           "repo_type": {
             "type": [
               "string",
@@ -578,6 +1251,869 @@
           }
         }
       },
+      "LoginRequest": {
+        "type": "object",
+        "description": "User login request",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "User password",
+            "example": "secure_password123"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username or email",
+            "example": "john_doe"
+          }
+        }
+      },
+      "ParameterType": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "String"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "Integer"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "Boolean"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "Choice"
+            ],
+            "properties": {
+              "Choice": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "description": "Parameter type enumeration"
+      },
+      "QuestionType": {
+        "type": "string",
+        "description": "Types of research questions",
+        "enum": [
+          "Conceptual",
+          "Technical",
+          "Architectural",
+          "Historical",
+          "Comparative",
+          "Diagnostic",
+          "Advisory"
+        ]
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "description": "Token refresh request",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "description": "Refresh token to exchange for new access token",
+            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "description": "User registration request",
+        "required": [
+          "username",
+          "email",
+          "password"
+        ],
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional display name",
+            "example": "John Doe"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email address for the new account",
+            "example": "john@example.com"
+          },
+          "password": {
+            "type": "string",
+            "description": "Password for the new account",
+            "example": "secure_password123"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username for the new account",
+            "example": "john_doe"
+          }
+        }
+      },
+      "ResearchCategory": {
+        "type": "string",
+        "description": "Research template category",
+        "enum": [
+          "Technical",
+          "Architecture",
+          "Security",
+          "Performance",
+          "Documentation",
+          "Business",
+          "Custom"
+        ]
+      },
+      "ResearchConfig": {
+        "type": "object",
+        "description": "Research session configuration",
+        "required": [
+          "max_iterations",
+          "max_depth",
+          "confidence_threshold",
+          "max_sources_per_iteration",
+          "enable_parallel_research"
+        ],
+        "properties": {
+          "confidence_threshold": {
+            "type": "number",
+            "format": "double",
+            "description": "Minimum confidence threshold for accepting findings"
+          },
+          "enable_parallel_research": {
+            "type": "boolean",
+            "description": "Whether to enable parallel research paths"
+          },
+          "max_depth": {
+            "type": "integer",
+            "description": "Maximum depth for sub-question decomposition",
+            "minimum": 0
+          },
+          "max_iterations": {
+            "type": "integer",
+            "description": "Maximum number of research iterations",
+            "minimum": 0
+          },
+          "max_sources_per_iteration": {
+            "type": "integer",
+            "description": "Maximum number of sources to consider per iteration",
+            "minimum": 0
+          }
+        }
+      },
+      "ResearchContext": {
+        "type": "object",
+        "description": "Research context for maintaining state across iterations",
+        "required": [
+          "session_id",
+          "topic",
+          "config",
+          "current_iteration",
+          "questions",
+          "findings",
+          "iterations",
+          "start_time",
+          "metadata"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/ResearchConfig",
+            "description": "Configuration"
+          },
+          "current_iteration": {
+            "type": "integer",
+            "description": "Current iteration number",
+            "minimum": 0
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchFinding"
+            },
+            "description": "All findings (as a vector for chronological order)"
+          },
+          "iterations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchIteration"
+            },
+            "description": "Research history"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional metadata",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            },
+            "description": "All questions (as a vector for ordered processing)"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start time"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Original topic"
+          }
+        }
+      },
+      "ResearchFinding": {
+        "type": "object",
+        "description": "Research finding from a single source",
+        "required": [
+          "id",
+          "question_id",
+          "source",
+          "content",
+          "confidence",
+          "relevance",
+          "evidence",
+          "limitations",
+          "timestamp"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "description": "Confidence score (0.0-1.0)"
+          },
+          "content": {
+            "type": "string",
+            "description": "The actual finding content"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Supporting evidence"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the finding"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Contradictions or limitations"
+          },
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Question this finding addresses"
+          },
+          "relevance": {
+            "type": "number",
+            "format": "double",
+            "description": "Relevance score (0.0-1.0)"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceInfo",
+            "description": "Source information"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when finding was discovered"
+          }
+        }
+      },
+      "ResearchHistoryRecord": {
+        "type": "object",
+        "description": "Research history record",
+        "required": [
+          "session_id",
+          "topic",
+          "context",
+          "iterations",
+          "status",
+          "created_at",
+          "updated_at",
+          "metadata"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Completion timestamp (if completed)"
+          },
+          "context": {
+            "$ref": "#/components/schemas/ResearchContext",
+            "description": "Research context"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp"
+          },
+          "iterations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchIteration"
+            },
+            "description": "All iterations performed"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResearchMetadata",
+            "description": "Research metadata"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Research session ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ResearchStatus",
+            "description": "Research status"
+          },
+          "summary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ResearchSummary",
+                "description": "Final summary (if completed)"
+              }
+            ]
+          },
+          "template_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Template used (if any)"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Research topic"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last updated timestamp"
+          }
+        }
+      },
+      "ResearchIteration": {
+        "type": "object",
+        "description": "Research iteration result",
+        "required": [
+          "iteration",
+          "questions",
+          "findings",
+          "new_questions",
+          "partial_synthesis",
+          "confidence",
+          "needs_more_research",
+          "duration"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "description": "Confidence in current understanding"
+          },
+          "duration": {
+            "type": "string",
+            "description": "Duration of this iteration"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchFinding"
+            },
+            "description": "Findings discovered"
+          },
+          "iteration": {
+            "type": "integer",
+            "description": "Iteration number (1-based)",
+            "minimum": 0
+          },
+          "needs_more_research": {
+            "type": "boolean",
+            "description": "Whether more research is needed"
+          },
+          "new_questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            },
+            "description": "New questions generated"
+          },
+          "partial_synthesis": {
+            "type": "string",
+            "description": "Synthesis of findings so far"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            },
+            "description": "Questions explored in this iteration"
+          }
+        }
+      },
+      "ResearchMetadata": {
+        "type": "object",
+        "description": "Research metadata",
+        "required": [
+          "total_iterations",
+          "total_questions",
+          "total_sources"
+        ],
+        "properties": {
+          "duration_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Research duration in seconds",
+            "minimum": 0
+          },
+          "repository_context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Repository or session context"
+          },
+          "total_iterations": {
+            "type": "integer",
+            "description": "Total number of iterations",
+            "minimum": 0
+          },
+          "total_questions": {
+            "type": "integer",
+            "description": "Total number of questions asked",
+            "minimum": 0
+          },
+          "total_sources": {
+            "type": "integer",
+            "description": "Total number of sources consulted",
+            "minimum": 0
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "User who initiated the research"
+          }
+        }
+      },
+      "ResearchProgressResponse": {
+        "type": "object",
+        "description": "Research progress response",
+        "required": [
+          "session_id",
+          "current_iteration",
+          "total_iterations",
+          "stage",
+          "progress",
+          "findings_count"
+        ],
+        "properties": {
+          "current_iteration": {
+            "type": "integer",
+            "description": "Current iteration",
+            "minimum": 0
+          },
+          "current_question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Current question being researched"
+          },
+          "estimated_remaining_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Estimated time remaining in seconds",
+            "minimum": 0
+          },
+          "findings_count": {
+            "type": "integer",
+            "description": "Number of findings so far",
+            "minimum": 0
+          },
+          "progress": {
+            "type": "number",
+            "format": "double",
+            "description": "Progress percentage (0.0-1.0)"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          },
+          "stage": {
+            "type": "string",
+            "description": "Current stage description"
+          },
+          "total_iterations": {
+            "type": "integer",
+            "description": "Total planned iterations",
+            "minimum": 0
+          }
+        }
+      },
+      "ResearchQualityMetrics": {
+        "type": "object",
+        "description": "Research quality metrics",
+        "required": [
+          "completeness_score",
+          "accuracy_confidence",
+          "source_reliability",
+          "coverage_breadth"
+        ],
+        "properties": {
+          "accuracy_confidence": {
+            "type": "number",
+            "format": "double",
+            "description": "Accuracy confidence (0.0 to 1.0)"
+          },
+          "completeness_score": {
+            "type": "number",
+            "format": "double",
+            "description": "Completeness score (0.0 to 1.0)"
+          },
+          "coverage_breadth": {
+            "type": "number",
+            "format": "double",
+            "description": "Coverage breadth (0.0 to 1.0)"
+          },
+          "source_reliability": {
+            "type": "number",
+            "format": "double",
+            "description": "Source reliability score (0.0 to 1.0)"
+          }
+        }
+      },
+      "ResearchQuestion": {
+        "type": "object",
+        "description": "Research question with metadata",
+        "required": [
+          "id",
+          "text",
+          "question_type",
+          "priority",
+          "depth",
+          "complexity",
+          "keywords"
+        ],
+        "properties": {
+          "complexity": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Expected complexity (1-10)",
+            "minimum": 0
+          },
+          "depth": {
+            "type": "integer",
+            "description": "Depth in the question hierarchy",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the question"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Keywords associated with this question"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Parent question ID (for sub-questions)"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Priority level (1-10, higher is more important)",
+            "minimum": 0
+          },
+          "question_type": {
+            "$ref": "#/components/schemas/QuestionType",
+            "description": "Question type/category"
+          },
+          "text": {
+            "type": "string",
+            "description": "The question text"
+          }
+        }
+      },
+      "ResearchStatistics": {
+        "type": "object",
+        "description": "Research statistics",
+        "required": [
+          "total_sessions",
+          "completed_sessions",
+          "in_progress_sessions",
+          "failed_sessions",
+          "popular_templates",
+          "activity_by_date"
+        ],
+        "properties": {
+          "activity_by_date": {
+            "type": "object",
+            "description": "Research activity by date",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "average_duration_seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Average research duration in seconds"
+          },
+          "completed_sessions": {
+            "type": "integer",
+            "description": "Number of completed sessions",
+            "minimum": 0
+          },
+          "failed_sessions": {
+            "type": "integer",
+            "description": "Number of failed sessions",
+            "minimum": 0
+          },
+          "in_progress_sessions": {
+            "type": "integer",
+            "description": "Number of in-progress sessions",
+            "minimum": 0
+          },
+          "popular_templates": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": false,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              ]
+            },
+            "description": "Most used templates"
+          },
+          "total_sessions": {
+            "type": "integer",
+            "description": "Total number of research sessions",
+            "minimum": 0
+          }
+        }
+      },
+      "ResearchStatus": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Research is in progress",
+            "enum": [
+              "InProgress"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Research completed successfully",
+            "enum": [
+              "Completed"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "Research was cancelled",
+            "enum": [
+              "Cancelled"
+            ]
+          },
+          {
+            "type": "object",
+            "description": "Research failed with error",
+            "required": [
+              "Failed"
+            ],
+            "properties": {
+              "Failed": {
+                "type": "string",
+                "description": "Research failed with error"
+              }
+            }
+          }
+        ],
+        "description": "Research status enumeration"
+      },
+      "ResearchSummary": {
+        "type": "object",
+        "description": "Research summary containing final results",
+        "required": [
+          "session_id",
+          "topic",
+          "executive_summary",
+          "key_findings",
+          "detailed_analysis",
+          "recommendations",
+          "sources",
+          "quality_metrics",
+          "generated_at"
+        ],
+        "properties": {
+          "detailed_analysis": {
+            "type": "string",
+            "description": "Detailed analysis"
+          },
+          "executive_summary": {
+            "type": "string",
+            "description": "Executive summary"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Generation timestamp"
+          },
+          "key_findings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Key findings"
+          },
+          "quality_metrics": {
+            "$ref": "#/components/schemas/ResearchQualityMetrics",
+            "description": "Research quality metrics"
+          },
+          "recommendations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Recommendations"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Research session ID"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Sources consulted"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Research topic"
+          }
+        }
+      },
+      "ResearchTemplate": {
+        "type": "object",
+        "description": "Research template definition",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "category",
+          "config",
+          "initial_questions",
+          "parameters"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ResearchCategory",
+            "description": "Template category"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ResearchConfig",
+            "description": "Research configuration"
+          },
+          "description": {
+            "type": "string",
+            "description": "Template description"
+          },
+          "id": {
+            "type": "string",
+            "description": "Template ID"
+          },
+          "initial_questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateQuestion"
+            },
+            "description": "Initial research questions"
+          },
+          "name": {
+            "type": "string",
+            "description": "Template name"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Template-specific parameters",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TemplateParameter"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "SourceDocument": {
         "type": "object",
         "description": "Source document information",
@@ -598,6 +2134,294 @@
             "type": "number",
             "format": "double",
             "example": 0.85
+          }
+        }
+      },
+      "SourceInfo": {
+        "type": "object",
+        "description": "Information about a research source",
+        "required": [
+          "id",
+          "source_type",
+          "reliability"
+        ],
+        "properties": {
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Author or maintainer"
+          },
+          "id": {
+            "type": "string",
+            "description": "Source identifier (file path, URL, etc.)"
+          },
+          "last_modified": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Last modified date"
+          },
+          "reliability": {
+            "type": "number",
+            "format": "double",
+            "description": "Source reliability score (0.0-1.0)"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceType",
+            "description": "Source type"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Source title or name"
+          }
+        }
+      },
+      "SourceType": {
+        "type": "string",
+        "description": "Types of research sources",
+        "enum": [
+          "SourceCode",
+          "Documentation",
+          "Configuration",
+          "Test",
+          "Readme",
+          "Comment",
+          "External"
+        ]
+      },
+      "StartResearchFromTemplateRequest": {
+        "type": "object",
+        "description": "Start research from template request",
+        "required": [
+          "session_id",
+          "template_id",
+          "topic"
+        ],
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "description": "Template parameters",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Session ID for the research"
+          },
+          "template_id": {
+            "type": "string",
+            "description": "Template ID to use"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Research topic"
+          }
+        }
+      },
+      "StartResearchRequest": {
+        "type": "object",
+        "description": "Start research request",
+        "required": [
+          "session_id",
+          "topic"
+        ],
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ResearchConfig",
+                "description": "Optional research configuration"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Session ID for the research"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Research topic"
+          }
+        }
+      },
+      "TemplateParameter": {
+        "type": "object",
+        "description": "Template parameter definition",
+        "required": [
+          "name",
+          "description",
+          "param_type",
+          "required"
+        ],
+        "properties": {
+          "default_value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Default value"
+          },
+          "description": {
+            "type": "string",
+            "description": "Parameter description"
+          },
+          "name": {
+            "type": "string",
+            "description": "Parameter name"
+          },
+          "param_type": {
+            "$ref": "#/components/schemas/ParameterType",
+            "description": "Parameter type"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether parameter is required"
+          }
+        }
+      },
+      "TemplateQuestion": {
+        "type": "object",
+        "description": "Simplified template question for initial research",
+        "required": [
+          "text",
+          "question_type",
+          "priority",
+          "complexity",
+          "keywords"
+        ],
+        "properties": {
+          "complexity": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Expected complexity (1-10)",
+            "minimum": 0
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Keywords for this question"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Priority level (1-10)",
+            "minimum": 0
+          },
+          "question_type": {
+            "$ref": "#/components/schemas/QuestionType",
+            "description": "Question type"
+          },
+          "text": {
+            "type": "string",
+            "description": "Question text"
+          }
+        }
+      },
+      "TokenPair": {
+        "type": "object",
+        "description": "JWT token pair (access + refresh)",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_in"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Access token for API requests",
+            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Token expiration time in seconds",
+            "example": 3600
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Refresh token for obtaining new access tokens",
+            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+          },
+          "token_type": {
+            "type": "string",
+            "description": "Token type (always \"Bearer\")",
+            "example": "Bearer"
+          }
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "description": "Public user information",
+        "required": [
+          "id",
+          "username",
+          "email",
+          "permissions",
+          "is_admin",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Account creation timestamp",
+            "example": "2024-01-01T00:00:00Z"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name",
+            "example": "John Doe"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email address",
+            "example": "john@example.com"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique user identifier",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "description": "Whether user is admin",
+            "example": false
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "User permissions",
+            "example": [
+              "GenerateWiki",
+              "DeepResearch"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "description": "Username",
+            "example": "john_doe"
           }
         }
       },
@@ -651,6 +2475,10 @@
       "description": "Health check endpoints"
     },
     {
+      "name": "Authentication",
+      "description": "User authentication and authorization"
+    },
+    {
       "name": "Repository",
       "description": "Repository management operations"
     },
@@ -661,6 +2489,10 @@
     {
       "name": "Wiki",
       "description": "Wiki generation and management"
+    },
+    {
+      "name": "Research",
+      "description": "Deep research and investigation operations"
     },
     {
       "name": "Session",

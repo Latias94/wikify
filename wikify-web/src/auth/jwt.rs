@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::LazyLock;
 use tracing::{debug, warn};
+use utoipa::ToSchema;
 use wikify_applications::Permission;
 
 /// JWT signing keys - initialized from environment variable
@@ -131,11 +132,19 @@ impl Claims {
 }
 
 /// JWT token pair (access + refresh)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct TokenPair {
+    /// Access token for API requests
+    #[schema(example = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...")]
     pub access_token: String,
+    /// Refresh token for obtaining new access tokens
+    #[schema(example = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...")]
     pub refresh_token: String,
+    /// Token type (always "Bearer")
+    #[schema(example = "Bearer")]
     pub token_type: String,
+    /// Token expiration time in seconds
+    #[schema(example = 3600)]
     pub expires_in: i64,
 }
 

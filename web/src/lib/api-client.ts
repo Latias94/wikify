@@ -9,6 +9,11 @@ import axios, {
   AxiosResponse,
   AxiosError,
 } from "axios";
+
+// 扩展AxiosRequestConfig以包含重试标记
+interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+}
 import {
   Repository,
   InitializeRepositoryRequest,
@@ -152,7 +157,7 @@ export class ApiClient {
         config.metadata = { startTime: Date.now() };
 
         // 添加认证头（如果需要）
-        const token = localStorage.getItem("auth_token");
+        const token = localStorage.getItem("wikify_access_token");
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -181,8 +186,51 @@ export class ApiClient {
         return response;
       },
       async (error: AxiosError) => {
-        const config = error.config;
+        const config = error.config as ExtendedAxiosRequestConfig;
         const requestKey = `${config?.method}-${config?.url}`;
+
+        // 处理401未授权错误 - 尝试刷新token
+        if (
+          error.response?.status === 401 &&
+          config &&
+          !config.url?.includes("/auth/")
+        ) {
+          const refreshToken = localStorage.getItem("wikify_refresh_token");
+
+          if (refreshToken && !config._retry) {
+            config._retry = true;
+
+            try {
+              console.log("🔄 Attempting to refresh token...");
+              const response = await this.instance.post("/auth/refresh", {
+                refresh_token: refreshToken,
+              });
+
+              const { tokens } = response.data;
+              localStorage.setItem("wikify_access_token", tokens.access_token);
+              localStorage.setItem(
+                "wikify_refresh_token",
+                tokens.refresh_token
+              );
+
+              // 更新原请求的Authorization头
+              config.headers.Authorization = `Bearer ${tokens.access_token}`;
+
+              console.log(
+                "✅ Token refreshed successfully, retrying original request"
+              );
+              return this.instance.request(config);
+            } catch (refreshError) {
+              console.error("❌ Token refresh failed:", refreshError);
+              // 清除无效的tokens
+              localStorage.removeItem("wikify_access_token");
+              localStorage.removeItem("wikify_refresh_token");
+
+              // 可以在这里触发重新登录
+              window.dispatchEvent(new CustomEvent("auth:token-expired"));
+            }
+          }
+        }
 
         // 重试逻辑
         if (this.shouldRetry(error) && config) {

@@ -10,11 +10,26 @@ use crate::AppState;
 use axum::{extract::State, http::StatusCode, response::Json, Json as JsonExtractor};
 use serde_json::{json, Value};
 use tracing::info;
+use utoipa::ToSchema;
 
 /// User registration endpoint
 ///
 /// Register a new user account with username, email, and password.
 /// Returns user information and JWT tokens on success.
+#[utoipa::path(
+    post,
+    path = "/api/auth/register",
+    tag = "Authentication",
+    summary = "Register a new user",
+    description = "Create a new user account with username, email, and password",
+    request_body = RegisterRequest,
+    responses(
+        (status = 200, description = "User registered successfully", body = AuthResponse),
+        (status = 400, description = "Invalid request data"),
+        (status = 409, description = "Username or email already exists"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn register_user(
     State(app_state): State<AppState>,
     JsonExtractor(request): JsonExtractor<RegisterRequest>,
@@ -31,6 +46,20 @@ pub async fn register_user(
 ///
 /// Authenticate user with username and password.
 /// Returns user information and JWT tokens on success.
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    tag = "Authentication",
+    summary = "User login",
+    description = "Authenticate user with username and password",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = AuthResponse),
+        (status = 400, description = "Invalid request data"),
+        (status = 401, description = "Invalid credentials"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn login_user(
     State(app_state): State<AppState>,
     JsonExtractor(request): JsonExtractor<LoginRequest>,
@@ -47,6 +76,20 @@ pub async fn login_user(
 ///
 /// Refresh access token using a valid refresh token.
 /// Returns new token pair on success.
+#[utoipa::path(
+    post,
+    path = "/api/auth/refresh",
+    tag = "Authentication",
+    summary = "Refresh access token",
+    description = "Refresh access token using a valid refresh token",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "Token refreshed successfully", body = AuthResponse),
+        (status = 400, description = "Invalid request data"),
+        (status = 401, description = "Invalid or expired refresh token"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn refresh_token(
     State(app_state): State<AppState>,
     JsonExtractor(request): JsonExtractor<RefreshRequest>,

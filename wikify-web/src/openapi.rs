@@ -7,11 +7,14 @@ use utoipa::{
     Modify, OpenApi,
 };
 
-use crate::handlers::{
-    ChatQueryRequest, ChatQueryResponse, DeleteRepositoryResponse, GenerateWikiRequest,
-    GenerateWikiResponse, HealthResponse, InitializeRepositoryRequest,
-    InitializeRepositoryResponse, ResearchProgressResponse, SourceDocument, StartResearchRequest,
-    WikiGenerationConfig,
+use crate::{
+    auth::users::{AuthResponse, LoginRequest, RefreshRequest, RegisterRequest},
+    handlers::{
+        ChatQueryRequest, ChatQueryResponse, DeleteRepositoryResponse, GenerateWikiRequest,
+        GenerateWikiResponse, HealthResponse, InitializeRepositoryRequest,
+        InitializeRepositoryResponse, ResearchProgressResponse, SourceDocument,
+        StartResearchRequest, WikiGenerationConfig,
+    },
 };
 
 /// Main OpenAPI specification for Wikify Web Server
@@ -36,6 +39,11 @@ use crate::handlers::{
     paths(
         // Health endpoints
         crate::handlers::health_check,
+
+        // Authentication endpoints
+        crate::auth::handlers::register_user,
+        crate::auth::handlers::login_user,
+        crate::auth::handlers::refresh_token,
 
         // Repository management
         crate::handlers::initialize_repository,
@@ -82,6 +90,12 @@ use crate::handlers::{
     ),
     components(
         schemas(
+            // Authentication schemas
+            RegisterRequest,
+            LoginRequest,
+            RefreshRequest,
+            AuthResponse,
+            // Other schemas
             HealthResponse,
             InitializeRepositoryRequest,
             InitializeRepositoryResponse,
@@ -99,6 +113,7 @@ use crate::handlers::{
     ),
     tags(
         (name = "Health", description = "Health check endpoints"),
+        (name = "Authentication", description = "User authentication and authorization"),
         (name = "Repository", description = "Repository management operations"),
         (name = "Chat", description = "AI chat and query operations"),
         (name = "Wiki", description = "Wiki generation and management"),

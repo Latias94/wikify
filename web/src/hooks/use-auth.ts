@@ -3,12 +3,12 @@
  * 提供登录、注册、权限检查等功能
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
-import { apiClient } from '@/lib/api-client';
-import { useAppStore } from '@/store/app-store';
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { apiClient } from "@/lib/api-client";
+import { useAppStore } from "@/store/app-store";
 import {
   AuthStatusResponse,
   LoginRequest,
@@ -18,7 +18,7 @@ import {
   UserInfo,
   Permission,
   AuthMode,
-} from '@/types/api';
+} from "@/types/api";
 
 // ============================================================================
 // 认证状态管理
@@ -29,7 +29,7 @@ import {
  */
 export const useAuthStatus = () => {
   return useQuery({
-    queryKey: ['auth', 'status'],
+    queryKey: ["auth", "status"],
     queryFn: () => apiClient.getAuthStatus(),
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 1,
@@ -43,14 +43,10 @@ export const useAuth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // Store state
-  const {
-    currentUser,
-    isAuthenticated,
-    setCurrentUser,
-    setAuthenticated,
-  } = useAppStore();
+  const { currentUser, isAuthenticated, setCurrentUser, setAuthenticated } =
+    useAppStore();
 
   // Local state
   const [isInitialized, setIsInitialized] = useState(false);
@@ -60,21 +56,24 @@ export const useAuth = () => {
   // ============================================================================
 
   const getStoredToken = useCallback(() => {
-    return localStorage.getItem('wikify_access_token');
+    return localStorage.getItem("wikify_access_token");
   }, []);
 
   const getStoredRefreshToken = useCallback(() => {
-    return localStorage.getItem('wikify_refresh_token');
+    return localStorage.getItem("wikify_refresh_token");
   }, []);
 
-  const storeTokens = useCallback((tokens: { access_token: string; refresh_token: string }) => {
-    localStorage.setItem('wikify_access_token', tokens.access_token);
-    localStorage.setItem('wikify_refresh_token', tokens.refresh_token);
-  }, []);
+  const storeTokens = useCallback(
+    (tokens: { access_token: string; refresh_token: string }) => {
+      localStorage.setItem("wikify_access_token", tokens.access_token);
+      localStorage.setItem("wikify_refresh_token", tokens.refresh_token);
+    },
+    []
+  );
 
   const clearTokens = useCallback(() => {
-    localStorage.removeItem('wikify_access_token');
-    localStorage.removeItem('wikify_refresh_token');
+    localStorage.removeItem("wikify_access_token");
+    localStorage.removeItem("wikify_refresh_token");
   }, []);
 
   // ============================================================================
@@ -90,15 +89,17 @@ export const useAuth = () => {
       storeTokens(response.tokens);
       setCurrentUser(response.user);
       setAuthenticated(true);
-      
+
       toast({
         title: "Login Successful",
-        description: `Welcome back, ${response.user.display_name || response.user.username}!`,
+        description: `Welcome back, ${
+          response.user.display_name || response.user.username
+        }!`,
       });
 
       // 刷新相关查询
-      queryClient.invalidateQueries({ queryKey: ['auth'] });
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
+      queryClient.invalidateQueries({ queryKey: ["user"] });
     },
     onError: (error: any) => {
       toast({
@@ -118,15 +119,17 @@ export const useAuth = () => {
       storeTokens(response.tokens);
       setCurrentUser(response.user);
       setAuthenticated(true);
-      
+
       toast({
         title: "Registration Successful",
-        description: `Welcome to Wikify, ${response.user.display_name || response.user.username}!`,
+        description: `Welcome to Wikify, ${
+          response.user.display_name || response.user.username
+        }!`,
       });
 
       // 刷新相关查询
-      queryClient.invalidateQueries({ queryKey: ['auth'] });
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
+      queryClient.invalidateQueries({ queryKey: ["user"] });
     },
     onError: (error: any) => {
       toast({
@@ -145,25 +148,32 @@ export const useAuth = () => {
       // 可选：调用后端登出接口
       // await apiClient.logout();
     } catch (error) {
-      console.warn('Logout API call failed:', error);
+      console.warn("Logout API call failed:", error);
     } finally {
       // 清理本地状态
       clearTokens();
       setCurrentUser(null);
       setAuthenticated(false);
-      
+
       // 清理查询缓存
       queryClient.clear();
-      
+
       toast({
         title: "Logged Out",
         description: "You have been successfully logged out.",
       });
 
       // 重定向到首页
-      navigate('/');
+      navigate("/");
     }
-  }, [clearTokens, setCurrentUser, setAuthenticated, queryClient, toast, navigate]);
+  }, [
+    clearTokens,
+    setCurrentUser,
+    setAuthenticated,
+    queryClient,
+    toast,
+    navigate,
+  ]);
 
   /**
    * Token 刷新
@@ -188,10 +198,15 @@ export const useAuth = () => {
   /**
    * 检查用户是否有特定权限
    */
-  const hasPermission = useCallback((permission: Permission): boolean => {
-    if (!currentUser) return false;
-    return currentUser.permissions.includes(permission) || currentUser.is_admin;
-  }, [currentUser]);
+  const hasPermission = useCallback(
+    (permission: Permission): boolean => {
+      if (!currentUser) return false;
+      return (
+        currentUser.permissions.includes(permission) || currentUser.is_admin
+      );
+    },
+    [currentUser]
+  );
 
   /**
    * 检查用户是否为管理员
@@ -204,12 +219,26 @@ export const useAuth = () => {
    * 检查是否需要认证
    */
   const requiresAuth = useCallback((authMode: AuthMode): boolean => {
-    return authMode !== 'open';
+    return authMode !== "open";
   }, []);
 
   // ============================================================================
   // 初始化
   // ============================================================================
+
+  /**
+   * 监听token过期事件
+   */
+  useEffect(() => {
+    const handleTokenExpired = () => {
+      console.log("Token expired, logging out user");
+      logout();
+    };
+
+    window.addEventListener("auth:token-expired", handleTokenExpired);
+    return () =>
+      window.removeEventListener("auth:token-expired", handleTokenExpired);
+  }, [logout]);
 
   /**
    * 初始化认证状态
@@ -222,9 +251,11 @@ export const useAuth = () => {
       if (token && refreshToken) {
         try {
           // 尝试刷新 token 来验证用户状态
-          await refreshTokenMutation.mutateAsync({ refresh_token: refreshToken });
+          await refreshTokenMutation.mutateAsync({
+            refresh_token: refreshToken,
+          });
         } catch (error) {
-          console.warn('Failed to refresh token on initialization:', error);
+          console.warn("Failed to refresh token on initialization:", error);
           clearTokens();
         }
       }
@@ -235,7 +266,13 @@ export const useAuth = () => {
     if (!isInitialized) {
       initializeAuth();
     }
-  }, [isInitialized, getStoredToken, getStoredRefreshToken, refreshTokenMutation, clearTokens]);
+  }, [
+    isInitialized,
+    getStoredToken,
+    getStoredRefreshToken,
+    refreshTokenMutation,
+    clearTokens,
+  ]);
 
   // ============================================================================
   // 返回值
@@ -246,17 +283,17 @@ export const useAuth = () => {
     currentUser,
     isAuthenticated,
     isInitialized,
-    
+
     // 操作
     login: loginMutation.mutate,
     register: registerMutation.mutate,
     logout,
-    
+
     // 权限检查
     hasPermission,
     isAdmin,
     requiresAuth,
-    
+
     // 加载状态
     isLoggingIn: loginMutation.isPending,
     isRegistering: registerMutation.isPending,
@@ -280,22 +317,33 @@ export const useRequireAuth = (requiredPermission?: Permission) => {
     if (!isInitialized) return;
 
     if (!isAuthenticated) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
 
     if (requiredPermission && currentUser) {
-      const hasPermission = currentUser.permissions.includes(requiredPermission) || currentUser.is_admin;
+      const hasPermission =
+        currentUser.permissions.includes(requiredPermission) ||
+        currentUser.is_admin;
       if (!hasPermission) {
-        navigate('/unauthorized');
+        navigate("/unauthorized");
         return;
       }
     }
-  }, [isAuthenticated, isInitialized, currentUser, requiredPermission, navigate]);
+  }, [
+    isAuthenticated,
+    isInitialized,
+    currentUser,
+    requiredPermission,
+    navigate,
+  ]);
 
   return {
-    isAuthorized: isAuthenticated && (!requiredPermission || 
-      (currentUser?.permissions.includes(requiredPermission) || currentUser?.is_admin)),
+    isAuthorized:
+      isAuthenticated &&
+      (!requiredPermission ||
+        currentUser?.permissions.includes(requiredPermission) ||
+        currentUser?.is_admin),
     isLoading: !isInitialized,
   };
 };

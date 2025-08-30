@@ -9,51 +9,83 @@ use argon2::{
     Argon2,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::{debug, info, warn};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use wikify_applications::Permission;
 
 /// User registration request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RegisterRequest {
+    /// Username for the new account
+    #[schema(example = "john_doe")]
     pub username: String,
+    /// Email address for the new account
+    #[schema(example = "john@example.com")]
     pub email: String,
+    /// Password for the new account
+    #[schema(example = "secure_password123")]
     pub password: String,
+    /// Optional display name
+    #[schema(example = "John Doe")]
     pub display_name: Option<String>,
 }
 
 /// User login request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
+    /// Username or email
+    #[schema(example = "john_doe")]
     pub username: String,
+    /// User password
+    #[schema(example = "secure_password123")]
     pub password: String,
 }
 
 /// Token refresh request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshRequest {
+    /// Refresh token to exchange for new access token
+    #[schema(example = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...")]
     pub refresh_token: String,
 }
 
 /// User registration/login response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthResponse {
+    /// User information
     pub user: UserInfo,
+    /// Authentication tokens
     #[serde(flatten)]
     pub tokens: TokenPair,
 }
 
 /// Public user information
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, ToSchema)]
 pub struct UserInfo {
+    /// Unique user identifier
+    #[schema(example = "550e8400-e29b-41d4-a716-446655440000")]
     pub id: String,
+    /// Username
+    #[schema(example = "john_doe")]
     pub username: String,
+    /// Email address
+    #[schema(example = "john@example.com")]
     pub email: String,
+    /// Display name
+    #[schema(example = "John Doe")]
     pub display_name: Option<String>,
+    /// User permissions
+    #[schema(example = json!(["GenerateWiki", "DeepResearch"]))]
     pub permissions: Vec<String>,
+    /// Whether user is admin
+    #[schema(example = false)]
     pub is_admin: bool,
+    /// Account creation timestamp
+    #[schema(example = "2024-01-01T00:00:00Z")]
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
