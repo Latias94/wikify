@@ -10,7 +10,8 @@ use utoipa::{
 use crate::handlers::{
     ChatQueryRequest, ChatQueryResponse, DeleteRepositoryResponse, GenerateWikiRequest,
     GenerateWikiResponse, HealthResponse, InitializeRepositoryRequest,
-    InitializeRepositoryResponse, SourceDocument, WikiGenerationConfig,
+    InitializeRepositoryResponse, ResearchProgressResponse, SourceDocument, StartResearchRequest,
+    WikiGenerationConfig,
 };
 
 /// Main OpenAPI specification for Wikify Web Server
@@ -54,6 +55,23 @@ use crate::handlers::{
         // Configuration
         crate::handlers::get_config,
 
+        // Research endpoints
+        crate::handlers::start_research,
+        crate::handlers::research_iteration,
+        crate::handlers::get_research_progress,
+
+        // Research template endpoints
+        crate::handlers::list_research_templates,
+        crate::handlers::get_research_template,
+        crate::handlers::list_templates_by_category,
+        crate::handlers::start_research_from_template,
+
+        // Research history endpoints
+        crate::handlers::get_research_history,
+        crate::handlers::get_research_record,
+        crate::handlers::delete_research_record,
+        crate::handlers::get_research_statistics,
+
         // SQLite-only endpoints (conditionally included)
         #[cfg(feature = "sqlite")]
         crate::handlers::get_repositories,
@@ -74,6 +92,9 @@ use crate::handlers::{
             GenerateWikiRequest,
             GenerateWikiResponse,
             WikiGenerationConfig,
+            StartResearchRequest,
+            ResearchProgressResponse,
+            crate::handlers::StartResearchFromTemplateRequest,
         )
     ),
     tags(
@@ -81,6 +102,7 @@ use crate::handlers::{
         (name = "Repository", description = "Repository management operations"),
         (name = "Chat", description = "AI chat and query operations"),
         (name = "Wiki", description = "Wiki generation and management"),
+        (name = "Research", description = "Deep research and investigation operations"),
         (name = "Session", description = "Session management operations"),
         (name = "Configuration", description = "Server configuration operations"),
     ),

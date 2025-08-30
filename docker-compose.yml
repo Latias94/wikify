@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  wikify:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - WIKIFY_HOST=0.0.0.0
+      - WIKIFY_PORT=8080
+      - WIKIFY_DEV_MODE=false
+      - WIKIFY_PERMISSION_MODE=open
+      - RUST_LOG=info
+    volumes:
+      - wikify_data:/app/data
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis for caching (future enhancement)
+  # redis:
+  #   image: redis:7-alpine
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+  # Optional: PostgreSQL for production (future enhancement)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_DB: wikify
+  #     POSTGRES_USER: wikify
+  #     POSTGRES_PASSWORD: wikify_password
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+volumes:
+  wikify_data:
+  # redis_data:
+  # postgres_data:
+
+networks:
+  default:
+    name: wikify_network

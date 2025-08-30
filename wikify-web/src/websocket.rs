@@ -238,12 +238,12 @@ async fn handle_index_socket(mut socket: WebSocket, state: AppState) {
                                     completed_steps: (percentage / 20.0) as usize, // 5 steps, so each is 20%
                                 }
                             }
-                            crate::state::IndexingUpdate::WikiGenerationComplete { session_id, wiki_id, pages_count, sections_count } => {
+                            crate::state::IndexingUpdate::WikiGenerationComplete { session_id, wiki_content } => {
                                 WsMessage::WikiComplete {
-                                    session_id,
-                                    wiki_id,
-                                    pages_count,
-                                    sections_count,
+                                    session_id: session_id.clone(),
+                                    wiki_id: session_id, // Use session_id as wiki_id for now
+                                    pages_count: 1, // Placeholder
+                                    sections_count: wiki_content.matches('#').count(),
                                 }
                             }
                             crate::state::IndexingUpdate::WikiGenerationError { session_id: _, error } => {
@@ -324,16 +324,11 @@ async fn handle_chat_message(
                     let sources = rag_response
                         .sources
                         .into_iter()
-                        .map(|source| WsSourceDocument {
-                            file_path: source
-                                .chunk
-                                .metadata
-                                .get("file_path")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown")
-                                .to_string(),
-                            content: source.chunk.content,
-                            similarity_score: source.score as f64,
+                        .enumerate()
+                        .map(|(i, source_content)| WsSourceDocument {
+                            file_path: format!("source_{}", i), // TODO: Extract actual file path
+                            content: source_content,
+                            similarity_score: 1.0, // TODO: Get actual similarity score
                         })
                         .collect();
 

@@ -46,7 +46,16 @@ Transform any codebase into intelligent, searchable documentation with AI-powere
    # ANTHROPIC_API_KEY=your_anthropic_key
    ```
 
-3. **Start the web server**
+3. **Deploy Wikify**
+
+   **Option A: Docker (Recommended)**
+   ```bash
+   # One-command deployment
+   ./scripts/deploy.sh
+   # or on Windows: .\scripts\deploy.ps1
+   ```
+
+   **Option B: Native Development**
    ```bash
    cd wikify-web
    cargo run --release
@@ -138,6 +147,140 @@ OLLAMA_BASE_URL=http://localhost:11434
 ## 🤝 Contributing
 
 We welcome contributions! Please feel free to submit issues, feature requests, or pull requests.
+
+## 🏗️ Architecture
+
+Wikify follows a modern, modular architecture designed for performance and scalability:
+
+### 🧩 **Core Components**
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   wikify-web    │    │ wikify-applications │    │  wikify-rag     │
+│  (Axum Server)  │◄──►│  (Business Logic)   │◄──►│  (RAG Engine)   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   React SPA     │    │  wikify-core    │    │ wikify-indexing │
+│  (Frontend UI)  │    │ (Shared Types)  │    │ (Code Analysis) │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### 🚀 **Key Features**
+
+- **🧠 Adaptive Research Engine**: Intelligent strategy selection based on question type
+- **⚡ High Performance**: Rust-powered backend with zero-cost abstractions
+- **🔄 Real-time Updates**: WebSocket-based live research progress
+- **🛡️ Type Safety**: Comprehensive type system prevents runtime errors
+- **📦 Modular Design**: Clean separation of concerns and easy extensibility
+
+## ⚙️ Configuration
+
+Wikify uses a comprehensive TOML-based configuration system. Key configuration files:
+
+- **`config/wikify.toml`**: Main configuration file
+- **`.env`**: Environment variables (copy from `.env.example`)
+- **`docker-compose.yml`**: Container orchestration
+
+### 📋 **Configuration Sections**
+
+| Section | Purpose | Key Settings |
+|---------|---------|--------------|
+| `[server]` | Web server settings | host, port, dev_mode |
+| `[llm]` | LLM provider config | provider, models, api_keys |
+| `[rag]` | RAG system settings | embedding_model, chunk_size |
+| `[research]` | Research engine | max_iterations, strategies |
+| `[permissions]` | Access control | mode (open/private/enterprise) |
+
+### 🔧 **Environment Variables**
+
+```bash
+# LLM Configuration
+OPENAI_API_KEY=your-openai-key
+ANTHROPIC_API_KEY=your-anthropic-key
+
+# Server Configuration
+WIKIFY_HOST=127.0.0.1
+WIKIFY_PORT=8080
+WIKIFY_PERMISSION_MODE=open
+
+# Development
+RUST_LOG=info
+WIKIFY_DEV_MODE=true
+```
+
+## 🐳 Docker Deployment
+
+### **Quick Start with Docker**
+
+```bash
+# Clone and deploy
+git clone https://github.com/your-org/wikify.git
+cd wikify
+cp .env.example .env
+# Edit .env with your API keys
+docker-compose up -d
+```
+
+### **Docker Services**
+
+- **wikify**: Main application container
+- **volumes**: Persistent data storage
+- **networks**: Isolated container networking
+
+### **Health Monitoring**
+
+```bash
+# Check service health
+docker-compose ps
+docker-compose logs wikify
+
+# Access health endpoint
+curl http://localhost:8080/api/health
+```
+
+## 🔧 Development
+
+### **Development Setup**
+
+```bash
+# Install dependencies
+cargo check --workspace
+cd web && npm install && cd ..
+
+# Run in development mode
+cargo run --bin wikify-web
+# In another terminal:
+cd web && npm run dev
+```
+
+### **Testing**
+
+```bash
+# Run all tests
+cargo test --workspace
+
+# Run specific test suites
+cargo test -p wikify-applications
+cargo test -p wikify-rag
+
+# Run with output
+cargo test -- --nocapture
+```
+
+### **Code Quality**
+
+```bash
+# Format code
+cargo fmt --all
+
+# Lint code
+cargo clippy --workspace --all-targets
+
+# Check for unused dependencies
+cargo machete
+```
 
 ## 📄 License
 

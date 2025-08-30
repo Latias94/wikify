@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 # Core dependencies
 wikify-core = { path = "../wikify-core" }
+wikify-applications = { path = "../wikify-applications", features = ["openapi"] }
 wikify-rag = { path = "../wikify-rag" }
 wikify-wiki = { path = "../wikify-wiki" }
 wikify-indexing = { path = "../wikify-indexing" }
@@ -35,6 +36,15 @@ serde_yaml = "0.9"
 
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
+
+# Authentication
+base64 = "0.22"
+jsonwebtoken = "9.3"
+argon2 = "0.5"
+rand = "0.8"
+sha2 = "0.10"
+async-trait = "0.1"
+axum-extra = { version = "0.9", features = ["typed-header"] }
 
 # WebSocket
 tokio-tungstenite = "0.24"
@@ -79,8 +89,9 @@ utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 
 [features]
-default = ["sqlite"]
+default = ["sqlite", "openapi"]
 sqlite = ["sqlx"]
+openapi = []
 
 [dev-dependencies]
 tokio-test = "0.4"

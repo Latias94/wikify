@@ -13,6 +13,11 @@ pub struct SimpleDatabaseService {
 }
 
 impl SimpleDatabaseService {
+    /// 获取数据库连接池
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     /// 创建新的数据库服务
     pub async fn new(database_url: &str) -> WebResult<Self> {
         tracing::info!("🔗 Attempting to connect to database: {}", database_url);

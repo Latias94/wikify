@@ -2,7 +2,7 @@
 //!
 //! This module defines all the routes for the web application.
 
-use crate::{handlers, openapi, websocket, AppState};
+use crate::{auth, handlers, openapi, websocket, AppState};
 use axum::{
     response::Json,
     routing::{delete, get, post},
@@ -13,11 +13,44 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 /// Create API routes
-pub fn api_routes() -> Router<AppState> {
-    let router = Router::new()
+pub fn api_routes(_state: AppState) -> Router<AppState> {
+    // Public routes (no authentication required)
+    let public_routes = Router::new()
         // Health check
         .route("/health", get(handlers::health_check))
-        // Repository management
+        // Authentication endpoints
+        .route("/auth/register", post(auth::handlers::register_user))
+        .route("/auth/login", post(auth::handlers::login_user))
+        .route("/auth/refresh", post(auth::handlers::refresh_token))
+        // Research template endpoints (public read)
+        .route(
+            "/research/templates",
+            get(handlers::list_research_templates),
+        )
+        .route(
+            "/research/templates/{template_id}",
+            get(handlers::get_research_template),
+        )
+        .route(
+            "/research/templates/category/{category}",
+            get(handlers::list_templates_by_category),
+        )
+        // Configuration (public read)
+        .route("/config", get(handlers::get_config));
+
+    // Protected routes (authentication required)
+    let protected_routes = Router::new()
+        // Authentication endpoints (require valid token)
+        .route("/auth/me", get(auth::handlers::get_current_user))
+        .route("/auth/logout", post(auth::handlers::logout_user))
+        // API Key management endpoints
+        .route("/auth/api-keys", post(auth::handlers::create_api_key))
+        .route("/auth/api-keys", get(auth::handlers::list_api_keys))
+        .route(
+            "/auth/api-keys/{key_id}",
+            delete(auth::handlers::delete_api_key),
+        )
+        // Repository management (requires GenerateWiki permission)
         .route("/repositories", post(handlers::initialize_repository))
         .route(
             "/repositories/{session_id}",
@@ -31,26 +64,62 @@ pub fn api_routes() -> Router<AppState> {
             "/repositories/{session_id}/reindex",
             post(handlers::reindex_repository),
         )
-        // RAG endpoints
+        // RAG endpoints (requires Query permission)
         .route("/chat", post(handlers::chat_query))
         .route("/chat/stream", post(handlers::chat_stream))
-        // Wiki generation
+        // Wiki generation (requires GenerateWiki permission)
         .route("/wiki/generate", post(handlers::generate_wiki))
         .route("/wiki/{session_id}", get(handlers::get_wiki))
         .route("/wiki/{session_id}/export", post(handlers::export_wiki))
-        // File operations
+        // Research endpoints (requires Query permission)
+        .route("/research/start", post(handlers::start_research))
+        .route(
+            "/research/iterate/{session_id}",
+            post(handlers::research_iteration),
+        )
+        .route(
+            "/research/progress/{session_id}",
+            get(handlers::get_research_progress),
+        )
+        .route(
+            "/research/start-from-template",
+            post(handlers::start_research_from_template),
+        )
+        // Research history endpoints (requires Query permission)
+        .route("/research/history", get(handlers::get_research_history))
+        .route(
+            "/research/history/{session_id}",
+            get(handlers::get_research_record),
+        )
+        .route(
+            "/research/history/{session_id}",
+            delete(handlers::delete_research_record),
+        )
+        .route(
+            "/research/statistics",
+            get(handlers::get_research_statistics),
+        )
+        // Configuration (admin write)
+        .route("/config", post(handlers::update_config))
+        // File operations (admin only)
         .route("/files/tree", post(handlers::get_file_tree))
         .route("/files/content", post(handlers::get_file_content))
-        // Configuration
-        .route("/config", get(handlers::get_config))
-        .route("/config", post(handlers::update_config));
+        // Apply authentication middleware to all protected routes
+        .layer(axum::middleware::from_fn_with_state(
+            _state.clone(),
+            crate::middleware::auth_middleware,
+        ));
+
+    let mut router = Router::new().merge(public_routes).merge(protected_routes);
 
     // Add database-specific routes if SQLite feature is enabled
     #[cfg(feature = "sqlite")]
-    let router = router
-        .route("/repositories", get(handlers::get_repositories))
-        .route("/sessions", get(handlers::get_sessions))
-        .route("/history/{repository_id}", get(handlers::get_query_history));
+    {
+        router = router
+            .route("/repositories", get(handlers::get_repositories))
+            .route("/sessions", get(handlers::get_sessions))
+            .route("/history/{repository_id}", get(handlers::get_query_history));
+    }
 
     router
 }
@@ -93,9 +162,9 @@ async fn get_openapi_yaml() -> String {
 }
 
 /// Create all routes combined
-pub fn all_routes() -> Router<AppState> {
+pub fn all_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .nest("/api", api_routes())
+        .nest("/api", api_routes(state.clone()))
         .nest("/ws", websocket_routes())
         .nest("/api-docs", openapi_routes())
         .merge(static_routes())
@@ -112,7 +181,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_route() {
         let state = AppState::new(WebConfig::default()).await.unwrap();
-        let app = api_routes().with_state(state);
+        let app = api_routes(state.clone()).with_state(state);
 
         let response = app
             .oneshot(

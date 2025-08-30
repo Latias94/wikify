@@ -1,0 +1,56 @@
+[package]
+name = "wikify-applications"
+version = "0.1.0"
+edition = "2021"
+description = "High-level applications built on Wikify's RAG foundation"
+
+[dependencies]
+# Core dependencies
+wikify-core = { path = "../wikify-core" }
+wikify-rag = { path = "../wikify-rag" }
+siumai = { path = "../repo-ref/siumai" }
+
+# Async runtime
+tokio = { workspace = true }
+futures = "0.3"
+async-trait = "0.1"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Date/time
+chrono = { workspace = true }
+
+# UUID generation
+uuid = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# OpenAPI support (optional)
+utoipa = { workspace = true, optional = true }
+
+# File system
+dirs = { workspace = true }
+
+# Template engine for research prompts
+tera = "1.20"
+
+[features]
+default = []
+openapi = ["utoipa"]
+# Enable advanced research features
+research = []
+# Enable workshop generation
+workshop = []
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"
+
+

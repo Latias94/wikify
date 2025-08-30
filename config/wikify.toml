@@ -1,0 +1,154 @@
+# Wikify Configuration File
+# This file contains all configuration options for Wikify
+
+[server]
+# Server binding configuration
+host = "127.0.0.1"
+port = 8080
+dev_mode = false
+
+# Static files directory (relative to binary)
+static_dir = "static"
+
+# Request limits
+max_body_size = "10MB"
+request_timeout = "30s"
+
+[database]
+# Database configuration (optional)
+# url = "sqlite:data/wikify.db"
+# url = "postgresql://user:password@localhost/wikify"
+
+[permissions]
+# Permission mode: "open", "private", "enterprise"
+mode = "open"
+
+# Rate limiting (requests per minute)
+rate_limit = 100
+
+# API key configuration (for private/enterprise modes)
+# api_key_expiry = "30d"
+# max_api_keys_per_user = 5
+
+[rag]
+# RAG system configuration
+embedding_model = "text-embedding-3-small"
+chunk_size = 1000
+chunk_overlap = 200
+max_chunks_per_query = 10
+
+# Vector database settings
+vector_db_path = "data/vectors"
+index_batch_size = 100
+
+[llm]
+# Default LLM provider
+provider = "openai"
+
+# Model configurations
+[llm.models]
+chat_model = "gpt-4o-mini"
+embedding_model = "text-embedding-3-small"
+
+# Provider-specific settings
+[llm.openai]
+# api_key = "your-openai-api-key"  # Set via environment variable OPENAI_API_KEY
+base_url = "https://api.openai.com/v1"
+timeout = "60s"
+
+[llm.anthropic]
+# api_key = "your-anthropic-api-key"  # Set via environment variable ANTHROPIC_API_KEY
+base_url = "https://api.anthropic.com"
+timeout = "60s"
+
+[research]
+# Research engine configuration
+max_iterations = 5
+max_sources_per_iteration = 5
+confidence_threshold = 0.7
+
+# Strategy selection
+enable_llm_strategy_selection = true
+fallback_to_heuristic = true
+
+[session]
+# Session management
+max_sessions_per_user = 10
+session_timeout = "24h"
+max_conversation_history = 50
+
+# Auto-cleanup
+cleanup_interval = "1h"
+max_inactive_time = "7d"
+
+[indexing]
+# Repository indexing configuration
+supported_extensions = [
+    ".rs", ".py", ".js", ".ts", ".java", ".cpp", ".c", ".h",
+    ".go", ".rb", ".php", ".cs", ".swift", ".kt", ".scala",
+    ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".xml"
+]
+
+# File size limits
+max_file_size = "1MB"
+max_total_size = "100MB"
+
+# Exclusion patterns
+exclude_patterns = [
+    "target/", "node_modules/", ".git/", "__pycache__/",
+    "*.log", "*.tmp", "*.cache", ".DS_Store"
+]
+
+[wiki]
+# Wiki generation configuration
+template_engine = "handlebars"
+output_format = "markdown"
+
+# Generation settings
+include_code_examples = true
+include_diagrams = true
+max_sections = 20
+
+[logging]
+# Logging configuration
+level = "info"
+format = "json"  # "json" or "pretty"
+
+# Log file settings
+file_enabled = true
+file_path = "data/logs/wikify.log"
+file_rotation = "daily"
+file_max_size = "10MB"
+file_max_files = 7
+
+[monitoring]
+# Health check settings
+health_check_interval = "30s"
+
+# Metrics collection
+metrics_enabled = true
+metrics_endpoint = "/metrics"
+
+[security]
+# Security headers
+enable_cors = true
+cors_origins = ["http://localhost:3000", "http://localhost:5173"]
+
+# Content Security Policy
+csp_enabled = true
+
+# Rate limiting
+rate_limit_enabled = true
+rate_limit_requests = 100
+rate_limit_window = "1m"
+
+[cache]
+# Caching configuration
+enabled = true
+ttl = "1h"
+max_size = "100MB"
+
+# Cache types
+query_cache = true
+wiki_cache = true
+session_cache = true

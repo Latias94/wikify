@@ -2,6 +2,7 @@
 //!
 //! This module provides a web interface for Wikify, similar to DeepWiki's architecture.
 
+pub mod auth;
 pub mod handlers;
 pub mod middleware;
 pub mod openapi;
@@ -78,7 +79,7 @@ pub fn create_app(state: AppState) -> Router {
     // Create the main router
     Router::new()
         // API routes
-        .nest("/api", routes::api_routes())
+        .nest("/api", routes::api_routes(state.clone()))
         // WebSocket routes
         .nest("/ws", routes::websocket_routes())
         // OpenAPI documentation routes
@@ -110,6 +111,8 @@ pub struct WebConfig {
     pub static_dir: Option<String>,
     /// Database URL (optional)
     pub database_url: Option<String>,
+    /// Permission mode (open, restricted, local)
+    pub permission_mode: Option<String>,
 }
 
 impl Default for WebConfig {
@@ -120,6 +123,7 @@ impl Default for WebConfig {
             dev_mode: false,
             static_dir: None,
             database_url: Some("sqlite:./data/wikify.db".to_string()), // 启用文件 SQLite 数据库
+            permission_mode: Some("open".to_string()),                 // 默认开放模式
         }
     }
 }
@@ -139,6 +143,7 @@ impl WebConfig {
                 .unwrap_or(false),
             static_dir: std::env::var("WIKIFY_STATIC_DIR").ok(),
             database_url: std::env::var("DATABASE_URL").ok(),
+            permission_mode: std::env::var("WIKIFY_PERMISSION_MODE").ok(),
         }
     }
 
@@ -197,6 +202,9 @@ pub enum WebError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
 
     #[error("Not found: {0}")]
     NotFound(String),

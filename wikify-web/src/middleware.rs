@@ -1,8 +1,15 @@
 // Wikify Web Middleware
 // 简单的用户上下文中间件，支持可选的用户隔离
 
-use axum::{extract::Request, http::HeaderMap, middleware::Next, response::Response};
+use crate::{auth::jwt::JwtService, AppState};
+use axum::{
+    extract::{Request, State},
+    http::{HeaderMap, StatusCode},
+    middleware::Next,
+    response::Response,
+};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, warn};
 
 /// 用户上下文信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,5 +172,115 @@ mod tests {
         let user_id = UserContext::extract_user_from_cookie(cookie_str);
 
         assert_eq!(user_id, None);
+    }
+}
+
+/// Authentication middleware that requires valid JWT token or API key
+pub async fn auth_middleware(
+    State(state): State<AppState>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let headers = request.headers();
+
+    // Extract Authorization header
+    let auth_header = headers
+        .get("Authorization")
+        .and_then(|header| header.to_str().ok());
+
+    match auth_header {
+        Some(auth_str) if auth_str.starts_with("Bearer ") => {
+            let token = &auth_str[7..]; // Remove "Bearer " prefix
+
+            // Try JWT token first
+            match JwtService::verify_token(token) {
+                Ok(claims) => {
+                    debug!("Valid JWT token for user: {}", claims.sub);
+
+                    // Try to get user from user service
+                    match state.user_service.get_user_by_id(&claims.sub).await {
+                        Some(user_data) => {
+                            // Convert to our User type and add to request extensions
+                            let user = crate::auth::User::new(
+                                user_data.id.clone(),
+                                user_data.display_name.clone(),
+                                user_data.permissions.clone(),
+                            );
+                            request.extensions_mut().insert(user);
+                            return Ok(next.run(request).await);
+                        }
+                        None => {
+                            warn!("User not found for valid token: {}", claims.sub);
+                            return Err(StatusCode::UNAUTHORIZED);
+                        }
+                    }
+                }
+                Err(_) => {
+                    // JWT validation failed, try as API key
+                    debug!("JWT validation failed, trying as API key");
+                }
+            }
+
+            // Try API key authentication
+            match state.api_key_service.authenticate_api_key(token).await {
+                Ok(Some(user_data)) => {
+                    debug!(
+                        "Valid API key authentication for: {:?}",
+                        user_data.display_name
+                    );
+
+                    // Convert to our User type and add to request extensions
+                    let user = crate::auth::User::new(
+                        user_data.id.clone(),
+                        user_data.display_name.clone(),
+                        user_data.permissions.clone(),
+                    );
+                    request.extensions_mut().insert(user);
+                    Ok(next.run(request).await)
+                }
+                Ok(None) => {
+                    debug!("API key not found");
+                    Err(StatusCode::UNAUTHORIZED)
+                }
+                Err(e) => {
+                    debug!("API key authentication failed: {}", e);
+                    Err(StatusCode::UNAUTHORIZED)
+                }
+            }
+        }
+        Some(auth_str) if auth_str.starts_with("ApiKey ") => {
+            let api_key = &auth_str[7..]; // Remove "ApiKey " prefix
+
+            // Try API key authentication
+            match state.api_key_service.authenticate_api_key(api_key).await {
+                Ok(Some(user_data)) => {
+                    debug!(
+                        "Valid API key authentication for: {:?}",
+                        user_data.display_name
+                    );
+
+                    // Convert to our User type and add to request extensions
+                    let user = crate::auth::User::new(
+                        user_data.id.clone(),
+                        user_data.display_name.clone(),
+                        user_data.permissions.clone(),
+                    );
+                    request.extensions_mut().insert(user);
+                    Ok(next.run(request).await)
+                }
+                Ok(None) => {
+                    debug!("API key not found");
+                    Err(StatusCode::UNAUTHORIZED)
+                }
+                Err(e) => {
+                    debug!("API key authentication failed: {}", e);
+                    Err(StatusCode::UNAUTHORIZED)
+                }
+            }
+        }
+        _ => {
+            debug!("Missing or invalid Authorization header");
+            Err(StatusCode::UNAUTHORIZED)
+        }
     }
 }

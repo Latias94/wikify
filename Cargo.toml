@@ -5,6 +5,7 @@ members = [
     "wikify-repo",
     "wikify-indexing",
     "wikify-rag",
+    "wikify-applications",
     "wikify-wiki",
     "wikify-cli",
     "wikify-web",
@@ -52,5 +53,9 @@ axum = "0.8"
 tower = "0.5.2"
 
 clap = { version = "4.0", features = ["derive"] }
+
+# OpenAPI and documentation
+utoipa = "5.4"
+utoipa-swagger-ui = "8.0"
 
 
