@@ -438,16 +438,17 @@ where
             .unwrap_or(&"open".to_string())
             .clone();
 
+        // 首先尝试从中间件中获取已认证的用户
+        if let Some(user) = parts.extensions.get::<User>() {
+            return Ok(ModeAwareUser(user.clone()));
+        }
+
         match permission_mode.as_str() {
             "open" => {
-                // Open模式：尝试获取用户，如果没有则创建匿名用户
-                let OptionalUser(user_opt) = OptionalUser::from_request_parts(parts, state)
-                    .await
-                    .unwrap();
-                match user_opt {
-                    Some(user) => Ok(ModeAwareUser(user)),
-                    None => {
-                        // 创建匿名用户，拥有所有权限
+                // Open模式：如果没有认证用户，创建匿名用户
+                if let Some(user_context) = parts.extensions.get::<crate::middleware::UserContext>() {
+                    if user_context.is_default_user() {
+                        // 创建匿名用户，拥有所有权限（Open 模式）
                         let anonymous_user = User {
                             id: "anonymous".to_string(),
                             display_name: Some("Anonymous User".to_string()),
@@ -459,32 +460,42 @@ where
                             is_admin: false,
                         };
                         Ok(ModeAwareUser(anonymous_user))
+                    } else {
+                        // 根据用户上下文创建用户
+                        let user = User {
+                            id: user_context.user_id.clone(),
+                            display_name: user_context.display_name.clone(),
+                            permissions: vec![
+                                Permission::Query,
+                                Permission::GenerateWiki,
+                                Permission::ManageRepository,
+                            ],
+                            is_admin: false,
+                        };
+                        Ok(ModeAwareUser(user))
                     }
+                } else {
+                    // 没有用户上下文，创建默认匿名用户
+                    let anonymous_user = User {
+                        id: "anonymous".to_string(),
+                        display_name: Some("Anonymous User".to_string()),
+                        permissions: vec![
+                            Permission::Query,
+                            Permission::GenerateWiki,
+                            Permission::ManageRepository,
+                        ],
+                        is_admin: false,
+                    };
+                    Ok(ModeAwareUser(anonymous_user))
                 }
             }
             "private" | "enterprise" => {
                 // Private/Enterprise模式：必须有认证用户
-                let OptionalUser(user_opt) = OptionalUser::from_request_parts(parts, state)
-                    .await
-                    .unwrap();
-                match user_opt {
-                    Some(user) => Ok(ModeAwareUser(user)),
-                    None => {
-                        Err((StatusCode::UNAUTHORIZED, "Authentication required").into_response())
-                    }
-                }
+                Err((StatusCode::UNAUTHORIZED, "Authentication required").into_response())
             }
             _ => {
                 // 未知模式，默认为需要认证
-                let OptionalUser(user_opt) = OptionalUser::from_request_parts(parts, state)
-                    .await
-                    .unwrap();
-                match user_opt {
-                    Some(user) => Ok(ModeAwareUser(user)),
-                    None => {
-                        Err((StatusCode::UNAUTHORIZED, "Authentication required").into_response())
-                    }
-                }
+                Err((StatusCode::UNAUTHORIZED, "Authentication required").into_response())
             }
         }
     }

@@ -1,7 +1,7 @@
 // Wikify Web Middleware
 // 简单的用户上下文中间件，支持可选的用户隔离
 
-use crate::{auth::jwt::JwtService, AppState};
+use crate::{auth::jwt::JwtService, auth::User, AppState};
 use axum::{
     extract::{Request, State},
     http::{HeaderMap, StatusCode},
@@ -89,13 +89,47 @@ impl UserContext {
     }
 }
 
-/// 用户上下文中间件
+/// 用户上下文中间件，支持JWT token认证（在open模式下）
 pub async fn user_context_middleware(mut request: Request, next: Next) -> Response {
-    // 从请求中提取用户上下文
-    let user_context = UserContext::from_request(request.headers());
+    // 首先尝试JWT认证（如果Authorization header存在）
+    let headers = request.headers();
+    let auth_header = headers
+        .get("Authorization")
+        .and_then(|header| header.to_str().ok());
 
-    // 将用户上下文添加到请求扩展中
-    request.extensions_mut().insert(user_context);
+    let mut user_authenticated = false;
+
+    // 如果存在Authorization header，尝试JWT认证
+    if let Some(auth_str) = auth_header {
+        if auth_str.starts_with("Bearer ") {
+            let token = &auth_str[7..]; // Remove "Bearer " prefix
+            
+            // 尝试验证JWT token
+            match JwtService::verify_token(token) {
+                Ok(claims) => {
+                    debug!("Valid JWT token found for user: {}", claims.sub);
+                    
+                    // 创建User并添加到请求扩展
+                    if let Ok(user) = claims.to_user() {
+                        debug!("User authenticated via JWT: {}", user.id);
+                        request.extensions_mut().insert(user);
+                        user_authenticated = true;
+                    } else {
+                        warn!("Failed to convert JWT claims to user");
+                    }
+                }
+                Err(e) => {
+                    debug!("JWT token validation failed: {:?}", e);
+                }
+            }
+        }
+    }
+
+    // 如果JWT认证失败，回退到用户上下文提取
+    if !user_authenticated {
+        let user_context = UserContext::from_request(request.headers());
+        request.extensions_mut().insert(user_context);
+    }
 
     // 继续处理请求
     next.run(request).await
