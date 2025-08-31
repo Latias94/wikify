@@ -32,8 +32,7 @@ import {
   useChatError,
   useChatStore
 } from "@/store/chat-store";
-import { 
-  useActiveSession,
+import {
   useSelectedRepository,
 } from "@/store/app-store";
 
@@ -42,18 +41,17 @@ import { UIChatMessage } from "@/types/ui";
 import { validateChatMessage } from "@/utils/validators";
 
 const ChatInterface = () => {
-  const { sessionId } = useParams<{ sessionId: string }>();
+  const { repositoryId } = useParams<{ repositoryId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   // Store state
-  const activeSession = useActiveSession();
   const selectedRepository = useSelectedRepository();
-  const messages = useMessages(sessionId || '');
+  const messages = useMessages(repositoryId || '');
   const currentInput = useCurrentInput();
   const isConnected = useIsConnected();
   const streamingMessage = useStreamingMessage();
-  const chatError = useChatError(sessionId || '');
+  const chatError = useChatError(repositoryId || '');
 
   // Store actions
   const {
@@ -64,14 +62,14 @@ const ChatInterface = () => {
   } = useChatStore();
 
   // WebSocket connection
-  const { sendMessage, isConnected: wsConnected, reconnect } = useChatWebSocket(sessionId);
+  const { sendMessage, isConnected: wsConnected, reconnect } = useChatWebSocket(repositoryId);
 
   // Local state
   const [isLoading, setIsLoading] = useState(false);
 
   // 处理函数
   const handleSendMessage = useCallback(async (message: string) => {
-    if (!message.trim() || isLoading || !sessionId) return;
+    if (!message.trim() || isLoading || !repositoryId) return;
     
     // 验证消息
     const validation = validateChatMessage(message);
@@ -96,7 +94,7 @@ const ChatInterface = () => {
     }
     
     setIsLoading(true);
-    clearChatError(sessionId);
+    clearChatError(repositoryId);
     
     try {
       // 发送消息
@@ -104,7 +102,7 @@ const ChatInterface = () => {
       clearCurrentInput();
     } catch (error) {
       console.error('Failed to send message:', error);
-      setChatError(sessionId, 'Failed to send message');
+      setChatError(repositoryId, 'Failed to send message');
       toast({
         title: "Send Failed",
         description: "Failed to send message. Please try again.",
@@ -113,7 +111,7 @@ const ChatInterface = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, sessionId, wsConnected, sendMessage, clearCurrentInput, clearChatError, setChatError, toast, reconnect]);
+  }, [isLoading, repositoryId, wsConnected, sendMessage, clearCurrentInput, clearChatError, setChatError, toast, reconnect]);
 
   const handleInputChange = useCallback((value: string) => {
     setCurrentInput(value);
@@ -154,24 +152,23 @@ const ChatInterface = () => {
 
   // Effects
   useEffect(() => {
-    // 验证会话是否存在
-    if (!sessionId) {
+    // 验证仓库是否存在
+    if (!repositoryId) {
       toast({
-        title: "Invalid Session",
-        description: "No session ID provided",
+        title: "Invalid Repository",
+        description: "No repository ID provided",
         variant: "destructive"
       });
       navigate('/');
       return;
     }
 
-    // 在 Wikify 中，sessionId 就是 repository 的 ID
-    // 我们不需要预先设置 activeSession，直接使用 sessionId 进行聊天
-    console.log('Starting chat with session ID:', sessionId);
-  }, [sessionId, navigate, toast]);
+    // 在 Wikify 中，repositoryId 直接用于聊天
+    console.log('Starting chat with repository ID:', repositoryId);
+  }, [repositoryId, navigate, toast]);
 
-  // 如果没有会话ID，显示错误
-  if (!sessionId) {
+  // 如果没有仓库ID，显示错误
+  if (!repositoryId) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -185,7 +182,7 @@ const ChatInterface = () => {
     );
   }
 
-  // 在 Wikify 中，我们直接使用 sessionId，不需要检查 activeSession
+  // 在 Wikify 中，我们直接使用 repositoryId，不需要检查 activeSession
 
   return (
     <motion.div 
@@ -257,7 +254,7 @@ const ChatInterface = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => clearChatError(sessionId || '')}
+                onClick={() => clearChatError(repositoryId || '')}
                 className="ml-auto h-6 w-6 p-0"
               >
                 ×

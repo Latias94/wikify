@@ -43,7 +43,7 @@ pub struct IndexTemplate {
 pub struct RepositoryTemplate {
     pub title: String,
     pub repository: String,
-    pub session_id: String,
+    pub repository_id: String,
     pub is_indexed: bool,
 }
 
@@ -53,7 +53,7 @@ pub struct RepositoryTemplate {
 pub struct WikiTemplate {
     pub title: String,
     pub wiki: WikiData,
-    pub session_id: String,
+    pub repository_id: String,
 }
 
 /// Chat page template
@@ -62,7 +62,7 @@ pub struct WikiTemplate {
 pub struct ChatTemplate {
     pub title: String,
     pub repository: String,
-    pub session_id: String,
+    pub repository_id: String,
 }
 
 /// Error page template
@@ -115,32 +115,32 @@ impl IndexTemplate {
 }
 
 impl RepositoryTemplate {
-    pub fn new(repository: String, session_id: String, is_indexed: bool) -> Self {
+    pub fn new(repository: String, repository_id: String, is_indexed: bool) -> Self {
         Self {
             title: format!("Wikify - {}", repository),
             repository,
-            session_id,
+            repository_id,
             is_indexed,
         }
     }
 }
 
 impl WikiTemplate {
-    pub fn new(wiki: WikiData, session_id: String) -> Self {
+    pub fn new(wiki: WikiData, repository_id: String) -> Self {
         Self {
             title: format!("Wikify - {}", wiki.title),
             wiki,
-            session_id,
+            repository_id,
         }
     }
 }
 
 impl ChatTemplate {
-    pub fn new(repository: String, session_id: String) -> Self {
+    pub fn new(repository: String, repository_id: String) -> Self {
         Self {
             title: format!("Wikify Chat - {}", repository),
             repository,
-            session_id,
+            repository_id,
         }
     }
 }

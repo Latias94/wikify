@@ -1,16 +1,100 @@
 //! Authentication handlers for user registration, login, and token management
 
 use super::{
-    api_keys::{ApiKeyService, CreateApiKeyRequest},
+    api_keys::CreateApiKeyRequest,
     jwt::AuthError,
-    users::{AuthResponse, LoginRequest, RefreshRequest, RegisterRequest, UserService},
+    users::{AuthResponse, LoginRequest, RefreshRequest, RegisterRequest},
     User,
 };
 use crate::AppState;
 use axum::{extract::State, http::StatusCode, response::Json, Json as JsonExtractor};
+use serde::Serialize;
 use serde_json::{json, Value};
 use tracing::info;
 use utoipa::ToSchema;
+
+/// Get authentication status and configuration
+///
+/// Returns the current authentication mode and available features.
+/// This endpoint is public and doesn't require authentication.
+#[utoipa::path(
+    get,
+    path = "/api/auth/status",
+    tag = "Authentication",
+    summary = "Get authentication status",
+    description = "Get current authentication mode and available features",
+    responses(
+        (status = 200, description = "Authentication status retrieved successfully", body = AuthStatusResponse),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_auth_status(
+    State(app_state): State<AppState>,
+) -> Result<Json<AuthStatusResponse>, StatusCode> {
+    // Get permission mode from config
+    let permission_mode = app_state
+        .config
+        .permission_mode
+        .as_ref()
+        .unwrap_or(&"open".to_string())
+        .clone();
+
+    // Determine if authentication is required
+    let auth_required = match permission_mode.as_str() {
+        "open" => false,
+        "private" | "enterprise" => true,
+        _ => false,
+    };
+
+    // Registration is enabled for private and enterprise modes
+    let registration_enabled = match permission_mode.as_str() {
+        "private" | "enterprise" => true,
+        _ => false,
+    };
+
+    let response = AuthStatusResponse {
+        auth_mode: permission_mode,
+        auth_required,
+        registration_enabled,
+        features: AuthFeatures {
+            research_engine: true, // Always available
+            wiki_generation: true, // Always available
+            multi_language: true,  // Always available
+        },
+    };
+
+    Ok(Json(response))
+}
+
+/// Authentication status response
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthStatusResponse {
+    /// Authentication mode: "open", "private", or "enterprise"
+    #[schema(example = "open")]
+    pub auth_mode: String,
+    /// Whether authentication is required
+    #[schema(example = false)]
+    pub auth_required: bool,
+    /// Whether user registration is enabled
+    #[schema(example = true)]
+    pub registration_enabled: bool,
+    /// Available features
+    pub features: AuthFeatures,
+}
+
+/// Available authentication features
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthFeatures {
+    /// Whether research engine is available
+    #[schema(example = true)]
+    pub research_engine: bool,
+    /// Whether wiki generation is available
+    #[schema(example = true)]
+    pub wiki_generation: bool,
+    /// Whether multi-language support is available
+    #[schema(example = true)]
+    pub multi_language: bool,
+}
 
 /// User registration endpoint
 ///

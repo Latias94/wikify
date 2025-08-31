@@ -25,6 +25,9 @@ chrono = { workspace = true }
 # UUID generation
 uuid = { workspace = true }
 
+# Database (optional)
+sqlx = { workspace = true, optional = true }
+
 # Logging
 tracing = { workspace = true }
 
@@ -42,7 +45,8 @@ dirs = { workspace = true }
 tera = "1.20"
 
 [features]
-default = []
+default = ["sqlite"]
+sqlite = ["sqlx"]
 openapi = ["utoipa"]
 # Enable advanced research features
 research = []

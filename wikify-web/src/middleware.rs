@@ -181,6 +181,19 @@ pub async fn auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    // 检查权限模式
+    let permission_mode = state
+        .config
+        .permission_mode
+        .as_ref()
+        .unwrap_or(&"open".to_string())
+        .clone();
+
+    // 在open模式下，跳过认证检查
+    if permission_mode == "open" {
+        return Ok(next.run(request).await);
+    }
+
     let headers = request.headers();
 
     // Extract Authorization header

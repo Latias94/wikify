@@ -92,6 +92,22 @@ paths:
           description: Username or email already exists
         '500':
           description: Internal server error
+  /api/auth/status:
+    get:
+      tags:
+      - Authentication
+      summary: Get authentication status
+      description: Get current authentication mode and available features
+      operationId: get_auth_status
+      responses:
+        '200':
+          description: Authentication status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthStatusResponse'
+        '500':
+          description: Internal server error
   /api/chat:
     post:
       tags:
@@ -177,12 +193,12 @@ paths:
     get:
       tags:
       - Repository
-      summary: Get all repositories
-      description: Get a list of all repositories (requires SQLite feature)
-      operationId: get_repositories
+      summary: List repositories
+      description: List all repositories accessible to the current user
+      operationId: list_repositories
       responses:
         '200':
-          description: Repositories retrieved successfully
+          description: Repositories listed successfully
         '500':
           description: Internal server error
     post:
@@ -208,17 +224,17 @@ paths:
           description: Repository is already being indexed by another session
         '500':
           description: Internal server error
-  /api/repositories/{session_id}:
+  /api/repositories/{repository_id}:
     get:
       tags:
       - Repository
       summary: Get repository information
-      description: Get information about a repository session
+      description: Get information about a repository
       operationId: get_repository_info
       parameters:
-      - name: session_id
+      - name: repository_id
         in: path
-        description: Session ID
+        description: Repository ID
         required: true
         schema:
           type: string
@@ -226,7 +242,7 @@ paths:
         '200':
           description: Repository information retrieved successfully
         '404':
-          description: Session not found
+          description: Repository not found
     delete:
       tags:
       - Repository
@@ -234,9 +250,9 @@ paths:
       description: Delete a repository and all associated data including sessions, vector data, and database records
       operationId: delete_repository
       parameters:
-      - name: session_id
+      - name: repository_id
         in: path
-        description: Session ID of the repository to delete
+        description: Repository ID to delete
         required: true
         schema:
           type: string
@@ -251,7 +267,7 @@ paths:
           description: Repository not found
         '500':
           description: Internal server error
-  /api/repositories/{session_id}/reindex:
+  /api/repositories/{repository_id}/reindex:
     post:
       tags:
       - Repository
@@ -259,9 +275,9 @@ paths:
       description: Reindex an existing repository. If the repository is currently being indexed, returns a conflict error. If already indexed, resets the state and starts reindexing.
       operationId: reindex_repository
       parameters:
-      - name: session_id
+      - name: repository_id
         in: path
-        description: Session ID of the repository to reindex
+        description: Repository ID to reindex
         required: true
         schema:
           type: string
@@ -290,50 +306,38 @@ paths:
         description: Filter by status
         required: false
         schema:
-          type:
-          - string
-          - 'null'
+          type: string
       - name: template_id
         in: query
         description: Filter by template ID
         required: false
         schema:
-          type:
-          - string
-          - 'null'
+          type: string
       - name: date_from
         in: query
         description: Filter by date from (ISO 8601)
         required: false
         schema:
-          type:
-          - string
-          - 'null'
+          type: string
       - name: date_to
         in: query
         description: Filter by date to (ISO 8601)
         required: false
         schema:
-          type:
-          - string
-          - 'null'
+          type: string
       - name: limit
         in: query
         description: Limit number of results
         required: false
         schema:
-          type:
-          - integer
-          - 'null'
+          type: integer
           minimum: 0
       - name: offset
         in: query
         description: Offset for pagination
         required: false
         schema:
-          type:
-          - integer
-          - 'null'
+          type: integer
           minimum: 0
       responses:
         '200':
@@ -395,16 +399,16 @@ paths:
           description: Record not found
         '500':
           description: Internal server error
-  /api/research/iterate/{session_id}:
+  /api/research/iterate/{repository_id}:
     post:
       tags:
       - crate::handlers
       summary: Execute one research iteration
       operationId: research_iteration
       parameters:
-      - name: session_id
+      - name: repository_id
         in: path
-        description: Research session ID
+        description: Repository ID for research
         required: true
         schema:
           type: string
@@ -418,19 +422,19 @@ paths:
         '403':
           description: Permission denied
         '404':
-          description: Research session not found
+          description: Repository not found
         '500':
           description: Internal server error
-  /api/research/progress/{session_id}:
+  /api/research/progress/{repository_id}:
     get:
       tags:
       - crate::handlers
       summary: Get research progress
       operationId: get_research_progress
       parameters:
-      - name: session_id
+      - name: repository_id
         in: path
-        description: Research session ID
+        description: Repository ID
         required: true
         schema:
           type: string
@@ -583,16 +587,54 @@ paths:
           description: Template not found
         '500':
           description: Internal server error
-  /api/sessions:
+  /api/research/{research_id}:
     get:
       tags:
-      - Session
-      summary: Get all sessions
-      description: Get a list of all active sessions (requires SQLite feature)
-      operationId: get_sessions
+      - Research
+      summary: Get research progress by ID
+      description: Get research progress using research session ID (frontend compatibility alias)
+      operationId: get_research_progress_by_id
+      parameters:
+      - name: research_id
+        in: path
+        description: Research session ID
+        required: true
+        schema:
+          type: string
       responses:
         '200':
-          description: Sessions retrieved successfully
+          description: Research progress retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResearchProgressResponse'
+        '403':
+          description: Permission denied
+        '404':
+          description: Research session not found
+        '500':
+          description: Internal server error
+  /api/research/{research_id}/stop:
+    post:
+      tags:
+      - Research
+      summary: Stop research session
+      description: Stop an active research session
+      operationId: stop_research
+      parameters:
+      - name: research_id
+        in: path
+        description: Research session ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Research stopped successfully
+        '403':
+          description: Permission denied
+        '404':
+          description: Research session not found
         '500':
           description: Internal server error
   /api/wiki/generate:
@@ -619,17 +661,17 @@ paths:
           description: Session not found
         '500':
           description: Wiki generation failed
-  /api/wiki/{session_id}:
+  /api/wiki/{repository_id}:
     get:
       tags:
       - Wiki
       summary: Get generated wiki
-      description: Retrieve the generated wiki documentation for a session
+      description: Retrieve the generated wiki documentation for a repository
       operationId: get_wiki
       parameters:
-      - name: session_id
+      - name: repository_id
         in: path
-        description: Session ID
+        description: Repository ID
         required: true
         schema:
           type: string
@@ -638,7 +680,7 @@ paths:
           description: Wiki retrieved successfully
         '404':
           description: Wiki not found
-  /api/wiki/{session_id}/export:
+  /api/wiki/{repository_id}/export:
     post:
       tags:
       - Wiki
@@ -646,9 +688,9 @@ paths:
       description: Export generated wiki in various formats (not yet implemented)
       operationId: export_wiki
       parameters:
-      - name: session_id
+      - name: repository_id
         in: path
-        description: Session ID
+        description: Repository ID
         required: true
         schema:
           type: string
@@ -659,6 +701,26 @@ paths:
           description: Not implemented
 components:
   schemas:
+    AuthFeatures:
+      type: object
+      description: Available authentication features
+      required:
+      - research_engine
+      - wiki_generation
+      - multi_language
+      properties:
+        multi_language:
+          type: boolean
+          description: Whether multi-language support is available
+          example: true
+        research_engine:
+          type: boolean
+          description: Whether research engine is available
+          example: true
+        wiki_generation:
+          type: boolean
+          description: Whether wiki generation is available
+          example: true
     AuthResponse:
       allOf:
       - $ref: '#/components/schemas/TokenPair'
@@ -671,37 +733,67 @@ components:
             $ref: '#/components/schemas/UserInfo'
             description: User information
       description: User registration/login response
+    AuthStatusResponse:
+      type: object
+      description: Authentication status response
+      required:
+      - auth_mode
+      - auth_required
+      - registration_enabled
+      - features
+      properties:
+        auth_mode:
+          type: string
+          description: 'Authentication mode: "open", "private", or "enterprise"'
+          example: open
+        auth_required:
+          type: boolean
+          description: Whether authentication is required
+          example: false
+        features:
+          $ref: '#/components/schemas/AuthFeatures'
+          description: Available features
+        registration_enabled:
+          type: boolean
+          description: Whether user registration is enabled
+          example: true
     ChatQueryRequest:
       type: object
       description: Chat query request
       required:
-      - session_id
+      - repository_id
       - question
       properties:
         context:
           type:
           - string
           - 'null'
+        max_results:
+          type:
+          - integer
+          - 'null'
+          description: Maximum number of results to return
+          minimum: 0
         question:
           type: string
           example: How does the authentication work?
-        session_id:
+        repository_id:
           type: string
-          example: uuid-string
+          example: repo-uuid-string
     ChatQueryResponse:
       type: object
       description: Chat query response
       required:
       - answer
       - sources
-      - session_id
+      - repository_id
       - timestamp
       properties:
         answer:
           type: string
-        session_id:
+        repository_id:
           type: string
-          example: uuid-string
+          example: repo-uuid-string
         sources:
           type: array
           items:
@@ -715,9 +807,9 @@ components:
       required:
       - status
       - message
-      - deleted_session_id
+      - deleted_repository_id
       properties:
-        deleted_session_id:
+        deleted_repository_id:
           type: string
           example: uuid-string
         message:
@@ -730,12 +822,12 @@ components:
       type: object
       description: Wiki generation request
       required:
-      - session_id
+      - repository_id
       - config
       properties:
         config:
           $ref: '#/components/schemas/WikiGenerationConfig'
-        session_id:
+        repository_id:
           type: string
           example: uuid-string
     GenerateWikiResponse:
@@ -805,14 +897,14 @@ components:
       type: object
       description: Repository initialization response
       required:
-      - session_id
+      - repository_id
       - status
       - message
       properties:
         message:
           type: string
           example: Repository initialized successfully
-        session_id:
+        repository_id:
           type: string
           example: uuid-string
         status:
@@ -853,6 +945,13 @@ components:
             items:
               type: string
       description: Parameter type enumeration
+    QuestionSource:
+      type: string
+      description: Question source type
+      enum:
+      - Initial
+      - Generated
+      - FollowUp
     QuestionType:
       type: string
       description: Types of research questions
@@ -944,55 +1043,55 @@ components:
       type: object
       description: Research context for maintaining state across iterations
       required:
-      - session_id
+      - id
+      - repository_id
       - topic
       - config
-      - current_iteration
       - questions
       - findings
       - iterations
-      - start_time
-      - metadata
+      - status
+      - created_at
+      - updated_at
       properties:
         config:
           $ref: '#/components/schemas/ResearchConfig'
           description: Configuration
-        current_iteration:
-          type: integer
-          description: Current iteration number
-          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time
         findings:
           type: array
           items:
             $ref: '#/components/schemas/ResearchFinding'
           description: All findings (as a vector for chronological order)
+        id:
+          type: string
+          description: Research session ID
         iterations:
           type: array
           items:
             $ref: '#/components/schemas/ResearchIteration'
           description: Research history
-        metadata:
-          type: object
-          description: Additional metadata
-          additionalProperties:
-            type: string
-          propertyNames:
-            type: string
         questions:
           type: array
           items:
             $ref: '#/components/schemas/ResearchQuestion'
           description: All questions (as a vector for ordered processing)
-        session_id:
+        repository_id:
           type: string
-          description: Session ID
-        start_time:
-          type: string
-          format: date-time
-          description: Start time
+          description: Repository ID being researched
+        status:
+          $ref: '#/components/schemas/ResearchStatus'
+          description: Research status
         topic:
           type: string
           description: Original topic
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update time
     ResearchFinding:
       type: object
       description: Research finding from a single source
@@ -1186,7 +1285,8 @@ components:
       type: object
       description: Research progress response
       required:
-      - session_id
+      - research_id
+      - repository_id
       - current_iteration
       - total_iterations
       - stage
@@ -1217,9 +1317,12 @@ components:
           type: number
           format: double
           description: Progress percentage (0.0-1.0)
-        session_id:
+        repository_id:
           type: string
-          description: Session ID
+          description: Repository ID being researched
+        research_id:
+          type: string
+          description: Research session ID
         stage:
           type: string
           description: Current stage description
@@ -1258,44 +1361,29 @@ components:
       required:
       - id
       - text
-      - question_type
       - priority
-      - depth
-      - complexity
-      - keywords
+      - answered
+      - source
+      - created_at
       properties:
-        complexity:
-          type: integer
-          format: int32
-          description: Expected complexity (1-10)
-          minimum: 0
-        depth:
-          type: integer
-          description: Depth in the question hierarchy
-          minimum: 0
+        answered:
+          type: boolean
+          description: Whether this question has been answered
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time
         id:
           type: string
           format: uuid
           description: Unique identifier for the question
-        keywords:
-          type: array
-          items:
-            type: string
-          description: Keywords associated with this question
-        parent_id:
-          type:
-          - string
-          - 'null'
-          format: uuid
-          description: Parent question ID (for sub-questions)
         priority:
-          type: integer
-          format: int32
-          description: Priority level (1-10, higher is more important)
-          minimum: 0
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-          description: Question type/category
+          type: number
+          format: double
+          description: Priority level (0.0-1.0, higher is more important)
+        source:
+          $ref: '#/components/schemas/QuestionSource'
+          description: Source of this question
         text:
           type: string
           description: The question text
@@ -1351,28 +1439,13 @@ components:
           description: Total number of research sessions
           minimum: 0
     ResearchStatus:
-      oneOf:
-      - type: string
-        description: Research is in progress
-        enum:
-        - InProgress
-      - type: string
-        description: Research completed successfully
-        enum:
-        - Completed
-      - type: string
-        description: Research was cancelled
-        enum:
-        - Cancelled
-      - type: object
-        description: Research failed with error
-        required:
-        - Failed
-        properties:
-          Failed:
-            type: string
-            description: Research failed with error
-      description: Research status enumeration
+      type: string
+      description: Research session status
+      enum:
+      - Active
+      - Completed
+      - Cancelled
+      - Failed
     ResearchSummary:
       type: object
       description: Research summary containing final results
@@ -1550,7 +1623,7 @@ components:
       type: object
       description: Start research request
       required:
-      - session_id
+      - repository_id
       - topic
       properties:
         config:
@@ -1558,9 +1631,9 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/ResearchConfig'
             description: Optional research configuration
-        session_id:
+        repository_id:
           type: string
-          description: Session ID for the research
+          description: Repository ID for the research
         topic:
           type: string
           description: Research topic

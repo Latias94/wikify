@@ -21,25 +21,25 @@ use tracing::{error, info, warn};
 pub enum WsMessage {
     /// Chat message
     Chat {
-        session_id: String,
+        repository_id: String,
         question: String,
         context: Option<String>,
     },
     /// Chat response
     ChatResponse {
-        session_id: String,
+        repository_id: String,
         answer: String,
         sources: Vec<WsSourceDocument>,
         timestamp: chrono::DateTime<chrono::Utc>,
     },
     /// Wiki generation request
     WikiGenerate {
-        session_id: String,
+        repository_id: String,
         config: WsWikiConfig,
     },
     /// Wiki generation progress
     WikiProgress {
-        session_id: String,
+        repository_id: String,
         progress: f64,
         current_step: String,
         total_steps: usize,
@@ -47,14 +47,15 @@ pub enum WsMessage {
     },
     /// Wiki generation complete
     WikiComplete {
-        session_id: String,
+        repository_id: String,
         wiki_id: String,
         pages_count: usize,
         sections_count: usize,
     },
     /// Indexing progress
+    #[serde(rename = "index_progress")]
     IndexProgress {
-        session_id: String,
+        repository_id: String,
         progress: f64,
         files_processed: usize,
         total_files: usize,
@@ -108,7 +109,7 @@ async fn handle_chat_socket(mut socket: WebSocket, state: AppState) {
 
     // Send welcome message
     let welcome = WsMessage::ChatResponse {
-        session_id: "system".to_string(),
+        repository_id: "system".to_string(),
         answer: "Welcome to Wikify! Please initialize a repository first.".to_string(),
         sources: vec![],
         timestamp: chrono::Utc::now(),
@@ -184,7 +185,7 @@ async fn handle_index_socket(mut socket: WebSocket, state: AppState) {
                         // Convert to WebSocket message format based on update type
                         let ws_message = match update {
                             crate::state::IndexingUpdate::Progress {
-                                session_id,
+                                repository_id,
                                 percentage,
                                 files_processed,
                                 total_files,
@@ -192,7 +193,7 @@ async fn handle_index_socket(mut socket: WebSocket, state: AppState) {
                                 ..
                             } => {
                                 WsMessage::IndexProgress {
-                                    session_id,
+                                    repository_id,
                                     progress: percentage / 100.0, // Convert to 0.0-1.0 range
                                     files_processed: files_processed.unwrap_or(0),
                                     total_files: total_files.unwrap_or(0),
@@ -200,53 +201,53 @@ async fn handle_index_socket(mut socket: WebSocket, state: AppState) {
                                 }
                             }
                             crate::state::IndexingUpdate::Complete {
-                                session_id,
+                                repository_id,
                                 total_files,
                                 total_chunks,
                                 ..
                             } => {
                                 // Send a completion message
                                 WsMessage::IndexProgress {
-                                    session_id,
+                                    repository_id,
                                     progress: 1.0,
                                     files_processed: total_files,
                                     total_files,
                                     current_file: Some(format!("Completed! Processed {} files into {} chunks", total_files, total_chunks)),
                                 }
                             }
-                            crate::state::IndexingUpdate::Error { session_id: _, error } => {
+                            crate::state::IndexingUpdate::Error { repository_id: _, error } => {
                                 WsMessage::Error {
                                     message: error,
                                     code: Some("INDEXING_ERROR".to_string()),
                                 }
                             }
-                            crate::state::IndexingUpdate::WikiGenerationStarted { session_id } => {
+                            crate::state::IndexingUpdate::WikiGenerationStarted { repository_id } => {
                                 WsMessage::WikiProgress {
-                                    session_id,
+                                    repository_id,
                                     progress: 0.0,
                                     current_step: "Starting wiki generation...".to_string(),
                                     total_steps: 5,
                                     completed_steps: 0,
                                 }
                             }
-                            crate::state::IndexingUpdate::WikiGenerationProgress { session_id, stage, percentage } => {
+                            crate::state::IndexingUpdate::WikiGenerationProgress { repository_id, stage, percentage } => {
                                 WsMessage::WikiProgress {
-                                    session_id,
+                                    repository_id,
                                     progress: percentage / 100.0,
                                     current_step: stage,
                                     total_steps: 5,
                                     completed_steps: (percentage / 20.0) as usize, // 5 steps, so each is 20%
                                 }
                             }
-                            crate::state::IndexingUpdate::WikiGenerationComplete { session_id, wiki_content } => {
+                            crate::state::IndexingUpdate::WikiGenerationComplete { repository_id, wiki_content } => {
                                 WsMessage::WikiComplete {
-                                    session_id: session_id.clone(),
-                                    wiki_id: session_id, // Use session_id as wiki_id for now
+                                    repository_id: repository_id.clone(),
+                                    wiki_id: repository_id, // Use repository_id as wiki_id for now
                                     pages_count: 1, // Placeholder
                                     sections_count: wiki_content.matches('#').count(),
                                 }
                             }
-                            crate::state::IndexingUpdate::WikiGenerationError { session_id: _, error } => {
+                            crate::state::IndexingUpdate::WikiGenerationError { repository_id: _, error } => {
                                 WsMessage::Error {
                                     message: format!("Wiki generation failed: {}", error),
                                     code: Some("WIKI_GENERATION_ERROR".to_string()),
@@ -308,17 +309,15 @@ async fn handle_chat_message(
 
     match message {
         WsMessage::Chat {
-            session_id,
+            repository_id,
             question,
             context: _,
         } => {
-            // Update session activity
-            if let Err(e) = state.update_session_activity(&session_id).await {
-                warn!("Failed to update session activity: {}", e);
-            }
+            // Update repository activity (no longer session-based)
+            // Note: Repository activity tracking can be implemented if needed
 
-            // Execute RAG query
-            let response = match state.query_rag(&session_id, &question).await {
+            // Execute RAG query using repository_id
+            let response = match state.query_rag(&repository_id, &question).await {
                 Ok(rag_response) => {
                     // Convert RAG response to WebSocket response
                     let sources = rag_response
@@ -333,7 +332,7 @@ async fn handle_chat_message(
                         .collect();
 
                     WsMessage::ChatResponse {
-                        session_id: session_id.clone(),
+                        repository_id: repository_id.clone(),
                         answer: rag_response.answer,
                         sources,
                         timestamp: chrono::Utc::now(),
@@ -342,7 +341,7 @@ async fn handle_chat_message(
                 Err(e) => {
                     // Return error response
                     WsMessage::ChatResponse {
-                        session_id: session_id.clone(),
+                        repository_id: repository_id.clone(),
                         answer: format!("Sorry, I encountered an error: {}", e),
                         sources: vec![],
                         timestamp: chrono::Utc::now(),
@@ -376,16 +375,16 @@ async fn handle_wiki_message(
 
     match message {
         WsMessage::WikiGenerate {
-            session_id,
+            repository_id,
             config: _,
         } => {
-            // Get session info
-            let _session = match state.get_session(&session_id).await {
-                Some(session) => session,
+            // Get repository info (replacing session lookup)
+            let _repository = match state.get_repository(&repository_id).await {
+                Some(repository) => repository,
                 None => {
                     let error = WsMessage::Error {
-                        message: "Session not found".to_string(),
-                        code: Some("SESSION_NOT_FOUND".to_string()),
+                        message: "Repository not found".to_string(),
+                        code: Some("REPOSITORY_NOT_FOUND".to_string()),
                     };
                     let error_text = serde_json::to_string(&error)?;
                     socket.send(Message::Text(error_text.into())).await?;
@@ -396,7 +395,7 @@ async fn handle_wiki_message(
             // Send progress updates
             for i in 1..=5 {
                 let progress = WsMessage::WikiProgress {
-                    session_id: session_id.clone(),
+                    repository_id: repository_id.clone(),
                     progress: (i as f64) / 5.0,
                     current_step: format!("Step {}: Processing...", i),
                     total_steps: 5,
@@ -412,7 +411,7 @@ async fn handle_wiki_message(
 
             // Send completion
             let complete = WsMessage::WikiComplete {
-                session_id: session_id.clone(),
+                repository_id: repository_id.clone(),
                 wiki_id: uuid::Uuid::new_v4().to_string(),
                 pages_count: 4,
                 sections_count: 2,

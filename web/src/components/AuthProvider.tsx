@@ -80,7 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (authStatus) {
       setAuthMode(authStatus.auth_mode);
       setAuthRequired(authStatus.auth_required);
-      
+
       console.log('Auth status loaded:', {
         mode: authStatus.auth_mode,
         required: authStatus.auth_required,

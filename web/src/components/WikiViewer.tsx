@@ -45,7 +45,7 @@ interface WikiViewerProps {
 }
 
 const WikiViewer = ({ className }: WikiViewerProps) => {
-  const { sessionId } = useParams<{ sessionId: string }>();
+  const { repositoryId } = useParams<{ repositoryId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -57,7 +57,7 @@ const WikiViewer = ({ className }: WikiViewerProps) => {
   const [showExportDialog, setShowExportDialog] = useState(false);
 
   // API
-  const { data: wiki, isLoading, error } = useWiki(sessionId || '');
+  const { data: wiki, isLoading, error } = useWiki(repositoryId || '');
 
   // Effects
   useEffect(() => {
@@ -68,15 +68,15 @@ const WikiViewer = ({ className }: WikiViewerProps) => {
   }, [wiki, selectedPageId]);
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!repositoryId) {
       toast({
-        title: "Invalid Session",
-        description: "No session ID provided",
+        title: "Invalid Repository",
+        description: "No repository ID provided",
         variant: "destructive"
       });
       navigate('/');
     }
-  }, [sessionId, navigate, toast]);
+  }, [repositoryId, navigate, toast]);
 
   // Handlers
   const handleGoBack = useCallback(() => {

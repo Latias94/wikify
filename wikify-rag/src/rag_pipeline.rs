@@ -102,8 +102,8 @@ impl RagPipeline {
         }
 
         // Step 1: Run document indexing pipeline
-        let indexing_pipeline = wikify_indexing::create_deepwiki_compatible_pipeline(&repo_path)
-            .map_err(RagError::Core)?;
+        let indexing_pipeline =
+            wikify_indexing::create_deepwiki_compatible_indexer().map_err(RagError::Core)?;
 
         // Report progress: Document processing
         if let Some(ref callback) = progress_callback {
@@ -114,19 +114,24 @@ impl RagPipeline {
             );
         }
 
-        let indexing_result = indexing_pipeline.run().await.map_err(RagError::Core)?;
+        // Load documents from repository first
+        let documents = self.load_repository_documents(&repo_path).await?;
+        let documents_count = documents.len();
 
-        info!(
-            "📚 Indexed {} documents into {} nodes",
-            indexing_result.stats.total_documents, indexing_result.stats.total_nodes
-        );
+        // Index the documents
+        let nodes = indexing_pipeline
+            .index_documents(documents)
+            .await
+            .map_err(RagError::Core)?;
+
+        info!("📚 Indexed documents into {} nodes", nodes.len());
 
         // Report progress: Embedding generation
         if let Some(ref callback) = progress_callback {
             callback(
                 "Generating embeddings".to_string(),
                 70.0,
-                Some(format!("Processing {} nodes", indexing_result.nodes.len())),
+                Some(format!("Processing {} nodes", nodes.len())),
             );
         }
 
@@ -134,11 +139,10 @@ impl RagPipeline {
         let mut embedding_generator = EmbeddingGenerator::new(self.config.embeddings.clone());
         embedding_generator.initialize().await?;
 
-        let embedded_chunks = embedding_generator
-            .generate_embeddings(indexing_result.nodes)
-            .await?;
+        let embedded_chunks = embedding_generator.generate_embeddings(nodes).await?;
 
-        info!("🔢 Generated {} embeddings", embedded_chunks.len());
+        let embedded_chunks_count = embedded_chunks.len();
+        info!("🔢 Generated {} embeddings", embedded_chunks_count);
 
         // Report progress: Storing vectors
         if let Some(ref callback) = progress_callback {
@@ -182,8 +186,8 @@ impl RagPipeline {
 
         let indexing_time = start_time.elapsed();
         let stats = IndexingStats {
-            total_documents: indexing_result.stats.total_documents,
-            total_nodes: indexing_result.stats.total_nodes,
+            total_documents: documents_count,
+            total_nodes: embedded_chunks_count,
             total_chunks: self.retriever.as_ref().unwrap().vector_store().len(),
             indexing_time_ms: indexing_time.as_millis() as u64,
         };
@@ -385,6 +389,40 @@ impl RagPipeline {
     /// Check if pipeline is ready for queries
     pub fn is_ready(&self) -> bool {
         self.is_initialized && self.retriever.is_some() && self.llm_client.is_some()
+    }
+
+    /// Load documents from repository
+    async fn load_repository_documents<P: AsRef<std::path::Path>>(
+        &self,
+        repo_path: P,
+    ) -> RagResult<Vec<cheungfun_core::Document>> {
+        use cheungfun_core::traits::Loader;
+        use wikify_indexing::DirectoryLoader;
+
+        let mut documents = Vec::new();
+
+        // Use cheungfun's DirectoryLoader to load documents
+        let loader = DirectoryLoader::new(repo_path.as_ref().to_path_buf()).map_err(|e| {
+            RagError::Core(Box::new(wikify_core::WikifyError::Indexing {
+                message: format!("Failed to create directory loader: {}", e),
+                source: None,
+                context: wikify_core::ErrorContext::new("rag_pipeline")
+                    .with_operation("create_loader"),
+            }))
+        })?;
+
+        let loaded_docs = loader.load().await.map_err(|e| {
+            RagError::Core(Box::new(wikify_core::WikifyError::Indexing {
+                message: format!("Failed to load documents: {}", e),
+                source: None,
+                context: wikify_core::ErrorContext::new("rag_pipeline")
+                    .with_operation("load_documents"),
+            }))
+        })?;
+        documents.extend(loaded_docs);
+
+        info!("Loaded {} documents from repository", documents.len());
+        Ok(documents)
     }
 }
 

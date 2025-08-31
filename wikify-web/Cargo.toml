@@ -46,8 +46,10 @@ sha2 = "0.10"
 async-trait = "0.1"
 axum-extra = { version = "0.10", features = ["typed-header"] }
 
-# WebSocket
+# WebSocket and Streaming
 tokio-tungstenite = "0.27"
+futures-util = "0.3"
+async-stream = "0.3"
 
 # Template engine
 askama = "0.14"
@@ -94,5 +96,9 @@ openapi = []
 
 [dev-dependencies]
 tokio-test = "0.4"
+axum-test = "15.0"
+tower-http = { version = "0.6", features = ["cors"] }
+hyper = { version = "1.0", features = ["full"] }
+http-body-util = "0.1"
 tempfile = "3.0"
 criterion = { version = "0.7", features = ["html_reports"] }

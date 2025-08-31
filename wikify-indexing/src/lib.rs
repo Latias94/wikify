@@ -9,8 +9,19 @@ pub mod pipeline;
 
 pub use document_processor::*;
 pub use indexer::*;
-pub use pipeline::*;
+
+// Re-export our own pipeline types with explicit names to avoid conflicts
+pub use pipeline::{
+    IndexingPipeline as WikifyIndexingPipeline, PipelineConfig as WikifyPipelineConfig,
+};
 
 // Re-export commonly used types from cheungfun
 pub use cheungfun_core::{Document, Node};
-pub use cheungfun_indexing::prelude::*;
+// Re-export specific types from cheungfun_indexing to avoid conflicts
+pub use cheungfun_indexing::{
+    loaders::{DirectoryLoader, FileLoader, ProgrammingLanguage},
+    node_parser::{
+        text::{CodeSplitter, MarkdownNodeParser, SentenceSplitter, TokenTextSplitter},
+        NodeParser,
+    },
+};

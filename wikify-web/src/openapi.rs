@@ -8,7 +8,10 @@ use utoipa::{
 };
 
 use crate::{
-    auth::users::{AuthResponse, LoginRequest, RefreshRequest, RegisterRequest},
+    auth::{
+        handlers::{AuthFeatures, AuthStatusResponse},
+        users::{AuthResponse, LoginRequest, RefreshRequest, RegisterRequest},
+    },
     handlers::{
         ChatQueryRequest, ChatQueryResponse, DeleteRepositoryResponse, GenerateWikiRequest,
         GenerateWikiResponse, HealthResponse, InitializeRepositoryRequest,
@@ -41,12 +44,14 @@ use crate::{
         crate::handlers::health_check,
 
         // Authentication endpoints
+        crate::auth::handlers::get_auth_status,
         crate::auth::handlers::register_user,
         crate::auth::handlers::login_user,
         crate::auth::handlers::refresh_token,
 
         // Repository management
         crate::handlers::initialize_repository,
+        crate::handlers::list_repositories,
         crate::handlers::get_repository_info,
         crate::handlers::delete_repository,
         crate::handlers::reindex_repository,
@@ -67,6 +72,8 @@ use crate::{
         crate::handlers::start_research,
         crate::handlers::research_iteration,
         crate::handlers::get_research_progress,
+        crate::handlers::get_research_progress_by_id,
+        crate::handlers::stop_research,
 
         // Research template endpoints
         crate::handlers::list_research_templates,
@@ -84,13 +91,13 @@ use crate::{
         #[cfg(feature = "sqlite")]
         crate::handlers::get_repositories,
         #[cfg(feature = "sqlite")]
-        crate::handlers::get_sessions,
-        #[cfg(feature = "sqlite")]
         crate::handlers::get_query_history,
     ),
     components(
         schemas(
             // Authentication schemas
+            AuthStatusResponse,
+            AuthFeatures,
             RegisterRequest,
             LoginRequest,
             RefreshRequest,

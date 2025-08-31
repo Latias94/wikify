@@ -11,7 +11,7 @@ use crate::{
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{Html, Json},
+    response::{Html, IntoResponse, Json},
     Json as JsonExtractor,
 };
 use serde::{Deserialize, Serialize};
@@ -57,7 +57,7 @@ pub struct InitializeRepositoryRequest {
 #[derive(Serialize, ToSchema)]
 pub struct InitializeRepositoryResponse {
     #[schema(example = "uuid-string")]
-    pub session_id: String,
+    pub repository_id: String,
     #[schema(example = "success")]
     pub status: String,
     #[schema(example = "Repository initialized successfully")]
@@ -72,17 +72,19 @@ pub struct DeleteRepositoryResponse {
     #[schema(example = "Repository deleted successfully")]
     pub message: String,
     #[schema(example = "uuid-string")]
-    pub deleted_session_id: String,
+    pub deleted_repository_id: String,
 }
 
 /// Chat query request
 #[derive(Deserialize, ToSchema)]
 pub struct ChatQueryRequest {
-    #[schema(example = "uuid-string")]
-    pub session_id: String,
+    #[schema(example = "repo-uuid-string")]
+    pub repository_id: String,
     #[schema(example = "How does the authentication work?")]
     pub question: String,
     pub context: Option<String>,
+    /// Maximum number of results to return
+    pub max_results: Option<usize>,
 }
 
 /// Chat query response
@@ -90,8 +92,8 @@ pub struct ChatQueryRequest {
 pub struct ChatQueryResponse {
     pub answer: String,
     pub sources: Vec<SourceDocument>,
-    #[schema(example = "uuid-string")]
-    pub session_id: String,
+    #[schema(example = "repo-uuid-string")]
+    pub repository_id: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
@@ -117,7 +119,7 @@ pub struct SourceDocument {
 #[derive(Deserialize, ToSchema)]
 pub struct GenerateWikiRequest {
     #[schema(example = "uuid-string")]
-    pub session_id: String,
+    pub repository_id: String,
     pub config: WikiGenerationConfig,
 }
 
@@ -182,7 +184,7 @@ pub async fn health_check() -> Json<HealthResponse> {
 )]
 pub async fn initialize_repository(
     State(state): State<AppState>,
-    RequireGenerateWiki(user): RequireGenerateWiki,
+    crate::auth::ModeAwareUser(user): crate::auth::ModeAwareUser,
     JsonExtractor(request): JsonExtractor<InitializeRepositoryRequest>,
 ) -> Result<Json<InitializeRepositoryResponse>, StatusCode> {
     info!(
@@ -191,17 +193,41 @@ pub async fn initialize_repository(
     );
 
     // Convert to permission context for application layer
-    let _context = user_to_permission_context(&user);
+    let context = user_to_permission_context(&user);
 
-    let auto_generate_wiki = request.auto_generate_wiki.unwrap_or(true);
+    let auto_index = request.auto_generate_wiki.unwrap_or(true);
+
+    // Use new Repository API
+    let repository_options = wikify_applications::RepositoryOptions {
+        auto_index,
+        metadata: None,
+    };
+
+    let repo_type = request.repo_type.clone().unwrap_or_else(|| {
+        // Auto-detect repo type from URL
+        if request.repository.contains("github.com") {
+            "github".to_string()
+        } else if request.repository.contains("gitlab.com") {
+            "gitlab".to_string()
+        } else {
+            "local".to_string()
+        }
+    });
+
     match state
-        .initialize_rag(&request.repository, auto_generate_wiki)
+        .application
+        .add_repository(
+            &context,
+            request.repository.clone(),
+            repo_type,
+            repository_options,
+        )
         .await
     {
-        Ok(session_id) => {
-            info!("Repository initialized successfully: {}", session_id);
+        Ok(repository_id) => {
+            info!("Repository initialized successfully: {}", repository_id);
             Ok(Json(InitializeRepositoryResponse {
-                session_id,
+                repository_id,
                 status: "success".to_string(),
                 message: "Repository initialized successfully".to_string(),
             }))
@@ -222,49 +248,118 @@ pub async fn initialize_repository(
     }
 }
 
-/// Get repository information
+/// List user repositories
 #[utoipa::path(
     get,
-    path = "/api/repositories/{session_id}",
+    path = "/api/repositories",
     tag = "Repository",
-    summary = "Get repository information",
-    description = "Get information about a repository session",
-    params(
-        ("session_id" = String, Path, description = "Session ID")
-    ),
+    summary = "List repositories",
+    description = "List all repositories accessible to the current user",
     responses(
-        (status = 200, description = "Repository information retrieved successfully"),
-        (status = 404, description = "Session not found")
+        (status = 200, description = "Repositories listed successfully"),
+        (status = 500, description = "Internal server error")
     )
 )]
-pub async fn get_repository_info(
+pub async fn list_repositories(
     State(state): State<AppState>,
-    RequireQuery(user): RequireQuery,
-    Path(session_id): Path<String>,
+    crate::auth::ModeAwareUser(user): crate::auth::ModeAwareUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    info!(
-        "Getting repository info for session: {} (user: {})",
-        session_id, user.id
-    );
+    info!("Listing repositories for user: {}", user.id);
 
     // Convert to permission context for application layer
     let context = user_to_permission_context(&user);
 
-    match state.application.get_session(&context, &session_id).await {
-        Ok(session) => {
+    // Use new Repository API
+    match state.application.list_repositories(&context).await {
+        Ok(repositories) => {
+            let repo_list: Vec<serde_json::Value> = repositories
+                .into_iter()
+                .map(|repo| {
+                    // Convert IndexingStatus to string
+                    let status = match repo.status {
+                        wikify_applications::IndexingStatus::Pending => "pending",
+                        wikify_applications::IndexingStatus::Indexing => "indexing",
+                        wikify_applications::IndexingStatus::Completed => "indexed",
+                        wikify_applications::IndexingStatus::Failed => "failed",
+                        wikify_applications::IndexingStatus::Cancelled => "cancelled",
+                    };
+
+                    serde_json::json!({
+                        "id": repo.id,
+                        "repository": repo.url,
+                        "repo_type": repo.repo_type,
+                        "status": status,
+                        "indexing_progress": repo.progress,
+                        "created_at": repo.created_at,
+                        "last_indexed_at": repo.indexed_at,
+                        "owner": repo.owner_id,
+                        "metadata": repo.metadata
+                    })
+                })
+                .collect();
+
+            let response = serde_json::json!({
+                "repositories": repo_list,
+                "user": user.id,
+                "permissions": user.permissions
+            });
+
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("Failed to list repositories: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Get repository information
+#[utoipa::path(
+    get,
+    path = "/api/repositories/{repository_id}",
+    tag = "Repository",
+    summary = "Get repository information",
+    description = "Get information about a repository",
+    params(
+        ("repository_id" = String, Path, description = "Repository ID")
+    ),
+    responses(
+        (status = 200, description = "Repository information retrieved successfully"),
+        (status = 404, description = "Repository not found")
+    )
+)]
+pub async fn get_repository_info(
+    State(state): State<AppState>,
+    crate::auth::ModeAwareUser(user): crate::auth::ModeAwareUser,
+    Path(repository_id): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    info!(
+        "Getting repository info for repository: {} (user: {})",
+        repository_id, user.id
+    );
+
+    // Convert to permission context for application layer
+    let _context = user_to_permission_context(&user);
+
+    match state
+        .application
+        .get_repository(&_context, &repository_id)
+        .await
+    {
+        Ok(repository) => {
             let info = serde_json::json!({
-                "session_id": session.id,
-                "repository": session.repository,
-                "repo_type": session.repository.repo_type,
-                "created_at": session.created_at,
-                "last_activity": session.last_activity,
-                "is_indexed": session.is_indexed,
-                "indexing_progress": session.indexing_progress,
+                "repository_id": repository.id,
+                "url": repository.url,
+                "repo_type": repository.repo_type,
+                "status": repository.status,
+                "created_at": repository.created_at,
+                "last_indexed_at": repository.indexed_at,
+                "progress": repository.progress,
             });
             Ok(Json(info))
         }
         Err(_) => {
-            warn!("Session not found: {}", session_id);
+            warn!("Repository not found: {}", repository_id);
             Err(StatusCode::NOT_FOUND)
         }
     }
@@ -273,12 +368,12 @@ pub async fn get_repository_info(
 /// Reindex repository
 #[utoipa::path(
     post,
-    path = "/api/repositories/{session_id}/reindex",
+    path = "/api/repositories/{repository_id}/reindex",
     tag = "Repository",
     summary = "Reindex repository",
     description = "Reindex an existing repository. If the repository is currently being indexed, returns a conflict error. If already indexed, resets the state and starts reindexing.",
     params(
-        ("session_id" = String, Path, description = "Session ID of the repository to reindex")
+        ("repository_id" = String, Path, description = "Repository ID to reindex")
     ),
     responses(
         (status = 200, description = "Repository reindexing started successfully", body = InitializeRepositoryResponse),
@@ -289,53 +384,73 @@ pub async fn get_repository_info(
 )]
 pub async fn reindex_repository(
     State(state): State<AppState>,
-    RequireManageSession(user): RequireManageSession,
-    Path(session_id): Path<String>,
+    crate::auth::ModeAwareUser(user): crate::auth::ModeAwareUser,
+    Path(repository_id): Path<String>,
 ) -> Result<Json<InitializeRepositoryResponse>, StatusCode> {
     info!(
-        "Reindexing repository for session: {} (user: {})",
-        session_id, user.id
+        "Reindexing repository: {} (user: {})",
+        repository_id, user.id
     );
 
     // Convert to permission context for application layer
-    let context = user_to_permission_context(&user);
+    let _context = user_to_permission_context(&user);
 
-    // Check if session exists using application layer
-    match state.application.get_session(&context, &session_id).await {
+    // Check if repository exists using repository manager
+    match state
+        .application
+        .get_repository(&_context, &repository_id)
+        .await
+    {
         Ok(_) => {
-            info!("Session found, proceeding with reindexing: {}", session_id);
+            info!(
+                "Repository found, proceeding with reindexing: {}",
+                repository_id
+            );
         }
         Err(_) => {
-            error!("Session not found for reindexing: {}", session_id);
+            error!("Repository not found for reindexing: {}", repository_id);
             return Err(StatusCode::NOT_FOUND);
         }
     }
 
-    // For now, we'll skip the indexing check since the application layer handles this
-    // TODO: Add indexing status check to application layer if needed
+    // Start reindexing using the repository manager
+    match state
+        .application
+        .reindex_repository(&_context, &repository_id)
+        .await
+    {
+        Ok(()) => {
+            let response = InitializeRepositoryResponse {
+                repository_id: repository_id.clone(),
+                status: "success".to_string(),
+                message: "Repository reindexing started successfully".to_string(),
+            };
 
-    // TODO: Implement reindexing through the application layer
-    warn!("Reindexing not yet implemented with new application layer");
-
-    let response = InitializeRepositoryResponse {
-        session_id: session_id.clone(),
-        status: "not_implemented".to_string(),
-        message: "Reindexing will be implemented in the application layer".to_string(),
-    };
-
-    info!("Repository reindexing started for session: {}", session_id);
-    Ok(Json(response))
+            info!(
+                "Repository reindexing started for repository: {}",
+                repository_id
+            );
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!(
+                "Failed to start reindexing for repository {}: {}",
+                repository_id, e
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
 /// Delete repository
 #[utoipa::path(
     delete,
-    path = "/api/repositories/{session_id}",
+    path = "/api/repositories/{repository_id}",
     tag = "Repository",
     summary = "Delete repository",
     description = "Delete a repository and all associated data including sessions, vector data, and database records",
     params(
-        ("session_id" = String, Path, description = "Session ID of the repository to delete")
+        ("repository_id" = String, Path, description = "Repository ID to delete")
     ),
     responses(
         (status = 200, description = "Repository deleted successfully", body = DeleteRepositoryResponse),
@@ -345,24 +460,21 @@ pub async fn reindex_repository(
 )]
 pub async fn delete_repository(
     State(state): State<AppState>,
-    RequireManageSession(user): RequireManageSession,
-    Path(session_id): Path<String>,
+    crate::auth::ModeAwareUser(user): crate::auth::ModeAwareUser,
+    Path(repository_id): Path<String>,
 ) -> Result<Json<DeleteRepositoryResponse>, StatusCode> {
-    info!(
-        "Deleting repository for session: {} (user: {})",
-        session_id, user.id
-    );
+    info!("Deleting repository: {} (user: {})", repository_id, user.id);
 
     // Convert to permission context for application layer
     let _context = user_to_permission_context(&user);
-    match state.delete_repository(&session_id).await {
+    match state.delete_repository(&repository_id).await {
         Ok(()) => Ok(Json(DeleteRepositoryResponse {
             status: "success".to_string(),
             message: "Repository deleted successfully".to_string(),
-            deleted_session_id: session_id,
+            deleted_repository_id: repository_id.clone(),
         })),
         Err(e) => {
-            tracing::error!("Failed to delete repository {}: {}", session_id, e);
+            tracing::error!("Failed to delete repository {}: {}", repository_id, e);
             match e {
                 crate::WebError::NotFound(_) => Err(StatusCode::NOT_FOUND),
                 _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -395,36 +507,18 @@ pub async fn get_repositories(
     if let Some(database) = &state.database {
         match database.get_repositories().await {
             Ok(repositories) => {
-                // Get current session states from application layer
+                // Get current repository states from application layer
                 let context = state.create_anonymous_context();
-                let sessions = state.application.list_sessions(&context).await;
+                // Note: Session-based status checking is no longer available
+                // Repository status is now managed directly by the Repository Manager
 
                 let repos_json: Vec<serde_json::Value> = repositories
                     .into_iter()
                     .map(|repo| {
-                        // Check if there's a corresponding session with updated status
-                        let session = sessions.iter().find(|s| s.repository.url == repo.id);
-
-                        let current_status = if let Some(session) = session {
-                            if session.is_indexed {
-                                "indexed"
-                            } else if session.indexing_progress > 0.0 {
-                                "indexing"
-                            } else {
-                                "created"
-                            }
-                        } else {
-                            // Use database status as fallback
-                            &repo.status
-                        };
-
-                        let indexing_progress = session.map(|s| s.indexing_progress).unwrap_or(0.0);
-
-                        let last_activity = sessions
-                            .iter()
-                            .find(|s| s.repository.url == repo.id)
-                            .map(|s| s.last_activity.to_rfc3339())
-                            .unwrap_or_else(|| repo.created_at.to_rfc3339());
+                        // Repository status is now managed directly, no session lookup needed
+                        let current_status = &repo.status;
+                        let indexing_progress = 0.0; // Progress tracking moved to Repository Manager
+                        let last_activity = repo.created_at.to_rfc3339(); // Use creation time as fallback
 
                         serde_json::json!({
                             "id": repo.id,
@@ -460,63 +554,6 @@ pub async fn get_repositories(
     }
 }
 
-/// Get all sessions (SQLite feature only)
-#[cfg(feature = "sqlite")]
-#[utoipa::path(
-    get,
-    path = "/api/sessions",
-    tag = "Session",
-    summary = "Get all sessions",
-    description = "Get a list of all active sessions (requires SQLite feature)",
-    responses(
-        (status = 200, description = "Sessions retrieved successfully"),
-        (status = 500, description = "Internal server error")
-    )
-)]
-pub async fn get_sessions(
-    State(state): State<AppState>,
-    RequireQuery(user): RequireQuery,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    info!("Getting sessions list (user: {})", user.id);
-
-    // Convert to permission context for application layer
-    let _context = user_to_permission_context(&user);
-    if let Some(database) = &state.database {
-        match database.get_sessions().await {
-            Ok(sessions) => {
-                let sessions_json: Vec<serde_json::Value> = sessions
-                    .into_iter()
-                    .map(|session| {
-                        serde_json::json!({
-                            "id": session.id,
-                            "repository_id": session.repository_id,
-                            "created_at": session.created_at,
-                            "last_activity": session.last_activity,
-                            "is_active": session.is_active,
-                        })
-                    })
-                    .collect();
-
-                Ok(Json(serde_json::json!({
-                    "sessions": sessions_json,
-                    "count": sessions_json.len()
-                })))
-            }
-            Err(e) => {
-                tracing::error!("Failed to get sessions: {}", e);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    } else {
-        // 数据库未启用，返回空列表
-        Ok(Json(serde_json::json!({
-            "sessions": [],
-            "count": 0,
-            "message": "Database not enabled"
-        })))
-    }
-}
-
 /// Handle chat queries
 #[utoipa::path(
     post,
@@ -531,44 +568,51 @@ pub async fn get_sessions(
 )]
 pub async fn chat_query(
     State(state): State<AppState>,
-    RequireQuery(user): RequireQuery,
+    crate::auth::ModeAwareUser(user): crate::auth::ModeAwareUser,
     JsonExtractor(request): JsonExtractor<ChatQueryRequest>,
 ) -> Result<Json<ChatQueryResponse>, StatusCode> {
     info!(
-        "Processing chat query for session: {} (user: {})",
-        request.session_id, user.id
+        "Processing chat query for repository: {} (user: {})",
+        request.repository_id, user.id
     );
 
     // Convert to permission context for application layer
     let context = user_to_permission_context(&user);
 
-    // Update session activity
-    if let Err(e) = state.update_session_activity(&request.session_id).await {
-        warn!("Failed to update session activity: {}", e);
-    }
+    // No session activity update needed for repository-based queries
 
-    // Execute RAG query using application layer
+    // Repository-based query only
+    let repository_id = &request.repository_id;
+
+    let repo_query = wikify_applications::RepositoryQuery {
+        question: request.question.clone(),
+        max_results: request.max_results,
+        parameters: None,
+    };
+
     match state
-        .query_rag(&request.session_id, &request.question)
+        .application
+        .query_repository(&context, &repository_id, repo_query)
         .await
     {
-        Ok(rag_response) => {
-            // Convert RAG response to chat response
-            let sources: Vec<SourceDocument> = rag_response
+        Ok(repo_response) => {
+            info!("✅ Repository query completed for: {}", repository_id);
+
+            // Convert repository response to chat response format
+            let sources: Vec<SourceDocument> = repo_response
                 .sources
                 .into_iter()
-                .enumerate()
-                .map(|(i, source_content)| SourceDocument {
-                    file_path: format!("source_{}", i), // TODO: Extract actual file path from content
-                    content: source_content,
-                    similarity_score: 1.0, // TODO: Get actual similarity score from application layer
+                .map(|source_path| SourceDocument {
+                    file_path: source_path.clone(),
+                    content: format!("Source: {}", source_path), // TODO: Get actual content
+                    similarity_score: 0.8, // TODO: Get actual similarity score
                 })
                 .collect();
 
             let response = ChatQueryResponse {
-                answer: rag_response.answer.clone(),
-                sources: sources.clone(),
-                session_id: request.session_id.clone(),
+                answer: repo_response.answer,
+                sources,
+                repository_id: repository_id.clone(),
                 timestamp: chrono::Utc::now(),
             };
 
@@ -577,9 +621,9 @@ pub async fn chat_query(
             if let Some(database) = &state.database {
                 if let Err(e) = save_query_to_database(
                     database,
-                    &request.session_id,
+                    &response.repository_id,
                     &request.question,
-                    &rag_response.answer,
+                    &response.answer,
                 )
                 .await
                 {
@@ -591,7 +635,7 @@ pub async fn chat_query(
             Ok(Json(response))
         }
         Err(e) => {
-            error!("Chat query failed: {}", e);
+            error!("❌ Repository query failed for {}: {}", repository_id, e);
 
             let error_answer = format!(
                 "Sorry, I encountered an error while processing your question: {}",
@@ -603,7 +647,7 @@ pub async fn chat_query(
             if let Some(database) = &state.database {
                 if let Err(db_e) = save_query_to_database(
                     database,
-                    &request.session_id,
+                    repository_id,
                     &request.question,
                     &error_answer,
                 )
@@ -617,7 +661,7 @@ pub async fn chat_query(
             let response = ChatQueryResponse {
                 answer: error_answer,
                 sources: vec![],
-                session_id: request.session_id,
+                repository_id: repository_id.clone(),
                 timestamp: chrono::Utc::now(),
             };
 
@@ -660,7 +704,7 @@ pub async fn get_query_history(
                     .map(|query| {
                         serde_json::json!({
                             "id": query.id,
-                            "session_id": query.session_id,
+                            "repository_id": query.repository_id,
                             "question": query.question,
                             "answer": query.answer,
                             "created_at": query.created_at,
@@ -702,18 +746,34 @@ pub async fn get_query_history(
     )
 )]
 pub async fn chat_stream(
-    State(_state): State<AppState>,
-    RequireQuery(user): RequireQuery,
-    JsonExtractor(_request): JsonExtractor<ChatQueryRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    info!("Starting chat stream (user: {})", user.id);
+    State(state): State<AppState>,
+    crate::auth::ModeAwareUser(user): crate::auth::ModeAwareUser,
+    JsonExtractor(request): JsonExtractor<ChatQueryRequest>,
+) -> Result<impl axum::response::IntoResponse, StatusCode> {
+    info!(
+        "Starting chat stream for user: {} with repository: {}",
+        user.id, request.repository_id
+    );
 
     // Convert to permission context for application layer
-    let _context = user_to_permission_context(&user);
-    // Placeholder for streaming implementation
+    let context = user_to_permission_context(&user);
+
+    let repository_id = &request.repository_id;
+
+    // Create repository query
+    let repo_query = wikify_applications::RepositoryQuery {
+        question: request.question.clone(),
+        max_results: request.max_results,
+        parameters: None, // TODO: Add support for additional parameters
+    };
+
+    // TODO: Implement streaming query when available
+    // For now, return a placeholder response
     Ok(Json(serde_json::json!({
-        "message": "Streaming chat is not yet implemented"
-    })))
+        "message": "Streaming queries not yet implemented for repository-based queries",
+        "repository_id": repository_id
+    }))
+    .into_response())
 }
 
 /// Generate wiki for repository
@@ -736,16 +796,20 @@ pub async fn generate_wiki(
     JsonExtractor(request): JsonExtractor<GenerateWikiRequest>,
 ) -> Result<Json<GenerateWikiResponse>, StatusCode> {
     info!(
-        "Generating wiki for session: {} (user: {})",
-        request.session_id, user.id
+        "Generating wiki for repository: {} (user: {})",
+        request.repository_id, user.id
     );
 
     // Convert to permission context for application layer
     let _context = user_to_permission_context(&user);
-    // Get session info
-    let session = match state.get_session(&request.session_id).await {
-        Some(session) => session,
-        None => return Err(StatusCode::NOT_FOUND),
+    // Get repository info
+    let repository = match state
+        .application
+        .get_repository(&_context, &request.repository_id)
+        .await
+    {
+        Ok(repository) => repository,
+        Err(_) => return Err(StatusCode::NOT_FOUND),
     };
 
     // Create wiki configuration
@@ -763,36 +827,26 @@ pub async fn generate_wiki(
         wiki_config.comprehensive_view = comprehensive_view;
     }
 
-    // Generate wiki
-    match state
-        .generate_wiki_for_session(&request.session_id, &session.repository.url, wiki_config)
-        .await
-    {
-        Ok(wiki) => {
-            let response = GenerateWikiResponse {
-                wiki_id: request.session_id.clone(), // Use session_id as wiki_id
-                status: "success".to_string(),
-                pages_count: 1, // Placeholder - wiki is a single string now
-                sections_count: wiki.matches('#').count(), // Count markdown headers
-            };
-            Ok(Json(response))
-        }
-        Err(e) => {
-            tracing::error!("Failed to generate wiki: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // TODO: Implement wiki generation through application layer
+    // For now, return a placeholder response
+    let response = GenerateWikiResponse {
+        wiki_id: request.repository_id.clone(), // Use repository_id as wiki_id
+        status: "not_implemented".to_string(),
+        pages_count: 0,
+        sections_count: 0,
+    };
+    Ok(Json(response))
 }
 
 /// Get generated wiki
 #[utoipa::path(
     get,
-    path = "/api/wiki/{session_id}",
+    path = "/api/wiki/{repository_id}",
     tag = "Wiki",
     summary = "Get generated wiki",
-    description = "Retrieve the generated wiki documentation for a session",
+    description = "Retrieve the generated wiki documentation for a repository",
     params(
-        ("session_id" = String, Path, description = "Session ID")
+        ("repository_id" = String, Path, description = "Repository ID")
     ),
     responses(
         (status = 200, description = "Wiki retrieved successfully"),
@@ -802,37 +856,39 @@ pub async fn generate_wiki(
 pub async fn get_wiki(
     State(state): State<AppState>,
     RequireQuery(user): RequireQuery,
-    Path(session_id): Path<String>,
+    Path(repository_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     info!(
-        "Getting wiki for session: {} (user: {})",
-        session_id, user.id
+        "Getting wiki for repository: {} (user: {})",
+        repository_id, user.id
     );
 
     // Convert to permission context for application layer
     let _context = user_to_permission_context(&user);
-    // Get session info (verify session exists)
-    let _session = match state.get_session(&session_id).await {
-        Some(session) => session,
-        None => return Err(StatusCode::NOT_FOUND),
+    // Get repository info (verify repository exists)
+    let _repository = match state
+        .application
+        .get_repository(&_context, &repository_id)
+        .await
+    {
+        Ok(repository) => repository,
+        Err(_) => return Err(StatusCode::NOT_FOUND),
     };
 
-    // Get cached wiki using session_id as key
-    match state.get_cached_wiki(&session_id).await {
-        Some(cached_wiki) => Ok(Json(serde_json::to_value(&cached_wiki.content).unwrap())),
-        None => Err(StatusCode::NOT_FOUND),
-    }
+    // TODO: Implement wiki retrieval through application layer
+    // For now, return not found
+    Err(StatusCode::NOT_FOUND)
 }
 
 /// Export wiki in various formats
 #[utoipa::path(
     post,
-    path = "/api/wiki/{session_id}/export",
+    path = "/api/wiki/{repository_id}/export",
     tag = "Wiki",
     summary = "Export wiki",
     description = "Export generated wiki in various formats (not yet implemented)",
     params(
-        ("session_id" = String, Path, description = "Session ID")
+        ("repository_id" = String, Path, description = "Repository ID")
     ),
     responses(
         (status = 200, description = "Wiki exported successfully"),
@@ -842,12 +898,12 @@ pub async fn get_wiki(
 pub async fn export_wiki(
     State(_state): State<AppState>,
     RequireExport(user): RequireExport,
-    Path(_session_id): Path<String>,
+    Path(_repository_id): Path<String>,
     JsonExtractor(_request): JsonExtractor<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     info!(
-        "Exporting wiki for session: {} (user: {})",
-        _session_id, user.id
+        "Exporting wiki for repository: {} (user: {})",
+        _repository_id, user.id
     );
 
     // Convert to permission context for application layer
@@ -921,8 +977,8 @@ pub async fn update_config(
 /// Start research request
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct StartResearchRequest {
-    /// Session ID for the research
-    pub session_id: String,
+    /// Repository ID for the research
+    pub repository_id: String,
     /// Research topic
     pub topic: String,
     /// Optional research configuration
@@ -939,8 +995,10 @@ pub struct ResearchIterationRequest {
 /// Research progress response
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ResearchProgressResponse {
-    /// Session ID
-    pub session_id: String,
+    /// Research session ID
+    pub research_id: String,
+    /// Repository ID being researched
+    pub repository_id: String,
     /// Current iteration
     pub current_iteration: usize,
     /// Total planned iterations
@@ -960,7 +1018,8 @@ pub struct ResearchProgressResponse {
 impl From<ResearchProgress> for ResearchProgressResponse {
     fn from(progress: ResearchProgress) -> Self {
         Self {
-            session_id: progress.session_id,
+            research_id: progress.session_id,
+            repository_id: progress.repository_id,
             current_iteration: progress.current_iteration,
             total_iterations: progress.total_iterations,
             stage: progress.stage,
@@ -1002,16 +1061,39 @@ pub async fn start_research(
     // Start research using application layer
     match state
         .application
-        .start_research(&context, request.session_id, request.topic, request.config)
+        .start_research(
+            &context,
+            &request.repository_id,
+            request.topic,
+            request.config,
+        )
         .await
     {
-        Ok(progress) => {
-            info!("Research started successfully");
-            Ok(Json(ResearchProgressResponse::from(progress)))
+        Ok(research_session_id) => {
+            info!(
+                "Research started successfully with session ID: {}",
+                research_session_id
+            );
+            // Return progress for the newly created session
+            match state
+                .application
+                .get_research_progress(&context, &research_session_id)
+                .await
+            {
+                Ok(progress) => Ok(Json(ResearchProgressResponse::from(progress))),
+                Err(e) => {
+                    error!("Failed to get initial research progress: {}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
         }
         Err(e) => {
             error!("Failed to start research: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            if e.to_string().contains("not found") {
+                Err(StatusCode::NOT_FOUND)
+            } else {
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         }
     }
 }
@@ -1019,25 +1101,25 @@ pub async fn start_research(
 /// Execute one research iteration
 #[utoipa::path(
     post,
-    path = "/api/research/iterate/{session_id}",
+    path = "/api/research/iterate/{repository_id}",
     params(
-        ("session_id" = String, Path, description = "Research session ID")
+        ("repository_id" = String, Path, description = "Repository ID for research")
     ),
     responses(
         (status = 200, description = "Research iteration completed", body = ResearchProgressResponse),
         (status = 403, description = "Permission denied"),
-        (status = 404, description = "Research session not found"),
+        (status = 404, description = "Repository not found"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub async fn research_iteration(
     State(state): State<AppState>,
     RequireQuery(user): RequireQuery,
-    Path(session_id): Path<String>,
+    Path(repository_id): Path<String>,
 ) -> Result<Json<ResearchProgressResponse>, StatusCode> {
     info!(
-        "Executing research iteration for session: {} (user: {})",
-        session_id, user.id
+        "Executing research iteration for repository: {} (user: {})",
+        repository_id, user.id
     );
 
     // Convert to permission context for application layer
@@ -1046,7 +1128,7 @@ pub async fn research_iteration(
     // Execute research iteration using application layer
     match state
         .application
-        .research_iteration(&context, &session_id)
+        .research_iteration(&context, &repository_id, &repository_id) // Using repository_id as research_session_id
         .await
     {
         Ok(progress) => {
@@ -1067,9 +1149,9 @@ pub async fn research_iteration(
 /// Get research progress
 #[utoipa::path(
     get,
-    path = "/api/research/progress/{session_id}",
+    path = "/api/research/progress/{repository_id}",
     params(
-        ("session_id" = String, Path, description = "Research session ID")
+        ("repository_id" = String, Path, description = "Repository ID")
     ),
     responses(
         (status = 200, description = "Research progress retrieved", body = ResearchProgressResponse),
@@ -1081,11 +1163,11 @@ pub async fn research_iteration(
 pub async fn get_research_progress(
     State(state): State<AppState>,
     RequireQuery(user): RequireQuery,
-    Path(session_id): Path<String>,
+    Path(repository_id): Path<String>,
 ) -> Result<Json<ResearchProgressResponse>, StatusCode> {
     info!(
-        "Getting research progress for session: {} (user: {})",
-        session_id, user.id
+        "Getting research progress for repository: {} (user: {})",
+        repository_id, user.id
     );
 
     // Convert to permission context for application layer
@@ -1094,7 +1176,7 @@ pub async fn get_research_progress(
     // Get research progress using application layer
     match state
         .application
-        .get_research_progress(&context, &session_id)
+        .get_research_progress(&context, &repository_id)
         .await
     {
         Ok(progress) => Ok(Json(ResearchProgressResponse::from(progress))),
@@ -1107,6 +1189,95 @@ pub async fn get_research_progress(
             }
         }
     }
+}
+
+/// List active research sessions
+#[utoipa::path(
+    get,
+    path = "/api/research/sessions",
+    responses(
+        (status = 200, description = "List of active research sessions", body = Vec<String>),
+        (status = 403, description = "Permission denied"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn list_research_sessions(
+    State(state): State<AppState>,
+    RequireQuery(user): RequireQuery,
+) -> Result<Json<Vec<String>>, StatusCode> {
+    info!("Listing active research sessions (user: {})", user.id);
+
+    // Convert to permission context for application layer
+    let context = user_to_permission_context(&user);
+
+    // List research sessions using application layer
+    match state.application.list_active_research(&context).await {
+        Ok(sessions) => {
+            info!("Found {} active research sessions", sessions.len());
+            Ok(Json(sessions))
+        }
+        Err(e) => {
+            error!("Failed to list research sessions: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Get research progress by research ID (alias for frontend compatibility)
+#[utoipa::path(
+    get,
+    path = "/api/research/{research_id}",
+    tag = "Research",
+    summary = "Get research progress by ID",
+    description = "Get research progress using research session ID (frontend compatibility alias)",
+    params(
+        ("research_id" = String, Path, description = "Research session ID")
+    ),
+    responses(
+        (status = 200, description = "Research progress retrieved", body = ResearchProgressResponse),
+        (status = 403, description = "Permission denied"),
+        (status = 404, description = "Research session not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_research_progress_by_id(
+    State(state): State<AppState>,
+    RequireQuery(user): RequireQuery,
+    Path(research_id): Path<String>,
+) -> Result<Json<ResearchProgressResponse>, StatusCode> {
+    // This is just an alias for get_research_progress
+    get_research_progress(State(state), RequireQuery(user), Path(research_id)).await
+}
+
+/// Stop research session
+#[utoipa::path(
+    post,
+    path = "/api/research/{research_id}/stop",
+    tag = "Research",
+    summary = "Stop research session",
+    description = "Stop an active research session",
+    params(
+        ("research_id" = String, Path, description = "Research session ID")
+    ),
+    responses(
+        (status = 200, description = "Research stopped successfully"),
+        (status = 403, description = "Permission denied"),
+        (status = 404, description = "Research session not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn stop_research(
+    State(state): State<AppState>,
+    RequireQuery(user): RequireQuery,
+    Path(_research_id): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    info!("Stopping research session (user: {})", user.id);
+
+    // For now, return a placeholder response
+    Ok(Json(serde_json::json!({
+        "status": "success",
+        "message": "Research session stopped (not yet implemented)"
+    })))
 }
 
 /// SPA fallback handler (serves index.html for client-side routing)
@@ -1211,7 +1382,7 @@ pub async fn spa_fallback() -> Html<&'static str> {
 #[cfg(feature = "sqlite")]
 async fn save_query_to_database(
     database: &std::sync::Arc<crate::simple_database::SimpleDatabaseService>,
-    session_id: &str,
+    repository_id: &str,
     question: &str,
     answer: &str,
 ) -> crate::WebResult<()> {
@@ -1219,7 +1390,7 @@ async fn save_query_to_database(
 
     let query = SimpleQuery {
         id: uuid::Uuid::new_v4().to_string(),
-        session_id: Some(session_id.to_string()),
+        repository_id: Some(repository_id.to_string()),
         question: question.to_string(),
         answer: answer.to_string(),
         created_at: chrono::Utc::now(),
@@ -1294,16 +1465,9 @@ pub async fn list_research_templates(
     // Create anonymous context for public endpoint
     let context = state.create_anonymous_context();
 
-    match state.application.list_research_templates(&context).await {
-        Ok(templates) => {
-            info!("Found {} research templates", templates.len());
-            Ok(Json(templates))
-        }
-        Err(e) => {
-            error!("Failed to list research templates: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 /// Get specific research template
@@ -1328,24 +1492,9 @@ pub async fn get_research_template(
     // Create anonymous context for public endpoint
     let context = state.create_anonymous_context();
 
-    match state
-        .application
-        .get_research_template(&context, &template_id)
-        .await
-    {
-        Ok(Some(template)) => {
-            info!("Found research template: {}", template_id);
-            Ok(Json(template))
-        }
-        Ok(None) => {
-            warn!("Research template not found: {}", template_id);
-            Err(StatusCode::NOT_FOUND)
-        }
-        Err(e) => {
-            error!("Failed to get research template: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 /// List templates by category
@@ -1385,24 +1534,9 @@ pub async fn list_templates_by_category(
     // Create anonymous context for public endpoint
     let context = state.create_anonymous_context();
 
-    match state
-        .application
-        .list_templates_by_category(&context, &category)
-        .await
-    {
-        Ok(templates) => {
-            info!(
-                "Found {} templates in category {}",
-                templates.len(),
-                category_str
-            );
-            Ok(Json(templates))
-        }
-        Err(e) => {
-            error!("Failed to list templates by category: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 /// Start research from template request
@@ -1445,38 +1579,15 @@ pub async fn start_research_from_template(
     // Convert to permission context for application layer
     let context = user_to_permission_context(&user);
 
-    // Start research from template using application layer
-    match state
-        .application
-        .start_research_from_template(
-            &context,
-            request.session_id,
-            request.template_id,
-            request.topic,
-            request.parameters,
-        )
-        .await
-    {
-        Ok(progress) => {
-            info!("Research started from template successfully");
-            Ok(Json(ResearchProgressResponse::from(progress)))
-        }
-        Err(e) => {
-            error!("Failed to start research from template: {}", e);
-            if e.to_string().contains("not found") {
-                Err(StatusCode::NOT_FOUND)
-            } else {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 // Research History API endpoints
 
 /// Research history query parameters
 #[derive(Debug, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
 pub struct ResearchHistoryQuery {
     /// Filter by status
     pub status: Option<String>,
@@ -1496,7 +1607,14 @@ pub struct ResearchHistoryQuery {
 #[utoipa::path(
     get,
     path = "/api/research/history",
-    params(ResearchHistoryQuery),
+    params(
+        ("status" = Option<String>, Query, description = "Filter by status"),
+        ("template_id" = Option<String>, Query, description = "Filter by template ID"),
+        ("date_from" = Option<String>, Query, description = "Filter by date from (ISO 8601)"),
+        ("date_to" = Option<String>, Query, description = "Filter by date to (ISO 8601)"),
+        ("limit" = Option<usize>, Query, description = "Limit number of results"),
+        ("offset" = Option<usize>, Query, description = "Offset for pagination")
+    ),
     responses(
         (status = 200, description = "Research history", body = Vec<ResearchHistoryRecord>),
         (status = 403, description = "Permission denied"),
@@ -1519,9 +1637,11 @@ pub async fn get_research_history(
     if let Some(status_str) = query.status {
         // Parse status - simplified for now
         filters.status = match status_str.to_lowercase().as_str() {
-            "in_progress" => Some(wikify_applications::research::ResearchStatus::InProgress),
-            "completed" => Some(wikify_applications::research::ResearchStatus::Completed),
-            "cancelled" => Some(wikify_applications::research::ResearchStatus::Cancelled),
+            "in_progress" => {
+                Some(wikify_applications::research::history::ResearchStatus::InProgress)
+            }
+            "completed" => Some(wikify_applications::research::history::ResearchStatus::Completed),
+            "cancelled" => Some(wikify_applications::research::history::ResearchStatus::Cancelled),
             _ => None,
         };
     }
@@ -1543,20 +1663,9 @@ pub async fn get_research_history(
         }
     }
 
-    match state
-        .application
-        .get_research_history(&context, filters)
-        .await
-    {
-        Ok(history) => {
-            info!("Found {} research records", history.len());
-            Ok(Json(history))
-        }
-        Err(e) => {
-            error!("Failed to get research history: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 /// Get specific research record
@@ -1586,24 +1695,9 @@ pub async fn get_research_record(
     // Convert to permission context for application layer
     let context = user_to_permission_context(&user);
 
-    match state
-        .application
-        .get_research_record(&context, &session_id)
-        .await
-    {
-        Ok(Some(record)) => {
-            info!("Found research record: {}", session_id);
-            Ok(Json(record))
-        }
-        Ok(None) => {
-            warn!("Research record not found or access denied: {}", session_id);
-            Err(StatusCode::NOT_FOUND)
-        }
-        Err(e) => {
-            error!("Failed to get research record: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 /// Delete research record
@@ -1633,28 +1727,9 @@ pub async fn delete_research_record(
     // Convert to permission context for application layer
     let context = user_to_permission_context(&user);
 
-    match state
-        .application
-        .delete_research_record(&context, &session_id)
-        .await
-    {
-        Ok(()) => {
-            info!("Research record deleted successfully: {}", session_id);
-            Ok(Json(serde_json::json!({
-                "message": "Research record deleted successfully"
-            })))
-        }
-        Err(e) => {
-            error!("Failed to delete research record: {}", e);
-            if e.to_string().contains("not found") {
-                Err(StatusCode::NOT_FOUND)
-            } else if e.to_string().contains("Access denied") {
-                Err(StatusCode::FORBIDDEN)
-            } else {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 /// Get research statistics (admin only)
@@ -1676,14 +1751,7 @@ pub async fn get_research_statistics(
     // Convert to permission context for application layer
     let context = user_to_permission_context(&user);
 
-    match state.application.get_research_statistics(&context).await {
-        Ok(stats) => {
-            info!("Retrieved research statistics");
-            Ok(Json(stats))
-        }
-        Err(e) => {
-            error!("Failed to get research statistics: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // TODO: Research Engine is being re-implemented
+    error!("Research Engine is currently being re-implemented");
+    Err(StatusCode::NOT_IMPLEMENTED)
 }

@@ -4,7 +4,6 @@
 
 import {
   Repository,
-  Session,
   ChatMessage as ApiChatMessage,
   SourceDocument,
 } from "./api";
@@ -109,27 +108,6 @@ export interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
   maxLength?: number;
-}
-
-// ============================================================================
-// 会话管理相关类型
-// ============================================================================
-
-export interface SessionListProps {
-  sessions: Session[];
-  currentSession?: Session;
-  onSelect: (session: Session) => void;
-  onCreate: () => void;
-  onDelete: (session: Session) => void;
-  onRename: (session: Session, newName: string) => void;
-}
-
-export interface SessionCardProps {
-  session: Session;
-  isActive: boolean;
-  onClick: () => void;
-  onDelete: () => void;
-  onRename: (newName: string) => void;
 }
 
 // ============================================================================

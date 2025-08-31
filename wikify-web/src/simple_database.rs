@@ -107,34 +107,13 @@ impl SimpleDatabaseService {
         })?;
         tracing::debug!("✅ Repositories table created successfully");
 
-        tracing::debug!("📋 Creating sessions table...");
-        // 创建会话表
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS sessions (
-                id TEXT PRIMARY KEY,
-                repository_id TEXT NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                last_activity TEXT DEFAULT CURRENT_TIMESTAMP,
-                is_active INTEGER DEFAULT 1
-            )
-            "#,
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("❌ Failed to create sessions table: {}", e);
-            WebError::Database(format!("Failed to create sessions table: {}", e))
-        })?;
-        tracing::debug!("✅ Sessions table created successfully");
-
         tracing::debug!("📋 Creating query_history table...");
         // 创建查询历史表
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS query_history (
                 id TEXT PRIMARY KEY,
-                session_id TEXT,
+                repository_id TEXT,
                 question TEXT NOT NULL,
                 answer TEXT NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -220,76 +199,13 @@ impl SimpleDatabaseService {
         Ok(())
     }
 
-    /// 保存会话
-    pub async fn save_session(&self, session: &SimpleSession) -> WebResult<()> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO sessions (id, repository_id, created_at, last_activity, is_active) VALUES (?, ?, ?, ?, ?)"
-        )
-        .bind(&session.id)
-        .bind(&session.repository_id)
-        .bind(session.created_at.to_rfc3339())
-        .bind(session.last_activity.to_rfc3339())
-        .bind(if session.is_active { 1 } else { 0 })
-        .execute(&self.pool)
-        .await
-        .map_err(|e| WebError::Database(format!("Failed to save session: {}", e)))?;
-
-        Ok(())
-    }
-
-    /// 获取会话列表
-    pub async fn get_sessions(&self) -> WebResult<Vec<SimpleSession>> {
-        let rows = sqlx::query("SELECT id, repository_id, created_at, last_activity, is_active FROM sessions WHERE is_active = 1 ORDER BY last_activity DESC")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| WebError::Database(format!("Failed to get sessions: {}", e)))?;
-
-        let mut sessions = Vec::new();
-        for row in rows {
-            let created_at_str: String = row
-                .try_get("created_at")
-                .unwrap_or_else(|_| Utc::now().to_rfc3339());
-            let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now());
-
-            let last_activity_str: String = row
-                .try_get("last_activity")
-                .unwrap_or_else(|_| Utc::now().to_rfc3339());
-            let last_activity = DateTime::parse_from_rfc3339(&last_activity_str)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now());
-
-            sessions.push(SimpleSession {
-                id: row.try_get("id").unwrap_or_default(),
-                repository_id: row.try_get("repository_id").unwrap_or_default(),
-                created_at,
-                last_activity,
-                is_active: row.try_get::<i32, _>("is_active").unwrap_or(1) == 1,
-            });
-        }
-
-        Ok(sessions)
-    }
-
-    /// 删除会话信息
-    pub async fn delete_session(&self, session_id: &str) -> WebResult<()> {
-        sqlx::query("DELETE FROM sessions WHERE id = ?")
-            .bind(session_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| WebError::Database(format!("Failed to delete session: {}", e)))?;
-
-        Ok(())
-    }
-
     /// 保存查询记录
     pub async fn save_query(&self, query: &SimpleQuery) -> WebResult<()> {
         sqlx::query(
-            "INSERT INTO query_history (id, session_id, question, answer, created_at) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO query_history (id, repository_id, question, answer, created_at) VALUES (?, ?, ?, ?, ?)"
         )
         .bind(&query.id)
-        .bind(&query.session_id)
+        .bind(&query.repository_id)
         .bind(&query.question)
         .bind(&query.answer)
         .bind(query.created_at.to_rfc3339())
@@ -303,17 +219,17 @@ impl SimpleDatabaseService {
     /// 获取查询历史
     pub async fn get_query_history(
         &self,
-        session_id: Option<&str>,
+        repository_id: Option<&str>,
         limit: i32,
     ) -> WebResult<Vec<SimpleQuery>> {
-        let rows = if let Some(sid) = session_id {
-            sqlx::query("SELECT id, session_id, question, answer, created_at FROM query_history WHERE session_id = ? ORDER BY created_at DESC LIMIT ?")
-                .bind(sid)
+        let rows = if let Some(repo_id) = repository_id {
+            sqlx::query("SELECT id, repository_id, question, answer, created_at FROM query_history WHERE repository_id = ? ORDER BY created_at DESC LIMIT ?")
+                .bind(repo_id)
                 .bind(limit)
                 .fetch_all(&self.pool)
                 .await
         } else {
-            sqlx::query("SELECT id, session_id, question, answer, created_at FROM query_history ORDER BY created_at DESC LIMIT ?")
+            sqlx::query("SELECT id, repository_id, question, answer, created_at FROM query_history ORDER BY created_at DESC LIMIT ?")
                 .bind(limit)
                 .fetch_all(&self.pool)
                 .await
@@ -331,7 +247,7 @@ impl SimpleDatabaseService {
 
             queries.push(SimpleQuery {
                 id: row.try_get("id").unwrap_or_default(),
-                session_id: row.try_get("session_id").ok(),
+                repository_id: row.try_get("repository_id").ok(),
                 question: row.try_get("question").unwrap_or_default(),
                 answer: row.try_get("answer").unwrap_or_default(),
                 created_at,
@@ -343,14 +259,12 @@ impl SimpleDatabaseService {
 
     /// 删除查询历史
     pub async fn delete_query_history(&self, repository_id: &str) -> WebResult<()> {
-        // Delete query history for sessions associated with this repository
-        sqlx::query(
-            "DELETE FROM query_history WHERE session_id IN (SELECT id FROM sessions WHERE repository_id = ?)"
-        )
-        .bind(repository_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| WebError::Database(format!("Failed to delete query history: {}", e)))?;
+        // Delete query history for this repository
+        sqlx::query("DELETE FROM query_history WHERE repository_id = ?")
+            .bind(repository_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| WebError::Database(format!("Failed to delete query history: {}", e)))?;
 
         Ok(())
     }
@@ -368,21 +282,11 @@ pub struct SimpleRepository {
     pub last_indexed_at: Option<DateTime<Utc>>,
 }
 
-/// 简化的会话信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimpleSession {
-    pub id: String,
-    pub repository_id: String,
-    pub created_at: DateTime<Utc>,
-    pub last_activity: DateTime<Utc>,
-    pub is_active: bool,
-}
-
 /// 简化的查询记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimpleQuery {
     pub id: String,
-    pub session_id: Option<String>,
+    pub repository_id: Option<String>,
     pub question: String,
     pub answer: String,
     pub created_at: DateTime<Utc>,

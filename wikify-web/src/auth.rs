@@ -400,14 +400,92 @@ where
             .await
             .map_err(|auth_redirect| auth_redirect.into_response())?;
 
-        if user.has_permission(&Permission::ManageSession) {
+        if user.has_permission(&Permission::ManageRepository) {
             Ok(RequireManageSession(user))
         } else {
             warn!(
-                "ManageSession permission required but user '{}' doesn't have it",
+                "ManageRepository permission required but user '{}' doesn't have it",
                 user.id
             );
-            Err(PermissionDenied::new("ManageSession", Some(user.id)).into_response())
+            Err(PermissionDenied::new("ManageRepository", Some(user.id)).into_response())
+        }
+    }
+}
+
+/// 模式感知的用户提取器
+///
+/// 根据当前的认证模式决定是否需要认证：
+/// - Open模式：允许匿名访问，创建临时匿名用户
+/// - Private/Enterprise模式：需要认证用户
+pub struct ModeAwareUser(pub User);
+
+impl<S> FromRequestParts<S> for ModeAwareUser
+where
+    AppState: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // 获取应用状态来检查认证模式
+        let app_state = AppState::from_ref(state);
+
+        // 检查认证模式
+        let permission_mode = app_state
+            .config
+            .permission_mode
+            .as_ref()
+            .unwrap_or(&"open".to_string())
+            .clone();
+
+        match permission_mode.as_str() {
+            "open" => {
+                // Open模式：尝试获取用户，如果没有则创建匿名用户
+                let OptionalUser(user_opt) = OptionalUser::from_request_parts(parts, state)
+                    .await
+                    .unwrap();
+                match user_opt {
+                    Some(user) => Ok(ModeAwareUser(user)),
+                    None => {
+                        // 创建匿名用户，拥有所有权限
+                        let anonymous_user = User {
+                            id: "anonymous".to_string(),
+                            display_name: Some("Anonymous User".to_string()),
+                            permissions: vec![
+                                Permission::Query,
+                                Permission::GenerateWiki,
+                                Permission::ManageRepository,
+                            ],
+                            is_admin: false,
+                        };
+                        Ok(ModeAwareUser(anonymous_user))
+                    }
+                }
+            }
+            "private" | "enterprise" => {
+                // Private/Enterprise模式：必须有认证用户
+                let OptionalUser(user_opt) = OptionalUser::from_request_parts(parts, state)
+                    .await
+                    .unwrap();
+                match user_opt {
+                    Some(user) => Ok(ModeAwareUser(user)),
+                    None => {
+                        Err((StatusCode::UNAUTHORIZED, "Authentication required").into_response())
+                    }
+                }
+            }
+            _ => {
+                // 未知模式，默认为需要认证
+                let OptionalUser(user_opt) = OptionalUser::from_request_parts(parts, state)
+                    .await
+                    .unwrap();
+                match user_opt {
+                    Some(user) => Ok(ModeAwareUser(user)),
+                    None => {
+                        Err((StatusCode::UNAUTHORIZED, "Authentication required").into_response())
+                    }
+                }
+            }
         }
     }
 }

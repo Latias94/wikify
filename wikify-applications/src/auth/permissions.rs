@@ -20,8 +20,8 @@ pub enum Permission {
     DeepResearch,
     /// Export data and results
     Export,
-    /// Manage sessions (view, delete, etc.)
-    ManageSession,
+    /// Manage repositories (view, delete, etc.)
+    ManageRepository,
     /// Administrative functions
     Admin,
 }
@@ -33,7 +33,7 @@ impl std::fmt::Display for Permission {
             Permission::GenerateWiki => write!(f, "generate_wiki"),
             Permission::DeepResearch => write!(f, "deep_research"),
             Permission::Export => write!(f, "export"),
-            Permission::ManageSession => write!(f, "manage_session"),
+            Permission::ManageRepository => write!(f, "manage_repository"),
             Permission::Admin => write!(f, "admin"),
         }
     }
@@ -48,7 +48,7 @@ impl std::str::FromStr for Permission {
             "generate_wiki" => Ok(Permission::GenerateWiki),
             "deep_research" => Ok(Permission::DeepResearch),
             "export" => Ok(Permission::Export),
-            "manage_session" => Ok(Permission::ManageSession),
+            "manage_repository" => Ok(Permission::ManageRepository),
             "admin" => Ok(Permission::Admin),
             _ => Err(format!("Unknown permission: {}", s)),
         }
@@ -189,7 +189,7 @@ impl PermissionConfig {
                 Permission::GenerateWiki,
                 Permission::DeepResearch,
                 Permission::Export,
-                Permission::ManageSession,
+                Permission::ManageRepository,
             ]
             .into_iter()
             .collect(),
@@ -224,7 +224,7 @@ impl PermissionConfig {
                 Permission::GenerateWiki,
                 Permission::DeepResearch,
                 Permission::Export,
-                Permission::ManageSession,
+                Permission::ManageRepository,
                 Permission::Admin,
             ]
             .into_iter()
@@ -234,7 +234,7 @@ impl PermissionConfig {
                 Permission::GenerateWiki,
                 Permission::DeepResearch,
                 Permission::Export,
-                Permission::ManageSession,
+                Permission::ManageRepository,
                 Permission::Admin,
             ]
             .into_iter()

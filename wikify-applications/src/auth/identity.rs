@@ -29,7 +29,7 @@ impl UserType {
             UserType::Premium => [Query, GenerateWiki, DeepResearch, Export]
                 .into_iter()
                 .collect(),
-            UserType::Admin => [Query, GenerateWiki, DeepResearch, Export, ManageSession]
+            UserType::Admin => [Query, GenerateWiki, DeepResearch, Export, ManageRepository]
                 .into_iter()
                 .collect(),
         }

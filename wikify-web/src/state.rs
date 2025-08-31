@@ -21,7 +21,7 @@ use crate::simple_database::SimpleDatabaseService;
 #[serde(tag = "type")]
 pub enum IndexingUpdate {
     Progress {
-        session_id: String,
+        repository_id: String,
         stage: String,
         percentage: f64,
         current_item: Option<String>,
@@ -29,29 +29,29 @@ pub enum IndexingUpdate {
         total_files: Option<usize>,
     },
     Complete {
-        session_id: String,
+        repository_id: String,
         total_files: usize,
         total_chunks: usize,
         duration_ms: u64,
     },
     Error {
-        session_id: String,
+        repository_id: String,
         error: String,
     },
     WikiGenerationStarted {
-        session_id: String,
+        repository_id: String,
     },
     WikiGenerationProgress {
-        session_id: String,
+        repository_id: String,
         stage: String,
         percentage: f64,
     },
     WikiGenerationComplete {
-        session_id: String,
+        repository_id: String,
         wiki_content: String,
     },
     WikiGenerationError {
-        session_id: String,
+        repository_id: String,
         error: String,
     },
 }
@@ -216,89 +216,45 @@ impl AppState {
         }
     }
 
-    /// Initialize RAG pipeline for a repository using application layer
-    pub async fn initialize_rag(
-        &self,
-        repo_path: &str,
-        auto_generate_wiki: bool,
-    ) -> WebResult<String> {
-        info!("Initializing RAG for repository: {}", repo_path);
-
-        // Create permission context for this operation
+    /// Delete repository using application layer
+    pub async fn delete_repository(&self, repository_id: &str) -> WebResult<()> {
         let context = self.create_anonymous_context();
-
-        // Create session options
-        let options = wikify_applications::SessionOptions {
-            auto_generate_wiki,
-            ..Default::default()
-        };
-
-        // Use the application layer to create session
-        let session_id = self
-            .application
-            .create_session(&context, repo_path.to_string(), options)
+        self.application
+            .delete_repository(&context, repository_id)
             .await
-            .map_err(|e| WebError::Internal(format!("Failed to create session: {}", e)))?;
+            .map_err(|e| WebError::Internal(format!("Failed to delete repository: {}", e)))
+    }
 
-        info!(
-            "Created session: {} for repository: {}",
-            session_id, repo_path
-        );
-
-        // Subscribe to progress updates from the application layer
-        let mut progress_receiver = self.application.subscribe_to_progress();
-        let web_progress_broadcaster = self.progress_broadcaster.clone();
-
-        // Forward application progress updates to web progress updates
-        tokio::spawn(async move {
-            while let Ok(app_update) = progress_receiver.recv().await {
-                // Convert application IndexingUpdate to web IndexingUpdate
-                let web_update = match app_update.is_complete {
-                    true if app_update.error.is_some() => IndexingUpdate::Error {
-                        session_id: app_update.session_id,
-                        error: app_update
-                            .error
-                            .unwrap_or_else(|| "Unknown error".to_string()),
-                    },
-                    true => IndexingUpdate::Complete {
-                        session_id: app_update.session_id,
-                        total_files: 0,  // TODO: Extract from message
-                        total_chunks: 0, // TODO: Extract from message
-                        duration_ms: 0,  // TODO: Calculate duration
-                    },
-                    false => IndexingUpdate::Progress {
-                        session_id: app_update.session_id,
-                        stage: app_update.message,
-                        percentage: app_update.progress,
-                        current_item: None,
-                        files_processed: None,
-                        total_files: None,
-                    },
-                };
-
-                let _ = web_progress_broadcaster.send(web_update);
-            }
-        });
-
-        Ok(session_id)
+    /// Clean up stale data using application layer
+    pub async fn cleanup_old_data(&self) {
+        // Note: This is now a no-op since we removed session management
+        // Repository cleanup is handled by the application layer
+        info!("Data cleanup is no longer needed - using repository-based management");
     }
 
     /// Query RAG pipeline using application layer
     pub async fn query_rag(
         &self,
-        session_id: &str,
+        repository_id: &str,
         question: &str,
-    ) -> WebResult<wikify_applications::QueryResponse> {
-        info!("Processing RAG query for session: {}", session_id);
+    ) -> WebResult<wikify_applications::RepositoryQueryResponse> {
+        info!("Processing RAG query for repository: {}", repository_id);
         debug!("Question: {}", question);
 
         // Create permission context for this query
         let context = self.create_anonymous_context();
 
+        // Create repository query
+        let query = wikify_applications::RepositoryQuery {
+            question: question.to_string(),
+            max_results: None,
+            parameters: None,
+        };
+
         // Use the application layer to execute the query
         let response = self
             .application
-            .query(&context, session_id, question.to_string())
+            .query_repository(&context, repository_id, query)
             .await
             .map_err(|e| WebError::RagQuery(format!("Query failed: {}", e)))?;
 
@@ -306,50 +262,15 @@ impl AppState {
         Ok(response)
     }
 
-    /// Get session information using application layer
-    pub async fn get_session(&self, session_id: &str) -> Option<wikify_applications::SessionInfo> {
+    /// Get repository information using application layer
+    pub async fn get_repository(
+        &self,
+        repository_id: &str,
+    ) -> Option<wikify_applications::RepositoryIndex> {
         let context = self.create_anonymous_context();
         self.application
-            .get_session(&context, session_id)
+            .get_repository(&context, repository_id)
             .await
             .ok()
-    }
-
-    /// Clean up stale sessions using application layer
-    pub async fn cleanup_old_sessions(&self) {
-        let cleaned_count = self.application.cleanup_stale_sessions().await;
-        info!("Cleaned up {} stale sessions", cleaned_count);
-    }
-
-    /// Delete repository session using application layer
-    pub async fn delete_repository(&self, session_id: &str) -> WebResult<()> {
-        let context = self.create_anonymous_context();
-        self.application
-            .remove_session(&context, session_id)
-            .await
-            .map_err(|e| WebError::Internal(format!("Failed to delete session: {}", e)))
-    }
-
-    /// Update session activity (no-op since application layer handles this)
-    pub async fn update_session_activity(&self, _session_id: &str) -> WebResult<()> {
-        // The application layer handles session activity updates automatically
-        Ok(())
-    }
-
-    /// Generate wiki for session (placeholder implementation)
-    pub async fn generate_wiki_for_session(
-        &self,
-        _session_id: &str,
-        _repository: &str,
-        _config: wikify_wiki::WikiConfig,
-    ) -> WebResult<String> {
-        // TODO: Implement wiki generation through application layer
-        Ok("Wiki generation not yet implemented".to_string())
-    }
-
-    /// Get cached wiki (placeholder implementation)
-    pub async fn get_cached_wiki(&self, _session_id: &str) -> Option<CachedWiki> {
-        // TODO: Implement wiki caching
-        None
     }
 }

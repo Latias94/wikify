@@ -46,7 +46,7 @@ impl WikifyServer {
             let mut interval = tokio::time::interval(Duration::from_secs(3600)); // Every hour
             loop {
                 interval.tick().await;
-                cleanup_state.cleanup_old_sessions().await;
+                cleanup_state.cleanup_old_data().await;
             }
         });
 

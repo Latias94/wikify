@@ -49,7 +49,7 @@ impl PermissionContext {
                 Permission::GenerateWiki,
                 Permission::DeepResearch,
                 Permission::Export,
-                Permission::ManageSession,
+                Permission::ManageRepository,
             ]
             .into_iter()
             .collect(),
@@ -68,7 +68,7 @@ impl PermissionContext {
                 Permission::GenerateWiki,
                 Permission::DeepResearch,
                 Permission::Export,
-                Permission::ManageSession,
+                Permission::ManageRepository,
                 Permission::Admin,
             ]
             .into_iter()

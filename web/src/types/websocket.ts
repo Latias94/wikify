@@ -57,7 +57,7 @@ export interface BaseWebSocketMessage {
  */
 export interface ChatMessage extends BaseWebSocketMessage {
   type: "Chat";
-  session_id: string;
+  repository_id: string;
   question: string;
   context?: string;
 }
@@ -67,7 +67,7 @@ export interface ChatMessage extends BaseWebSocketMessage {
  */
 export interface ChatResponseMessage extends BaseWebSocketMessage {
   type: "ChatResponse";
-  session_id: string;
+  repository_id: string;
   answer: string;
   sources: SourceDocument[];
   is_streaming?: boolean;
@@ -79,7 +79,7 @@ export interface ChatResponseMessage extends BaseWebSocketMessage {
  */
 export interface ChatErrorMessage extends BaseWebSocketMessage {
   type: "ChatError";
-  session_id: string;
+  repository_id: string;
   error: string;
   details?: Record<string, any>;
 }
@@ -93,7 +93,7 @@ export interface ChatErrorMessage extends BaseWebSocketMessage {
  */
 export interface WikiGenerateMessage extends BaseWebSocketMessage {
   type: "WikiGenerate";
-  session_id: string;
+  repository_id: string;
   config: {
     language?: string;
     max_pages?: number;
@@ -107,7 +107,7 @@ export interface WikiGenerateMessage extends BaseWebSocketMessage {
  */
 export interface WikiProgressMessage extends BaseWebSocketMessage {
   type: "WikiProgress";
-  session_id: string;
+  repository_id: string;
   progress: number; // 0-100
   current_step: string;
   total_steps: number;
@@ -119,7 +119,7 @@ export interface WikiProgressMessage extends BaseWebSocketMessage {
  */
 export interface WikiCompleteMessage extends BaseWebSocketMessage {
   type: "WikiComplete";
-  session_id: string;
+  repository_id: string;
   wiki_id: string;
   title: string;
   description: string;
@@ -131,7 +131,7 @@ export interface WikiCompleteMessage extends BaseWebSocketMessage {
  */
 export interface WikiErrorMessage extends BaseWebSocketMessage {
   type: "WikiError";
-  session_id: string;
+  repository_id: string;
   error: string;
   details?: Record<string, any>;
 }
@@ -145,7 +145,7 @@ export interface WikiErrorMessage extends BaseWebSocketMessage {
  */
 export interface IndexProgressMessage extends BaseWebSocketMessage {
   type: "index_progress";
-  session_id: string;
+  repository_id: string;
   progress: number; // 0.0-1.0 range
   current_file?: string;
   files_processed: number;
@@ -157,7 +157,7 @@ export interface IndexProgressMessage extends BaseWebSocketMessage {
  */
 export interface IndexCompleteMessage extends BaseWebSocketMessage {
   type: "index_progress";
-  session_id: string;
+  repository_id: string;
   progress: 1.0;
   current_file?: string; // Contains completion summary
   files_processed: number;

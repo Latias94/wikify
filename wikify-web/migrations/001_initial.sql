@@ -14,15 +14,16 @@ CREATE TABLE repositories (
     metadata TEXT DEFAULT '{}' -- JSON 格式的元数据
 );
 
--- 会话表
-CREATE TABLE sessions (
+-- 研究进程表 (替代会话表)
+CREATE TABLE research_processes (
     id TEXT PRIMARY KEY,
     user_id TEXT DEFAULT 'default', -- 用户标识，默认为 'default'
     repository_id TEXT NOT NULL,
-    name TEXT,
+    topic TEXT NOT NULL,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT DEFAULT '{}', -- JSON 格式的研究元数据
     FOREIGN KEY (repository_id) REFERENCES repositories(id) ON DELETE CASCADE
 );
 
@@ -31,7 +32,7 @@ CREATE TABLE query_history (
     id TEXT PRIMARY KEY,
     user_id TEXT DEFAULT 'default',
     repository_id TEXT NOT NULL,
-    session_id TEXT,
+    research_id TEXT, -- 关联的研究进程ID
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
     sources TEXT DEFAULT '[]', -- JSON 格式的源文档
@@ -40,7 +41,7 @@ CREATE TABLE query_history (
     similarity_threshold REAL,
     chunks_retrieved INTEGER,
     FOREIGN KEY (repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+    FOREIGN KEY (research_id) REFERENCES research_processes(id) ON DELETE SET NULL
 );
 
 -- 用户表 (可选，仅在简单多用户模式下使用)
@@ -55,13 +56,14 @@ CREATE TABLE users (
 CREATE INDEX idx_repositories_status ON repositories(status);
 CREATE INDEX idx_repositories_created ON repositories(created_at DESC);
 
-CREATE INDEX idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX idx_sessions_repository_id ON sessions(repository_id);
-CREATE INDEX idx_sessions_last_activity ON sessions(last_activity DESC);
+CREATE INDEX idx_research_processes_user_id ON research_processes(user_id);
+CREATE INDEX idx_research_processes_repository_id ON research_processes(repository_id);
+CREATE INDEX idx_research_processes_status ON research_processes(status);
+CREATE INDEX idx_research_processes_updated ON research_processes(updated_at DESC);
 
 CREATE INDEX idx_query_history_user_id ON query_history(user_id);
 CREATE INDEX idx_query_history_repository_id ON query_history(repository_id);
-CREATE INDEX idx_query_history_session_id ON query_history(session_id);
+CREATE INDEX idx_query_history_research_id ON query_history(research_id);
 CREATE INDEX idx_query_history_created ON query_history(created_at DESC);
 
 CREATE INDEX idx_users_last_seen ON users(last_seen DESC);

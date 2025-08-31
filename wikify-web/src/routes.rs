@@ -19,6 +19,7 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         // Health check
         .route("/health", get(handlers::health_check))
         // Authentication endpoints
+        .route("/auth/status", get(auth::handlers::get_auth_status))
         .route("/auth/register", post(auth::handlers::register_user))
         .route("/auth/login", post(auth::handlers::login_user))
         .route("/auth/refresh", post(auth::handlers::refresh_token))
@@ -36,7 +37,9 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
             get(handlers::list_templates_by_category),
         )
         // Configuration (public read)
-        .route("/config", get(handlers::get_config));
+        .route("/config", get(handlers::get_config))
+        // Repository listing (public in open mode, protected by middleware)
+        .route("/repositories", get(handlers::list_repositories));
 
     // Protected routes (authentication required)
     let protected_routes = Router::new()
@@ -53,15 +56,15 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         // Repository management (requires GenerateWiki permission)
         .route("/repositories", post(handlers::initialize_repository))
         .route(
-            "/repositories/{session_id}",
+            "/repositories/{repository_id}",
             get(handlers::get_repository_info),
         )
         .route(
-            "/repositories/{session_id}",
+            "/repositories/{repository_id}",
             delete(handlers::delete_repository),
         )
         .route(
-            "/repositories/{session_id}/reindex",
+            "/repositories/{repository_id}/reindex",
             post(handlers::reindex_repository),
         )
         // RAG endpoints (requires Query permission)
@@ -69,18 +72,28 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         .route("/chat/stream", post(handlers::chat_stream))
         // Wiki generation (requires GenerateWiki permission)
         .route("/wiki/generate", post(handlers::generate_wiki))
-        .route("/wiki/{session_id}", get(handlers::get_wiki))
-        .route("/wiki/{session_id}/export", post(handlers::export_wiki))
+        .route("/wiki/{repository_id}", get(handlers::get_wiki))
+        .route("/wiki/{repository_id}/export", post(handlers::export_wiki))
         // Research endpoints (requires Query permission)
         .route("/research/start", post(handlers::start_research))
+        .route("/research/deep", post(handlers::start_research)) // Alias for frontend compatibility
         .route(
-            "/research/iterate/{session_id}",
+            "/research/iterate/{repository_id}",
             post(handlers::research_iteration),
         )
         .route(
-            "/research/progress/{session_id}",
+            "/research/progress/{repository_id}",
             get(handlers::get_research_progress),
         )
+        .route(
+            "/research/{research_id}",
+            get(handlers::get_research_progress_by_id),
+        )
+        .route(
+            "/research/{research_id}/stop",
+            post(handlers::stop_research),
+        )
+        .route("/research/sessions", get(handlers::list_research_sessions))
         .route(
             "/research/start-from-template",
             post(handlers::start_research_from_template),
@@ -88,11 +101,11 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         // Research history endpoints (requires Query permission)
         .route("/research/history", get(handlers::get_research_history))
         .route(
-            "/research/history/{session_id}",
+            "/research/history/{repository_id}",
             get(handlers::get_research_record),
         )
         .route(
-            "/research/history/{session_id}",
+            "/research/history/{repository_id}",
             delete(handlers::delete_research_record),
         )
         .route(
@@ -115,10 +128,7 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
     // Add database-specific routes if SQLite feature is enabled
     #[cfg(feature = "sqlite")]
     {
-        router = router
-            .route("/repositories", get(handlers::get_repositories))
-            .route("/sessions", get(handlers::get_sessions))
-            .route("/history/{repository_id}", get(handlers::get_query_history));
+        router = router.route("/history/{repository_id}", get(handlers::get_query_history));
     }
 
     router

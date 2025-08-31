@@ -6,13 +6,7 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
-import {
-  Repository,
-  Session,
-  UserInfo,
-  AuthMode,
-  Permission,
-} from "@/types/api";
+import { Repository, UserInfo, AuthMode, Permission } from "@/types/api";
 import { Theme, UserSettings } from "@/types/ui";
 
 // ============================================================================
@@ -30,10 +24,6 @@ interface AppState {
   repositories: Repository[];
   selectedRepository: Repository | null;
 
-  // 会话相关
-  sessions: Session[];
-  activeSession: Session | null;
-
   // UI 状态
   theme: Theme;
   sidebarCollapsed: boolean;
@@ -42,7 +32,6 @@ interface AppState {
   // 加载状态
   isLoading: {
     repositories: boolean;
-    sessions: boolean;
     user: boolean;
     auth: boolean;
   };
@@ -50,7 +39,6 @@ interface AppState {
   // 错误状态
   errors: {
     repositories?: string;
-    sessions?: string;
     user?: string;
     auth?: string;
     general?: string;
@@ -70,13 +58,6 @@ interface AppActions {
   updateRepository: (id: string, updates: Partial<Repository>) => void;
   removeRepository: (id: string) => void;
   setSelectedRepository: (repository: Repository | null) => void;
-
-  // 会话操作
-  setSessions: (sessions: Session[]) => void;
-  addSession: (session: Session) => void;
-  updateSession: (id: string, updates: Partial<Session>) => void;
-  removeSession: (id: string) => void;
-  setActiveSession: (session: Session | null) => void;
 
   // UI 操作
   setTheme: (theme: Theme) => void;
@@ -138,10 +119,6 @@ const initialState: AppState = {
   repositories: [],
   selectedRepository: null,
 
-  // 会话相关
-  sessions: [],
-  activeSession: null,
-
   // UI 状态
   theme: "system",
   sidebarCollapsed: false,
@@ -150,7 +127,6 @@ const initialState: AppState = {
   // 加载状态
   isLoading: {
     repositories: false,
-    sessions: false,
     user: false,
     auth: false,
   },
@@ -239,76 +215,12 @@ export const useAppStore = create<AppStore>()(
             if (state.selectedRepository?.id === id) {
               state.selectedRepository = null;
             }
-
-            // 清除相关会话
-            state.sessions = state.sessions.filter(
-              (session) => session.repository_id !== id
-            );
-            if (state.activeSession?.repository_id === id) {
-              state.activeSession = null;
-            }
           });
         },
 
         setSelectedRepository: (repository) => {
           set((state) => {
             state.selectedRepository = repository;
-          });
-        },
-
-        // ============================================================================
-        // 会话操作
-        // ============================================================================
-
-        setSessions: (sessions) => {
-          set((state) => {
-            state.sessions = sessions;
-          });
-        },
-
-        addSession: (session) => {
-          set((state) => {
-            state.sessions.push(session);
-          });
-        },
-
-        updateSession: (id, updates) => {
-          set((state) => {
-            const index = state.sessions.findIndex(
-              (session) => session.id === id
-            );
-            if (index !== -1) {
-              Object.assign(state.sessions[index], updates);
-            }
-          });
-        },
-
-        removeSession: (id) => {
-          set((state) => {
-            state.sessions = state.sessions.filter(
-              (session) => session.id !== id
-            );
-
-            // 如果删除的是当前活跃会话，清除选择
-            if (state.activeSession?.id === id) {
-              state.activeSession = null;
-            }
-          });
-        },
-
-        setActiveSession: (session) => {
-          set((state) => {
-            state.activeSession = session;
-
-            // 自动设置选中的仓库
-            if (session) {
-              const repository = state.repositories.find(
-                (repo) => repo.id === session.repository_id
-              );
-              if (repository) {
-                state.selectedRepository = repository;
-              }
-            }
           });
         },
 
@@ -405,7 +317,6 @@ export const useAppStore = create<AppStore>()(
           sidebarCollapsed: state.sidebarCollapsed,
           settings: state.settings,
           selectedRepository: state.selectedRepository,
-          activeSession: state.activeSession,
         }),
       }
     ),
@@ -431,11 +342,6 @@ export const useRepositories = () => useAppStore((state) => state.repositories);
 export const useSelectedRepository = () =>
   useAppStore((state) => state.selectedRepository);
 
-// 会话相关选择器
-export const useSessions = () => useAppStore((state) => state.sessions);
-export const useActiveSession = () =>
-  useAppStore((state) => state.activeSession);
-
 // UI 相关选择器
 export const useTheme = () => useAppStore((state) => state.theme);
 export const useSidebarCollapsed = () =>
@@ -454,11 +360,6 @@ export const useIsAdmin = () => useAppStore((state) => state.isAdmin);
 // 组合选择器
 export const useRepositoryById = (id: string) =>
   useAppStore((state) => state.repositories.find((repo) => repo.id === id));
-
-export const useSessionsByRepository = (repositoryId: string) =>
-  useAppStore((state) =>
-    state.sessions.filter((session) => session.repository_id === repositoryId)
-  );
 
 // 权限检查组合选择器
 export const usePermissionCheck = (permission: Permission) => {

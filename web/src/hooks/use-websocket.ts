@@ -30,7 +30,7 @@ import { UIChatMessage } from "@/types/ui";
 // ============================================================================
 
 export function useChatWebSocket(
-  sessionId?: string,
+  repositoryId?: string,
   config?: Partial<WebSocketConfig>,
   options?: Partial<WebSocketOptions>
 ) {
@@ -53,7 +53,7 @@ export function useChatWebSocket(
 
   // 初始化 WebSocket 连接
   useEffect(() => {
-    if (!sessionId) return;
+    if (!repositoryId) return;
 
     const ws = new WebSocketClient("chat", config, {
       debug: import.meta.env.DEV,
@@ -65,7 +65,7 @@ export function useChatWebSocket(
       onConnect: () => {
         console.log("Chat WebSocket connected");
         setConnectionState({ status: "connected", error: undefined });
-        clearError(sessionId);
+        clearError(repositoryId);
       },
 
       onDisconnect: () => {
@@ -76,11 +76,11 @@ export function useChatWebSocket(
       onError: (event) => {
         console.error("Chat WebSocket error:", event);
         setConnectionState({ status: "error", error: "Connection error" });
-        setError(sessionId, "Connection error occurred");
+        setError(repositoryId, "Connection error occurred");
       },
 
       onChatResponse: (message: ChatResponseMessage) => {
-        if (message.session_id !== sessionId) return;
+        if (message.repository_id !== repositoryId) return;
 
         if (message.is_streaming) {
           // 流式响应
@@ -100,7 +100,7 @@ export function useChatWebSocket(
                 sources: message.sources,
                 isStreaming: true,
               };
-              startStreamingMessage(sessionId, uiMessage);
+              startStreamingMessage(repositoryId, uiMessage);
             }
           }
         } else {
@@ -112,15 +112,15 @@ export function useChatWebSocket(
             timestamp: new Date(message.timestamp),
             sources: message.sources,
           };
-          addMessage(sessionId, uiMessage);
+          addMessage(repositoryId, uiMessage);
         }
       },
 
       onChatError: (message: ChatErrorMessage) => {
-        if (message.session_id !== sessionId) return;
+        if (message.repository_id !== repositoryId) return;
 
         console.error("Chat error:", message.error);
-        setError(sessionId, message.error);
+        setError(repositoryId, message.error);
 
         // 取消流式消息（如果有）
         cancelStreamingMessage();
@@ -136,7 +136,7 @@ export function useChatWebSocket(
         // 更新仓库索引进度
         updateRepository(message.repository_id, {
           status: "indexing",
-          // 注意：这里需要根据后端实际字段调整
+          indexing_progress: message.progress,
         });
       },
 
@@ -172,20 +172,20 @@ export function useChatWebSocket(
     // 连接到 WebSocket
     ws.connect().catch((error) => {
       console.error("Failed to connect to chat WebSocket:", error);
-      setError(sessionId, "Failed to connect to chat service");
+      setError(repositoryId, "Failed to connect to chat service");
     });
 
     return () => {
       ws.disconnect();
       wsRef.current = null;
     };
-  }, [sessionId, config, options]);
+  }, [repositoryId, config, options]);
 
   // 发送聊天消息
   const sendMessage = useCallback(
     (question: string, context?: string) => {
-      if (!wsRef.current || !sessionId) {
-        console.error("WebSocket not connected or session not available");
+      if (!wsRef.current || !repositoryId) {
+        console.error("WebSocket not connected or repository not available");
         return;
       }
 
@@ -196,21 +196,21 @@ export function useChatWebSocket(
         content: question,
         timestamp: new Date(),
       };
-      addMessage(sessionId, userMessage);
+      addMessage(repositoryId, userMessage);
 
       // 发送到服务器
       const chatMessage: ChatMessage = {
         type: "Chat",
-        session_id: sessionId,
+        repository_id: repositoryId,
         question,
         context,
         timestamp: new Date().toISOString(),
       };
 
       wsRef.current.send(chatMessage);
-      clearError(sessionId);
+      clearError(repositoryId);
     },
-    [sessionId, addMessage, clearError]
+    [repositoryId, addMessage, clearError]
   );
 
   // 获取连接状态
@@ -242,7 +242,7 @@ export function useChatWebSocket(
 // ============================================================================
 
 export function useWikiWebSocket(
-  sessionId?: string,
+  repositoryId?: string,
   config?: Partial<WebSocketConfig>,
   options?: Partial<WebSocketOptions>
 ) {
@@ -251,7 +251,7 @@ export function useWikiWebSocket(
 
   // 初始化 WebSocket 连接
   useEffect(() => {
-    if (!sessionId) return;
+    if (!repositoryId) return;
 
     const ws = new WebSocketClient("wiki", config, {
       debug: import.meta.env.DEV,
@@ -273,7 +273,7 @@ export function useWikiWebSocket(
       },
 
       onWikiProgress: (message: WikiProgressMessage) => {
-        if (message.session_id !== sessionId) return;
+        if (message.repository_id !== repositoryId) return;
 
         console.log(
           `Wiki generation progress: ${message.progress}% - ${message.current_step}`
@@ -284,7 +284,7 @@ export function useWikiWebSocket(
       },
 
       onWikiComplete: (message: WikiCompleteMessage) => {
-        if (message.session_id !== sessionId) return;
+        if (message.repository_id !== repositoryId) return;
 
         console.log("Wiki generation completed:", message);
 
@@ -295,7 +295,7 @@ export function useWikiWebSocket(
       },
 
       onWikiError: (message: WikiErrorMessage) => {
-        if (message.session_id !== sessionId) return;
+        if (message.repository_id !== repositoryId) return;
 
         console.error("Wiki generation error:", message.error);
 
@@ -318,7 +318,7 @@ export function useWikiWebSocket(
       ws.disconnect();
       wsRef.current = null;
     };
-  }, [sessionId, config, options]);
+  }, [repositoryId, config, options]);
 
   // 生成 Wiki
   const generateWiki = useCallback(
@@ -328,14 +328,14 @@ export function useWikiWebSocket(
       include_diagrams?: boolean;
       comprehensive_view?: boolean;
     }) => {
-      if (!wsRef.current || !sessionId) {
-        console.error("WebSocket not connected or session not available");
+      if (!wsRef.current || !repositoryId) {
+        console.error("WebSocket not connected or repository not available");
         return;
       }
 
       const wikiMessage: WikiGenerateMessage = {
         type: "WikiGenerate",
-        session_id: sessionId,
+        repository_id: repositoryId,
         config: config || {
           language: "en",
           max_pages: 50,
@@ -347,7 +347,7 @@ export function useWikiWebSocket(
 
       wsRef.current.send(wikiMessage);
     },
-    [sessionId]
+    [repositoryId]
   );
 
   return {
@@ -399,7 +399,7 @@ export function useIndexProgressWebSocket(
         );
 
         // 更新仓库状态
-        updateRepository(message.session_id, {
+        updateRepository(message.repository_id, {
           status: "indexing",
           indexing_progress: message.progress,
         });
@@ -414,7 +414,7 @@ export function useIndexProgressWebSocket(
           onComplete?.(completionMessage);
 
           // 更新仓库状态为已索引
-          updateRepository(message.session_id, {
+          updateRepository(message.repository_id, {
             status: "indexed",
             indexing_progress: 1.0,
             last_indexed_at: new Date().toISOString(),

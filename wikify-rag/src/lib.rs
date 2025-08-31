@@ -17,12 +17,16 @@ pub mod types;
 pub use chat::*;
 pub use embeddings::*;
 pub use indexing_manager::*;
-pub use llm_client::*;
 pub use rag_pipeline::*;
 pub use retriever::*;
 pub use storage::*;
 pub use token_counter::*;
-pub use types::*;
+
+// Re-export our own types with explicit names to avoid conflicts
+pub use types::{
+    ChatMessage as WikifyChatMessage, LlmConfig, RagConfig, RagError, RagQuery, RagResponse,
+    RagResult,
+};
 
 // Re-export commonly used types from siumai
-pub use siumai::prelude::*;
+pub use siumai::prelude::{LlmClient, Provider as LlmProvider};

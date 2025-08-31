@@ -71,15 +71,15 @@ confidence_threshold = 0.7
 enable_llm_strategy_selection = true
 fallback_to_heuristic = true
 
-[session]
-# Session management
-max_sessions_per_user = 10
-session_timeout = "24h"
-max_conversation_history = 50
+[repository]
+# Repository management
+max_repositories_per_user = 50
+repository_timeout = "30d"
+max_query_history = 1000
 
 # Auto-cleanup
-cleanup_interval = "1h"
-max_inactive_time = "7d"
+cleanup_interval = "6h"
+max_inactive_time = "30d"
 
 [indexing]
 # Repository indexing configuration
@@ -151,4 +151,4 @@ max_size = "100MB"
 # Cache types
 query_cache = true
 wiki_cache = true
-session_cache = true
+repository_cache = true

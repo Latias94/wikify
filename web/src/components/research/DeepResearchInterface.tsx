@@ -88,7 +88,6 @@ export const DeepResearchInterface: React.FC<DeepResearchInterfaceProps> = ({
 
     startResearch({
       repository_id: repositoryId,
-      session_id: sessionId,
       query: query.trim(),
       max_iterations: maxIterations,
       research_strategy: researchStrategy,

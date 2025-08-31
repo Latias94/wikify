@@ -33,16 +33,12 @@ export const queryKeys = {
   repositories: ["repositories"] as const,
   repository: (id: string) => ["repositories", id] as const,
 
-  // 会话相关
-  sessions: ["sessions"] as const,
-  session: (id: string) => ["sessions", id] as const,
-
   // 聊天相关
   queryHistory: (repositoryId: string, params?: PaginationParams) =>
     ["queryHistory", repositoryId, params] as const,
 
   // Wiki 相关
-  wiki: (sessionId: string) => ["wiki", sessionId] as const,
+  wiki: (repositoryId: string) => ["wiki", repositoryId] as const,
 
   // 文件相关
   fileTree: (repositoryId: string) => ["fileTree", repositoryId] as const,
@@ -111,6 +107,18 @@ export function useUpdateConfig() {
 // ============================================================================
 // 仓库 API Hooks
 // ============================================================================
+
+/**
+ * 获取认证状态
+ */
+export function useAuthStatus() {
+  return useQuery(
+    createQueryConfig(["auth", "status"], () => apiClient.getAuthStatus(), {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 1,
+    })
+  );
+}
 
 /**
  * 获取仓库列表
@@ -192,13 +200,13 @@ export function useInitializeRepository() {
 /**
  * 获取仓库信息
  */
-export function useRepository(sessionId: string) {
+export function useRepository(repositoryId: string) {
   return useQuery(
     createQueryConfig(
-      queryKeys.repository(sessionId),
-      () => apiClient.getRepository(sessionId),
+      queryKeys.repository(repositoryId),
+      () => apiClient.getRepository(repositoryId),
       {
-        enabled: !!sessionId,
+        enabled: !!repositoryId,
         staleTime: 5 * 60 * 1000, // 5 minutes
       }
     )
@@ -213,8 +221,9 @@ export function useReindexRepository() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (sessionId: string) => apiClient.reindexRepository(sessionId),
-    onSuccess: (response, sessionId) => {
+    mutationFn: (repositoryId: string) =>
+      apiClient.reindexRepository(repositoryId),
+    onSuccess: (response, repositoryId) => {
       // 刷新仓库列表
       queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
 
@@ -281,120 +290,6 @@ export function useDeleteRepository() {
         onError: (error) => {
           toast({
             title: "Failed to delete repository",
-            description: error.message,
-            variant: "destructive",
-          });
-        },
-      }
-    )
-  );
-}
-
-// ============================================================================
-// 会话 API Hooks
-// ============================================================================
-
-/**
- * 获取会话列表
- */
-export function useSessions() {
-  const setSessions = useAppStore((state) => state.setSessions);
-  const setLoading = useAppStore((state) => state.setLoading);
-  const setError = useAppStore((state) => state.setError);
-
-  return useQuery(
-    createQueryConfig(
-      queryKeys.sessions,
-      async () => {
-        setLoading("sessions", true);
-        try {
-          const response = await apiClient.getSessions();
-          setSessions(response.sessions);
-          setError("sessions", undefined);
-          return response;
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          setError("sessions", errorMessage);
-          throw error;
-        } finally {
-          setLoading("sessions", false);
-        }
-      },
-      {
-        staleTime: 2 * 60 * 1000, // 2 minutes
-      }
-    )
-  );
-}
-
-/**
- * 创建会话
- */
-export function useCreateSession() {
-  const queryClient = useQueryClient();
-  const addSession = useAppStore((state) => state.addSession);
-  const setActiveSession = useAppStore((state) => state.setActiveSession);
-  const { toast } = useToast();
-
-  return useMutation(
-    createMutationConfig(
-      ({ repositoryId, name }: { repositoryId: string; name?: string }) =>
-        apiClient.createSession(repositoryId, name),
-      {
-        onSuccess: (session) => {
-          // 更新本地状态
-          addSession(session);
-          setActiveSession(session);
-
-          // 刷新会话列表
-          queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
-
-          toast({
-            title: "Session created",
-            description: "New chat session has been created.",
-          });
-        },
-        onError: (error) => {
-          toast({
-            title: "Failed to create session",
-            description: error.message,
-            variant: "destructive",
-          });
-        },
-      }
-    )
-  );
-}
-
-/**
- * 删除会话
- */
-export function useDeleteSession() {
-  const queryClient = useQueryClient();
-  const removeSession = useAppStore((state) => state.removeSession);
-  const { toast } = useToast();
-
-  return useMutation(
-    createMutationConfig(
-      (sessionId: string) => apiClient.deleteSession(sessionId),
-      {
-        onSuccess: (_, sessionId) => {
-          // 更新本地状态
-          removeSession(sessionId);
-
-          // 刷新相关查询
-          queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
-          queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) });
-
-          toast({
-            title: "Session deleted",
-            description: "The chat session has been removed.",
-          });
-        },
-        onError: (error) => {
-          toast({
-            title: "Failed to delete session",
             description: error.message,
             variant: "destructive",
           });
@@ -485,13 +380,13 @@ export function useGenerateWiki() {
 /**
  * 获取 Wiki 内容
  */
-export function useWiki(sessionId: string) {
+export function useWiki(repositoryId: string) {
   return useQuery(
     createQueryConfig(
-      queryKeys.wiki(sessionId),
-      () => apiClient.getWiki(sessionId),
+      queryKeys.wiki(repositoryId),
+      () => apiClient.getWiki(repositoryId),
       {
-        enabled: !!sessionId,
+        enabled: !!repositoryId,
         staleTime: 10 * 60 * 1000, // 10 minutes
       }
     )

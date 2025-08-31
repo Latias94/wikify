@@ -43,18 +43,14 @@ pub struct ResearchQuestion {
     pub id: Uuid,
     /// The question text
     pub text: String,
-    /// Question type/category
-    pub question_type: QuestionType,
-    /// Priority level (1-10, higher is more important)
-    pub priority: u8,
-    /// Parent question ID (for sub-questions)
-    pub parent_id: Option<Uuid>,
-    /// Depth in the question hierarchy
-    pub depth: usize,
-    /// Expected complexity (1-10)
-    pub complexity: u8,
-    /// Keywords associated with this question
-    pub keywords: Vec<String>,
+    /// Priority level (0.0-1.0, higher is more important)
+    pub priority: f64,
+    /// Whether this question has been answered
+    pub answered: bool,
+    /// Source of this question
+    pub source: QuestionSource,
+    /// Creation time
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Types of research questions
@@ -264,8 +260,10 @@ pub struct ResearchQualityMetrics {
 /// Research progress update
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResearchProgress {
-    /// Session ID
+    /// Research session ID
     pub session_id: String,
+    /// Repository ID being researched
+    pub repository_id: String,
     /// Current iteration
     pub current_iteration: usize,
     /// Total planned iterations
@@ -296,26 +294,54 @@ pub enum ResearchStrategy {
     Adaptive,
 }
 
+/// Question source type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub enum QuestionSource {
+    /// Initial question from user
+    Initial,
+    /// Generated from previous findings
+    Generated,
+    /// Follow-up question
+    FollowUp,
+}
+
+/// Research session status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub enum ResearchStatus {
+    /// Research is active
+    Active,
+    /// Research completed successfully
+    Completed,
+    /// Research was cancelled
+    Cancelled,
+    /// Research failed with error
+    Failed,
+}
+
 /// Research context for maintaining state across iterations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ResearchContext {
-    /// Session ID
-    pub session_id: String,
+    /// Research session ID
+    pub id: String,
+    /// Repository ID being researched
+    pub repository_id: String,
     /// Original topic
     pub topic: String,
     /// Configuration
     pub config: ResearchConfig,
-    /// Current iteration number
-    pub current_iteration: usize,
     /// All questions (as a vector for ordered processing)
     pub questions: Vec<ResearchQuestion>,
     /// All findings (as a vector for chronological order)
     pub findings: Vec<ResearchFinding>,
     /// Research history
     pub iterations: Vec<ResearchIteration>,
-    /// Start time
-    pub start_time: chrono::DateTime<chrono::Utc>,
-    /// Additional metadata
-    pub metadata: HashMap<String, String>,
+    /// Research status
+    pub status: ResearchStatus,
+    /// Creation time
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Last update time
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }

@@ -313,6 +313,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "auto-future"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c1e7e457ea78e524f48639f551fd79703ac3f2237f5ecccdf4708f8a75ad373"
+
+[[package]]
 name = "auto_enums"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -355,11 +361,45 @@ dependencies = [
 
 [[package]]
 name = "axum"
+version = "0.7.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edca88bc138befd0323b20752846e6587272d3b03b0343c8ea28a6f819e6e71f"
+dependencies = [
+ "async-trait",
+ "axum-core 0.4.5",
+ "bytes",
+ "futures-util",
+ "http 1.3.1",
+ "http-body 1.0.1",
+ "http-body-util",
+ "hyper 1.7.0",
+ "hyper-util",
+ "itoa",
+ "matchit 0.7.3",
+ "memchr",
+ "mime",
+ "percent-encoding",
+ "pin-project-lite",
+ "rustversion",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
+ "sync_wrapper 1.0.2",
+ "tokio",
+ "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "axum"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "021e862c184ae977658b36c4500f7feac3221ca5da43e3f25bd04ab6c79a29b5"
 dependencies = [
- "axum-core",
+ "axum-core 0.5.2",
  "axum-macros",
  "base64 0.22.1",
  "bytes",
@@ -371,7 +411,7 @@ dependencies = [
  "hyper 1.7.0",
  "hyper-util",
  "itoa",
- "matchit",
+ "matchit 0.8.4",
  "memchr",
  "mime",
  "percent-encoding",
@@ -386,6 +426,27 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "axum-core"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09f2bd6146b97ae3359fa0cc6d6b376d9539582c7b4220f041a33ec24c226199"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures-util",
+ "http 1.3.1",
+ "http-body 1.0.1",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "rustversion",
+ "sync_wrapper 1.0.2",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -417,8 +478,8 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45bf463831f5131b7d3c756525b305d40f1185b688565648a92e1392ca35713d"
 dependencies = [
- "axum",
- "axum-core",
+ "axum 0.8.4",
+ "axum-core 0.5.2",
  "bytes",
  "futures-util",
  "headers",
@@ -443,6 +504,34 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "axum-test"
+version = "15.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac63648e380fd001402a02ec804e7686f9c4751f8cad85b7de0b53dae483a128"
+dependencies = [
+ "anyhow",
+ "auto-future",
+ "axum 0.7.9",
+ "bytes",
+ "cookie",
+ "http 1.3.1",
+ "http-body-util",
+ "hyper 1.7.0",
+ "hyper-util",
+ "mime",
+ "pretty_assertions",
+ "reserve-port",
+ "rust-multipart-rfc7578_2",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "smallvec",
+ "tokio",
+ "tower",
+ "url",
 ]
 
 [[package]]
@@ -776,7 +865,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 [[package]]
 name = "cheungfun"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
+source = "git+https://github.com/YumchaLabs/cheungfun#e9b56a8d97ad1a19fce0e1a76a1dbff284f95f65"
 dependencies = [
  "cheungfun-agents",
  "cheungfun-core",
@@ -788,11 +877,11 @@ dependencies = [
 [[package]]
 name = "cheungfun-agents"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
+source = "git+https://github.com/YumchaLabs/cheungfun#e9b56a8d97ad1a19fce0e1a76a1dbff284f95f65"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.8.4",
  "cheungfun-core",
  "cheungfun-query",
  "chrono",
@@ -813,7 +902,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-core"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
+source = "git+https://github.com/YumchaLabs/cheungfun#e9b56a8d97ad1a19fce0e1a76a1dbff284f95f65"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -844,7 +933,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-indexing"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
+source = "git+https://github.com/YumchaLabs/cheungfun#e9b56a8d97ad1a19fce0e1a76a1dbff284f95f65"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -862,6 +951,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "sha2",
  "siumai 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "text-splitter",
  "thiserror 2.0.16",
@@ -888,7 +978,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-integrations"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
+source = "git+https://github.com/YumchaLabs/cheungfun#e9b56a8d97ad1a19fce0e1a76a1dbff284f95f65"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -906,7 +996,7 @@ dependencies = [
 [[package]]
 name = "cheungfun-query"
 version = "0.1.0"
-source = "git+https://github.com/YumchaLabs/cheungfun#d24cff0e7ae9701798bfe29336b24679d5dce31e"
+source = "git+https://github.com/YumchaLabs/cheungfun#e9b56a8d97ad1a19fce0e1a76a1dbff284f95f65"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -916,6 +1006,7 @@ dependencies = [
  "futures",
  "futures-util",
  "rand 0.8.5",
+ "regex",
  "serde",
  "serde_json",
  "siumai 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1164,6 +1255,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
 dependencies = [
  "unicode-segmentation",
+]
+
+[[package]]
+name = "cookie"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ddef33a339a91ea89fb53151bd0a4689cfce27055c291dfa69945475d22c747"
+dependencies = [
+ "time",
+ "version_check",
 ]
 
 [[package]]
@@ -1574,6 +1675,12 @@ name = "deunicode"
 version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abd57806937c9cc163efc8ea3910e00a62e2aeb0b8119f1793a978088f8f6b04"
+
+[[package]]
+name = "diff"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 
 [[package]]
 name = "digest"
@@ -3365,6 +3472,12 @@ dependencies = [
 
 [[package]]
 name = "matchit"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
+
+[[package]]
+name = "matchit"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
@@ -4251,6 +4364,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
+name = "pretty_assertions"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
+dependencies = [
+ "diff",
+ "yansi",
+]
+
+[[package]]
 name = "proc-macro-error-attr2"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4715,6 +4838,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "reserve-port"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21918d6644020c6f6ef1993242989bf6d4952d2e025617744f184c02df51c356"
+dependencies = [
+ "thiserror 2.0.16",
+]
+
+[[package]]
 name = "rgb"
 version = "0.8.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4860,13 +4992,28 @@ dependencies = [
 
 [[package]]
 name = "rust-ini"
-version = "0.21.1"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e310ef0e1b6eeb79169a1171daf9abcb87a2e17c03bee2c4bb100b55c75409f"
+checksum = "796e8d2b6696392a43bea58116b667fb4c29727dc5abd27d6acf338bb4f688c7"
 dependencies = [
  "cfg-if",
  "ordered-multimap",
- "trim-in-place",
+]
+
+[[package]]
+name = "rust-multipart-rfc7578_2"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03b748410c0afdef2ebbe3685a6a862e2ee937127cdaae623336a459451c8d57"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http 0.2.12",
+ "mime",
+ "mime_guess",
+ "rand 0.8.5",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -5308,7 +5455,7 @@ version = "0.9.1"
 dependencies = [
  "async-stream",
  "async-trait",
- "axum",
+ "axum 0.8.4",
  "backoff",
  "bytes",
  "chrono",
@@ -6582,12 +6729,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "trim-in-place"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "343e926fc669bc8cde4fa3129ab681c63671bae288b1f1081ceee6d9d37904fc"
-
-[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6862,7 +7003,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c25bae5bccc842449ec0c5ddc5cbb6a3a1eaeac4503895dc105a1138f8234a0"
 dependencies = [
- "axum",
+ "axum 0.8.4",
  "paste",
  "tower-layer",
  "tower-service",
@@ -6888,7 +7029,7 @@ version = "9.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d047458f1b5b65237c2f6dc6db136945667f40a7668627b3490b9513a3d43a55"
 dependencies = [
- "axum",
+ "axum 0.8.4",
  "base64 0.22.1",
  "mime_guess",
  "regex",
@@ -7186,6 +7327,7 @@ dependencies = [
  "serde",
  "serde_json",
  "siumai 0.9.1",
+ "sqlx",
  "tempfile",
  "tera",
  "thiserror 2.0.16",
@@ -7306,9 +7448,11 @@ dependencies = [
  "anyhow",
  "argon2",
  "askama",
+ "async-stream",
  "async-trait",
- "axum",
+ "axum 0.8.4",
  "axum-extra",
+ "axum-test",
  "base64 0.22.1",
  "chrono",
  "clap",
@@ -7316,6 +7460,9 @@ dependencies = [
  "criterion",
  "dirs",
  "dotenvy",
+ "futures-util",
+ "http-body-util",
+ "hyper 1.7.0",
  "include_dir",
  "jsonwebtoken",
  "rand 0.8.5",
@@ -7352,7 +7499,7 @@ name = "wikify-wiki"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum",
+ "axum 0.8.4",
  "chrono",
  "dirs",
  "futures",
@@ -7832,6 +7979,12 @@ dependencies = [
  "encoding_rs",
  "hashlink",
 ]
+
+[[package]]
+name = "yansi"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "yoke"

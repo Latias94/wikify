@@ -19,8 +19,6 @@ import {
   InitializeRepositoryRequest,
   InitializeRepositoryResponse,
   RepositoriesResponse,
-  Session,
-  SessionsResponse,
   ChatQueryRequest,
   ChatQueryResponse,
   QueryHistoryResponse,
@@ -160,6 +158,9 @@ export class ApiClient {
         const token = localStorage.getItem("wikify_access_token");
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+          console.log(`🔑 Added Authorization header for ${config.url}`);
+        } else {
+          console.log(`⚠️ No access token found for ${config.url}`);
         }
 
         console.log(
@@ -189,13 +190,23 @@ export class ApiClient {
         const config = error.config as ExtendedAxiosRequestConfig;
         const requestKey = `${config?.method}-${config?.url}`;
 
+        console.log(
+          `❌ API Error Response: ${error.response?.status} for ${config?.url}`
+        );
+        console.log(`🔍 Error details:`, error.response?.data);
+
         // 处理401未授权错误 - 尝试刷新token
         if (
           error.response?.status === 401 &&
           config &&
           !config.url?.includes("/auth/")
         ) {
+          console.log(
+            `🔄 401 error detected for ${config.url}, attempting token refresh...`
+          );
           const refreshToken = localStorage.getItem("wikify_refresh_token");
+          console.log(`🔍 Refresh token available: ${!!refreshToken}`);
+          console.log(`🔍 Request already retried: ${!!config._retry}`);
 
           if (refreshToken && !config._retry) {
             config._retry = true;
@@ -205,6 +216,7 @@ export class ApiClient {
               const response = await this.instance.post("/auth/refresh", {
                 refresh_token: refreshToken,
               });
+              console.log("🔄 Refresh response:", response.data);
 
               const { tokens } = response.data;
               localStorage.setItem("wikify_access_token", tokens.access_token);
@@ -229,7 +241,17 @@ export class ApiClient {
               // 可以在这里触发重新登录
               window.dispatchEvent(new CustomEvent("auth:token-expired"));
             }
+          } else {
+            console.log(
+              `⚠️ Cannot refresh token - refreshToken: ${!!refreshToken}, already retried: ${!!config._retry}`
+            );
           }
+        } else {
+          console.log(
+            `ℹ️ Skipping token refresh for ${config.url} - status: ${
+              error.response?.status
+            }, is auth endpoint: ${config.url?.includes("/auth/")}`
+          );
         }
 
         // 重试逻辑
@@ -486,10 +508,10 @@ export class ApiClient {
   /**
    * 获取仓库信息
    */
-  async getRepository(sessionId: string): Promise<Repository> {
+  async getRepository(repositoryId: string): Promise<Repository> {
     return this.request<Repository>({
       method: "GET",
-      url: `/repositories/${sessionId}`,
+      url: `/repositories/${repositoryId}`,
     });
   }
 
@@ -497,11 +519,11 @@ export class ApiClient {
    * 重新索引仓库
    */
   async reindexRepository(
-    sessionId: string
+    repositoryId: string
   ): Promise<InitializeRepositoryResponse> {
     return this.request<InitializeRepositoryResponse>({
       method: "POST",
-      url: `/repositories/${sessionId}/reindex`,
+      url: `/repositories/${repositoryId}/reindex`,
     });
   }
 
@@ -512,41 +534,6 @@ export class ApiClient {
     return this.request<void>({
       method: "DELETE",
       url: `/repositories/${repositoryId}`,
-    });
-  }
-
-  // ============================================================================
-  // 会话管理 API
-  // ============================================================================
-
-  /**
-   * 获取会话列表
-   */
-  async getSessions(): Promise<SessionsResponse> {
-    return this.request<SessionsResponse>({
-      method: "GET",
-      url: "/sessions",
-    });
-  }
-
-  /**
-   * 创建新会话
-   */
-  async createSession(repositoryId: string, name?: string): Promise<Session> {
-    return this.request<Session>({
-      method: "POST",
-      url: "/sessions",
-      data: { repository_id: repositoryId, name },
-    });
-  }
-
-  /**
-   * 删除会话
-   */
-  async deleteSession(sessionId: string): Promise<void> {
-    return this.request<void>({
-      method: "DELETE",
-      url: `/sessions/${sessionId}`,
     });
   }
 
@@ -597,10 +584,10 @@ export class ApiClient {
   /**
    * 获取 Wiki 内容
    */
-  async getWiki(sessionId: string): Promise<WikiStructure> {
+  async getWiki(repositoryId: string): Promise<WikiStructure> {
     return this.request<WikiStructure>({
       method: "GET",
-      url: `/wiki/${sessionId}`,
+      url: `/wiki/${repositoryId}`,
     });
   }
 
@@ -608,12 +595,12 @@ export class ApiClient {
    * 导出 Wiki
    */
   async exportWiki(
-    sessionId: string,
+    repositoryId: string,
     format: "markdown" | "html" | "pdf"
   ): Promise<Blob> {
     const response = await this.instance.request({
       method: "POST",
-      url: `/wiki/${sessionId}/export`,
+      url: `/wiki/${repositoryId}/export`,
       data: { format },
       responseType: "blob",
     });

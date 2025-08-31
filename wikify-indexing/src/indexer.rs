@@ -3,7 +3,10 @@
 //! This module provides document indexing functionality using cheungfun's
 //! text splitters and node parsers.
 
-use cheungfun_core::{traits::Transform, Document, Node};
+use cheungfun_core::{
+    traits::{TypedData, TypedTransform},
+    Document, Node,
+};
 use cheungfun_indexing::loaders::ProgrammingLanguage;
 use cheungfun_indexing::node_parser::{
     text::{CodeSplitter, MarkdownNodeParser, SentenceSplitter, TokenTextSplitter},
@@ -175,28 +178,32 @@ impl DocumentIndexer {
 
     /// Split document using sentence splitter
     async fn split_with_sentence_splitter(&self, document: Document) -> WikifyResult<Vec<Node>> {
-        let input = cheungfun_core::traits::TransformInput::Document(document);
+        let input = TypedData::from_documents(vec![document]);
 
-        self.sentence_splitter.transform(input).await.map_err(|e| {
+        let result = self.sentence_splitter.transform(input).await.map_err(|e| {
             Box::new(WikifyError::Indexing {
                 message: format!("Sentence splitting failed: {}", e),
                 source: Some(Box::new(e)),
                 context: ErrorContext::new("document_indexer").with_operation("sentence_split"),
             })
-        })
+        })?;
+
+        Ok(result.into_nodes())
     }
 
     /// Split document using token splitter
     async fn split_with_token_splitter(&self, document: Document) -> WikifyResult<Vec<Node>> {
-        let input = cheungfun_core::traits::TransformInput::Document(document);
+        let input = TypedData::from_documents(vec![document]);
 
-        self.token_splitter.transform(input).await.map_err(|e| {
+        let result = self.token_splitter.transform(input).await.map_err(|e| {
             Box::new(WikifyError::Indexing {
                 message: format!("Token splitting failed: {}", e),
                 source: Some(Box::new(e)),
                 context: ErrorContext::new("document_indexer").with_operation("token_split"),
             })
-        })
+        })?;
+
+        Ok(result.into_nodes())
     }
 
     /// Detect programming language from file extension or language hint

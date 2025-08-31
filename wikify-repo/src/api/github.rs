@@ -51,7 +51,9 @@ struct GitHubTreeItem {
 struct GitHubContentResponse {
     content: String,
     encoding: String,
+    #[allow(dead_code)] // Metadata field, may be used in future
     size: u64,
+    #[allow(dead_code)] // Metadata field, may be used in future
     sha: String,
 }
 

@@ -49,7 +49,7 @@ export interface InitializeRepositoryRequest {
  * 仓库初始化响应
  */
 export interface InitializeRepositoryResponse {
-  session_id: string;
+  repository_id: string;
   status: string;
   message: string;
 }
@@ -129,7 +129,7 @@ export interface SourceDocument {
  * 聊天查询请求
  */
 export interface ChatQueryRequest {
-  session_id: string;
+  repository_id: string;
   question: string;
   context?: string;
 }
@@ -140,7 +140,7 @@ export interface ChatQueryRequest {
 export interface ChatQueryResponse {
   answer: string;
   sources: SourceDocument[];
-  session_id: string;
+  repository_id: string;
   timestamp: string;
 }
 
@@ -151,7 +151,6 @@ export interface QueryHistory {
   id: string;
   user_id: string;
   repository_id: string;
-  session_id?: string;
   question: string;
   answer: string;
   sources: SourceDocument[];
@@ -237,7 +236,7 @@ export interface WikiGenerationConfig {
  * Wiki 生成请求
  */
 export interface GenerateWikiRequest {
-  session_id: string;
+  repository_id: string;
   config: WikiGenerationConfig;
 }
 
@@ -303,7 +302,6 @@ export interface ResearchStage {
  */
 export interface DeepResearchRequest {
   repository_id: string;
-  session_id?: string;
   query: string;
   max_iterations?: number;
   research_strategy?: "comprehensive" | "focused" | "exploratory";
@@ -314,7 +312,7 @@ export interface DeepResearchRequest {
  */
 export interface DeepResearchResponse {
   research_id: string;
-  session_id: string;
+  repository_id: string;
   status: "planning" | "researching" | "completed" | "failed";
   current_iteration: number;
   max_iterations: number;

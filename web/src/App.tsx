@@ -37,8 +37,8 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
-              <Route path="/chat/:sessionId" element={<ChatInterface />} />
-              <Route path="/wiki/:sessionId" element={<WikiViewer />} />
+              <Route path="/chat/:repositoryId" element={<ChatInterface />} />
+              <Route path="/wiki/:repositoryId" element={<WikiViewer />} />
               <Route path="/research/:repositoryId" element={<ResearchPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
