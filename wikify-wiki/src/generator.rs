@@ -326,6 +326,13 @@ impl WikiGenerator {
             })?
         };
 
+        // Log the LLM response for debugging
+        debug!(
+            "LLM response for wiki structure generation: {}",
+            response.answer
+        );
+        info!("LLM response length: {} characters", response.answer.len());
+
         // Parse the structured response
         let wiki_structure =
             self.parse_wiki_structure_response(&response.answer, repo_info, config)?;
@@ -446,6 +453,11 @@ Generate detailed, accurate documentation that would be valuable for developers 
         repo_info: &RepositoryInfo,
         config: &WikiConfig,
     ) -> WikifyResult<WikiStructure> {
+        debug!(
+            "Parsing wiki structure response. Full response: {}",
+            response
+        );
+
         // Try to extract JSON from the response
         let json_str = if let Some(start) = response.find('{') {
             if let Some(end) = response.rfind('}') {
@@ -457,11 +469,16 @@ Generate detailed, accurate documentation that would be valuable for developers 
             response
         };
 
-        let parsed: Value = serde_json::from_str(json_str).map_err(|e| WikifyError::Config {
-            message: format!("Failed to parse wiki structure JSON: {}", e),
-            source: Some(Box::new(e)),
-            context: ErrorContext::new("wiki_generator")
-                .with_suggestion("Check LLM response format"),
+        debug!("Extracted JSON string: {}", json_str);
+
+        let parsed: Value = serde_json::from_str(json_str).map_err(|e| {
+            debug!("JSON parsing failed. Error: {}, JSON: {}", e, json_str);
+            WikifyError::Config {
+                message: format!("Failed to parse wiki structure JSON: {}", e),
+                source: Some(Box::new(e)),
+                context: ErrorContext::new("wiki_generator")
+                    .with_suggestion("Check LLM response format"),
+            }
         })?;
 
         // Convert parsed JSON to WikiStructure
@@ -479,15 +496,19 @@ Generate detailed, accurate documentation that would be valuable for developers 
 
         // Parse pages
         if let Some(pages_array) = parsed["pages"].as_array() {
+            debug!("Found {} pages in LLM response", pages_array.len());
             for (index, page_obj) in pages_array.iter().enumerate() {
                 let page_id = page_obj["id"]
                     .as_str()
                     .unwrap_or(&format!("page-{}", index + 1))
                     .to_string();
 
+                let page_title = page_obj["title"].as_str().unwrap_or("Untitled").to_string();
+                debug!("Parsing page {}: {} ({})", index + 1, page_title, page_id);
+
                 let mut page = WikiPage::new(
                     page_id,
-                    page_obj["title"].as_str().unwrap_or("Untitled").to_string(),
+                    page_title,
                     page_obj["description"].as_str().unwrap_or("").to_string(),
                 );
 
@@ -500,6 +521,10 @@ Generate detailed, accurate documentation that would be valuable for developers 
                         "critical" => ImportanceLevel::Critical,
                         _ => ImportanceLevel::Medium,
                     };
+                    debug!(
+                        "Set importance for page {}: {:?}",
+                        page.title, page.importance
+                    );
                 }
 
                 // Set file paths
@@ -509,6 +534,11 @@ Generate detailed, accurate documentation that would be valuable for developers 
                         .filter_map(|f| f.as_str())
                         .map(|s| s.to_string())
                         .collect();
+                    debug!(
+                        "Set {} file paths for page {}",
+                        page.file_paths.len(),
+                        page.title
+                    );
                 }
 
                 // Set tags
@@ -518,10 +548,13 @@ Generate detailed, accurate documentation that would be valuable for developers 
                         .filter_map(|t| t.as_str())
                         .map(|s| s.to_string())
                         .collect();
+                    debug!("Set {} tags for page {}", page.tags.len(), page.title);
                 }
 
                 wiki_structure.pages.push(page);
             }
+        } else {
+            debug!("No 'pages' array found in LLM response");
         }
 
         // Parse sections
@@ -562,10 +595,27 @@ Generate detailed, accurate documentation that would be valuable for developers 
             }
         }
 
+        // If no pages were generated, return an error instead of creating fallback content
+        if wiki_structure.pages.is_empty() {
+            debug!("No pages found in LLM response, wiki generation failed");
+            return Err(Box::new(WikifyError::WikiGeneration {
+                message: "LLM failed to generate any wiki pages. The response may have been malformed or the repository content may be insufficient for wiki generation.".to_string(),
+                source: None,
+                context: ErrorContext::new("wiki_generator")
+                    .with_suggestion("Try regenerating the wiki or check the repository content"),
+            }));
+        }
+
         // Update metadata
         wiki_structure.metadata.config = config.clone();
         wiki_structure.metadata.stats.total_pages = wiki_structure.pages.len();
         wiki_structure.metadata.stats.total_sections = wiki_structure.sections.len();
+
+        info!(
+            "Final wiki structure: {} pages, {} sections",
+            wiki_structure.pages.len(),
+            wiki_structure.sections.len()
+        );
 
         Ok(wiki_structure)
     }

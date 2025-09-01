@@ -134,9 +134,23 @@ export function useRepositories() {
         setLoading("repositories", true);
         try {
           const response = await apiClient.getRepositories();
-          setRepositories(response.repositories);
+
+          // 数据去重，防止重复的仓库ID导致渲染问题
+          const uniqueRepositories = response.repositories.filter(
+            (repo, index, arr) =>
+              arr.findIndex((r) => r.id === repo.id) === index
+          );
+
+          // 如果发现重复数据，记录警告
+          if (uniqueRepositories.length !== response.repositories.length) {
+            console.warn(
+              `发现重复仓库数据: 原始${response.repositories.length}个，去重后${uniqueRepositories.length}个`
+            );
+          }
+
+          setRepositories(uniqueRepositories);
           setError("repositories", undefined);
-          return response;
+          return { ...response, repositories: uniqueRepositories };
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
@@ -165,7 +179,7 @@ export function useInitializeRepository() {
     mutationFn: (data: InitializeRepositoryRequest) =>
       apiClient.initializeRepository(data),
     onSuccess: (response, variables) => {
-      // 刷新仓库列表
+      // 正常的invalidation，后端WebSocket已经修复了重复消息问题
       queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
 
       toast({
@@ -223,7 +237,7 @@ export function useReindexRepository() {
     mutationFn: (repositoryId: string) =>
       apiClient.reindexRepository(repositoryId),
     onSuccess: (response, repositoryId) => {
-      // 刷新仓库列表
+      // 正常的invalidation
       queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
 
       toast({
@@ -275,7 +289,7 @@ export function useDeleteRepository() {
           // 更新本地状态
           removeRepository(repositoryId);
 
-          // 刷新相关查询
+          // 正常的invalidation和清理
           queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
           queryClient.removeQueries({
             queryKey: queryKeys.repository(repositoryId),
@@ -387,6 +401,15 @@ export function useWiki(repositoryId: string) {
       {
         enabled: !!repositoryId,
         staleTime: 10 * 60 * 1000, // 10 minutes
+        retry: (failureCount, error: any) => {
+          // Don't retry on 404 (wiki not found) or 500 (generation failed)
+          if (error?.status === 404 || error?.status === 500) {
+            return false;
+          }
+          // Retry up to 2 times for other errors
+          return failureCount < 2;
+        },
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       }
     )
   );

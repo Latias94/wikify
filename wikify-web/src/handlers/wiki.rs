@@ -191,26 +191,12 @@ pub async fn get_wiki(
                     })
                 }
             } else {
-                // No structure stored, use simple format
-                serde_json::json!({
-                    "id": wiki_record.id,
-                    "title": wiki_record.title,
-                    "description": wiki_record.description.unwrap_or_default(),
-                    "pages": [{
-                        "id": "main",
-                        "title": "Main Documentation",
-                        "content": wiki_record.content,
-                        "description": "Main documentation page",
-                        "importance": "Critical",
-                        "file_paths": [],
-                        "related_pages": [],
-                        "tags": ["documentation"],
-                        "reading_time": (wiki_record.content.split_whitespace().count() / 200).max(1),
-                        "generated_at": wiki_record.generated_at,
-                        "source_documents": []
-                    }],
-                    "sections": []
-                })
+                // No structure stored in database - return not found
+                info!(
+                    "Database wiki record found without structure for repository: {}",
+                    repository_id
+                );
+                return Err(StatusCode::NOT_FOUND);
             };
 
             return Ok(Json(wiki_response));
@@ -225,28 +211,55 @@ pub async fn get_wiki(
             repository_id
         );
 
-        // Convert cached content to WikiStructure format
-        let wiki_structure = serde_json::json!({
-            "id": repository_id,
-            "title": format!("{} Wiki", repository.url.split('/').last().unwrap_or("Repository")),
-            "description": format!("Generated wiki for repository: {}", repository.url),
-            "pages": [{
-                "id": "main",
-                "title": "Main Documentation",
-                "content": cached_wiki.content,
-                "description": "Main documentation page",
-                "importance": "Critical",
-                "file_paths": [],
-                "related_pages": [],
-                "tags": ["documentation"],
-                "reading_time": (cached_wiki.content.split_whitespace().count() / 200).max(1), // ~200 words per minute
-                "generated_at": cached_wiki.generated_at.to_rfc3339(),
-                "source_documents": []
-            }],
-            "sections": []
-        });
+        // Check if we have the full wiki structure cached
+        if let Some(ref wiki_structure) = cached_wiki.structure {
+            info!(
+                "Returning full wiki structure with {} pages and {} sections",
+                wiki_structure.pages.len(),
+                wiki_structure.sections.len()
+            );
 
-        return Ok(Json(wiki_structure));
+            // Convert WikiStructure to JSON response format
+            let wiki_response = serde_json::json!({
+                "id": wiki_structure.id,
+                "title": wiki_structure.title,
+                "description": wiki_structure.description,
+                "pages": wiki_structure.pages.iter().map(|page| {
+                    serde_json::json!({
+                        "id": page.id,
+                        "title": page.title,
+                        "content": page.content,
+                        "description": page.description,
+                        "importance": format!("{:?}", page.importance),
+                        "file_paths": page.file_paths,
+                        "related_pages": page.related_pages,
+                        "tags": page.tags,
+                        "reading_time": page.reading_time,
+                        "generated_at": page.generated_at.to_rfc3339(),
+                        "source_documents": page.source_documents
+                    })
+                }).collect::<Vec<_>>(),
+                "sections": wiki_structure.sections.iter().map(|section| {
+                    serde_json::json!({
+                        "id": section.id,
+                        "title": section.title,
+                        "description": section.description,
+                        "pages": section.pages,
+                        "subsections": section.subsections,
+                        "order": section.order
+                    })
+                }).collect::<Vec<_>>()
+            });
+
+            return Ok(Json(wiki_response));
+        } else {
+            // Legacy cached content without structure - return not found
+            info!(
+                "Legacy cached content found without structure for repository: {}",
+                repository_id
+            );
+            return Err(StatusCode::NOT_FOUND);
+        }
     }
     drop(wiki_cache);
 
@@ -264,15 +277,16 @@ pub async fn get_wiki(
         .await
     {
         Ok(wiki_structure) => {
-            // Extract actual markdown content from the first page, or create a summary
-            let wiki_content = if let Some(first_page) = wiki_structure.pages.first() {
-                first_page.content.clone()
-            } else {
-                format!(
-                    "# {}\n\n{}\n\nNo content pages were generated.",
-                    wiki_structure.title, wiki_structure.description
-                )
-            };
+            // Extract actual markdown content from the first page
+            let wiki_content = wiki_structure
+                .pages
+                .first()
+                .map(|page| page.content.clone())
+                .unwrap_or_else(|| {
+                    // This should not happen since we check for empty pages in the generator
+                    error!("Wiki structure has no pages despite passing validation");
+                    String::new()
+                });
             let generated_at = chrono::Utc::now();
 
             // Store in database if available
@@ -293,6 +307,7 @@ pub async fn get_wiki(
                 generated_at,
                 repository: repository.url.clone(),
                 format: "markdown".to_string(),
+                structure: Some(wiki_structure.clone()),
             };
 
             let mut wiki_cache = state.wiki_cache.write().await;

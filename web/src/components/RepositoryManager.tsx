@@ -123,8 +123,8 @@ const RepositoryManager = () => {
             auto_generate_wiki: true,
           });
 
-          // Refresh repositories list
-          refetch();
+          // React Query会自动invalidate repositories查询，不需要手动refetch
+          // refetch(); // 移除手动refetch，避免重复请求
         },
         onSettled: () => {
           // Always reset loading state after request completes (success or error)
@@ -182,7 +182,7 @@ const RepositoryManager = () => {
       return;
     }
 
-    // Check wiki status
+    // Only prevent navigation if wiki is currently being generated
     if (repository.wiki_status === 'generating') {
       toast({
         title: "Wiki Being Generated",
@@ -192,26 +192,8 @@ const RepositoryManager = () => {
       return;
     }
 
-    if (repository.wiki_status === 'failed') {
-      toast({
-        title: "Wiki Generation Failed",
-        description: "The wiki generation failed. Please try generating it again.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (repository.wiki_status === 'not_generated' || !repository.wiki_status) {
-      toast({
-        title: "Wiki Not Available",
-        description: "No wiki has been generated for this repository yet. Please generate one first.",
-        variant: "destructive"
-      });
-      return;
-    }
-
     try {
-      // Navigate to wiki page using repository.id
+      // Always navigate to wiki page - let WikiViewer handle error states
       navigate(`/wiki/${repository.id}`);
     } catch (error) {
       console.error('Failed to navigate to wiki:', error);
@@ -649,16 +631,14 @@ const RepositoryManager = () => {
                         onClick={() => handleStartWiki(repo)}
                         disabled={
                           repo.status !== 'indexed' ||
-                          repo.wiki_status === 'generating' ||
-                          repo.wiki_status === 'not_generated' ||
-                          !repo.wiki_status
+                          repo.wiki_status === 'generating'
                         }
                       >
                         <BookOpen className="h-4 w-4" />
                         {repo.wiki_status === 'generating' ? 'Generating...' :
                          repo.wiki_status === 'generated' ? 'View Wiki' :
-                         repo.wiki_status === 'failed' ? 'Wiki Failed' :
-                         'No Wiki'}
+                         repo.wiki_status === 'failed' ? 'View Wiki' :
+                         'View Wiki'}
                       </Button>
 
                       <Button

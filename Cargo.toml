@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "wikify-core",
     "wikify-repo",
-    "wikify-indexing",
     "wikify-rag",
     "wikify-applications",
     "wikify-wiki",

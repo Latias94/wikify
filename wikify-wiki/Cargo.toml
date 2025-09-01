@@ -7,7 +7,6 @@ edition = "2021"
 # Core dependencies
 wikify-core = { path = "../wikify-core" }
 wikify-rag = { path = "../wikify-rag" }
-wikify-indexing = { path = "../wikify-indexing" }
 
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }

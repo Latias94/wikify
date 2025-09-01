@@ -1,4 +1,4 @@
-//! Wikify Indexing - Document indexing and processing module
+//! Document indexing and processing module
 //!
 //! This module integrates with cheungfun to provide document loading, parsing,
 //! and indexing capabilities for the Wikify system.

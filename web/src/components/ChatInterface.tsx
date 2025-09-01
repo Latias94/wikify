@@ -35,6 +35,7 @@ import {
 import {
   useSelectedRepository,
 } from "@/store/app-store";
+import { useRepositories } from "@/hooks/use-api";
 
 // Utils and types
 import { UIChatMessage } from "@/types/ui";
@@ -52,6 +53,9 @@ const ChatInterface = () => {
   const isConnected = useIsConnected();
   const streamingMessage = useStreamingMessage();
   const chatError = useChatError(repositoryId || '');
+
+  // 确保数据刷新
+  const { refetch } = useRepositories();
 
   // Store actions
   const {
@@ -151,6 +155,11 @@ const ChatInterface = () => {
   }, [reconnect, toast]);
 
   // Effects
+  useEffect(() => {
+    // 强制重新获取repositories数据以确保repository信息是最新的
+    refetch();
+  }, [refetch]);
+
   useEffect(() => {
     // 验证仓库是否存在
     if (!repositoryId) {

@@ -3,13 +3,14 @@
  * 提供深度研究功能的完整界面
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DeepResearchInterface } from '@/components/research';
 import { AuthRequired, FeatureConditional } from '@/components/AuthProvider';
 import { useRepositoryById } from '@/store/app-store';
+import { useRepositories } from '@/hooks/use-api';
 import { ArrowLeft, Brain, AlertCircle } from 'lucide-react';
 
 // ============================================================================
@@ -20,6 +21,14 @@ const ResearchPage: React.FC = () => {
   const { repositoryId } = useParams<{ repositoryId: string }>();
   const navigate = useNavigate();
   const repository = useRepositoryById(repositoryId || '');
+
+  // 确保数据刷新
+  const { refetch } = useRepositories();
+
+  useEffect(() => {
+    // 强制重新获取repositories数据以确保repository信息是最新的
+    refetch();
+  }, [refetch]);
 
   // 处理研究完成
   const handleResearchComplete = (conclusion: string) => {

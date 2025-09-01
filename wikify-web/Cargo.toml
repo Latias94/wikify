@@ -15,7 +15,6 @@ wikify-core = { path = "../wikify-core" }
 wikify-applications = { path = "../wikify-applications", features = ["openapi", "sqlite"] }
 wikify-rag = { path = "../wikify-rag" }
 wikify-wiki = { path = "../wikify-wiki" }
-wikify-indexing = { path = "../wikify-indexing" }
 wikify-repo = { path = "../wikify-repo" }
 
 # Web framework

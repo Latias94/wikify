@@ -139,14 +139,9 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
 /// Create WebSocket routes
 pub fn websocket_routes() -> Router<AppState> {
     Router::new()
-        // Main chat WebSocket
-        .route("/chat", get(websocket::chat_handler))
-        // Wiki generation WebSocket (for progress updates)
-        .route("/wiki", get(websocket::wiki_handler))
-        // Repository indexing WebSocket (for progress updates)
-        .route("/index", get(websocket::index_handler))
-        // Global WebSocket (for unified progress updates)
-        .route("/global", get(websocket::global_handler))
+        // WebSocket endpoint for all real-time communication
+        .route("/", get(websocket::unified_handler))
+        .route("/global", get(websocket::unified_handler))
 }
 
 /// Create static file routes

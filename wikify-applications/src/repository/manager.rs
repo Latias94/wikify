@@ -494,7 +494,34 @@ impl RepositoryManager {
             "Preparing repository indexing...".to_string(),
         ));
 
-        match rag_pipeline.index_repository(repository_url).await {
+        // Create progress callback that forwards to the broadcaster
+        let repository_id_clone = repository_id.to_string();
+        let progress_tx_clone = progress_tx.clone();
+        let progress_callback = Box::new(
+            move |stage: String, percentage: f64, current_item: Option<String>| {
+                // RAG pipeline sends percentage as 0.0-100.0, convert to 0.0-1.0 for IndexingUpdate
+                let normalized_percentage = percentage / 100.0;
+
+                // Create stage description with current item if available
+                let stage_description = if let Some(item) = current_item {
+                    format!("{}: {}", stage, item)
+                } else {
+                    stage
+                };
+
+                // Send only one progress update per callback to avoid duplicates
+                let _ = progress_tx_clone.send(IndexingUpdate::progress(
+                    repository_id_clone.clone(),
+                    normalized_percentage,
+                    stage_description,
+                ));
+            },
+        );
+
+        match rag_pipeline
+            .index_repository_with_progress(repository_url, Some(progress_callback))
+            .await
+        {
             Ok(stats) => {
                 let duration = start_time.elapsed();
                 info!(

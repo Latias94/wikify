@@ -63,6 +63,7 @@ pub struct CachedWiki {
     pub generated_at: chrono::DateTime<chrono::Utc>,
     pub repository: String,
     pub format: String,
+    pub structure: Option<wikify_wiki::WikiStructure>,
 }
 
 /// Clean application state using unified application layer

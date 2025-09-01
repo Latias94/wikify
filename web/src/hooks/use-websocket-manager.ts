@@ -14,11 +14,14 @@ interface WebSocketManagerState {
   lastError?: string;
 }
 
+// 全局消息去重集合 - 简化版本
+const processedMessages = new Set<string>();
+
 /**
- * 全局 WebSocket 连接管理器
+ * 统一 WebSocket 连接管理器
  *
- * 这个 hook 管理一个全局的 WebSocket 连接，避免重复连接
- * 所有需要监听进度的组件都可以使用这个连接
+ * 使用后端的统一WebSocket端点，处理所有类型的实时通信
+ * 包括聊天、Wiki生成、索引进度等
  */
 export function useWebSocketManager() {
   const wsRef = useRef<WebSocketClient | null>(null);
@@ -75,12 +78,15 @@ export function useWebSocketManager() {
         setState((prev) => ({ ...prev, lastError: errorMessage }));
       },
 
-      // 统一消息处理
+      // 简化的消息处理 - 后端已经处理了去重
       onMessage: (message: any) => {
         try {
+          console.log("WebSocket message received:", message.type, message);
+
           switch (message.type) {
             // 索引进度消息
             case "IndexProgress":
+            case "index_progress":
               handleIndexProgress(message);
               break;
 
@@ -95,6 +101,9 @@ export function useWebSocketManager() {
               break;
 
             case "IndexError":
+              console.log(
+                `Index error for repository: ${message.repository_id}`
+              );
               handleIndexError(message);
               updateRepository(message.repository_id, {
                 status: "failed",

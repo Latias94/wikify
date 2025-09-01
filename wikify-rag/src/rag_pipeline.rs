@@ -122,7 +122,7 @@ impl RagPipeline {
         // Step 1: Run document indexing pipeline
         eprintln!("🔧 Creating document indexing pipeline...");
         let indexing_pipeline =
-            wikify_indexing::create_deepwiki_compatible_indexer().map_err(RagError::Core)?;
+            crate::create_deepwiki_compatible_indexer().map_err(RagError::Core)?;
 
         // Report progress: Document processing
         if let Some(ref callback) = progress_callback {
@@ -133,14 +133,42 @@ impl RagPipeline {
             );
         }
 
+        // Report progress: Loading documents
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Loading documents from repository".to_string(),
+                10.0,
+                Some(format!("Scanning repository: {}", local_path.display())),
+            );
+        }
+
         // Load documents from repository first
         eprintln!("📄 Loading documents from repository...");
         let documents = self.load_repository_documents(&local_path).await?;
         let documents_count = documents.len();
         eprintln!("📚 Found {} documents to process", documents_count);
 
+        // Report progress: Document loading complete
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Documents loaded".to_string(),
+                30.0,
+                Some(format!("Found {} documents", documents_count)),
+            );
+        }
+
         // Index the documents
         eprintln!("⚙️ Indexing documents...");
+
+        // Report progress: Starting indexing
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Indexing documents".to_string(),
+                40.0,
+                Some(format!("Processing {} documents", documents_count)),
+            );
+        }
+
         let nodes = indexing_pipeline
             .index_documents(documents)
             .await
@@ -148,11 +176,20 @@ impl RagPipeline {
 
         eprintln!("📚 Indexed documents into {} nodes", nodes.len());
 
+        // Report progress: Indexing complete
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Document indexing complete".to_string(),
+                60.0,
+                Some(format!("Created {} nodes", nodes.len())),
+            );
+        }
+
         // Report progress: Embedding generation
         if let Some(ref callback) = progress_callback {
             callback(
                 "Generating embeddings".to_string(),
-                70.0,
+                80.0,
                 Some(format!("Processing {} nodes", nodes.len())),
             );
         }
@@ -418,8 +455,8 @@ impl RagPipeline {
         &self,
         repo_path: P,
     ) -> RagResult<Vec<cheungfun_core::Document>> {
+        use crate::DirectoryLoader;
         use cheungfun_core::traits::Loader;
-        use wikify_indexing::DirectoryLoader;
 
         let mut documents = Vec::new();
 
@@ -463,7 +500,7 @@ impl RagPipeline {
             .join("wikify")
             .join("repos");
 
-        // Create unified processor
+        // Create processor
         let processor = RepositoryProcessor::new(&base_path);
 
         // Configure for Git clone mode with shallow clone
@@ -475,7 +512,7 @@ impl RagPipeline {
             custom_local_path: None,
         };
 
-        // Access repository using unified processor
+        // Access repository using processor
         let access = processor
             .access_repository(repo_url, Some(config))
             .await

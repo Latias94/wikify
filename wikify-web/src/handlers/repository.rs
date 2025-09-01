@@ -24,17 +24,113 @@ async fn generate_wiki_for_repository(
     repository_id: &str,
     progress_sender: &tokio::sync::broadcast::Sender<crate::state::IndexingUpdate>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // This is a placeholder for wiki generation logic
-    // In the actual implementation, this would call the wiki generation service
-    info!("Auto-generating wiki for repository: {}", repository_id);
+    info!("Starting wiki generation for repository: {}", repository_id);
 
-    // Send completion update
-    let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationComplete {
+    // Create a local permission context for system operations (has all permissions)
+    let permission_context = wikify_applications::PermissionContext::local();
+
+    // Get repository information
+    let repository = match state
+        .application
+        .get_repository(&permission_context, repository_id)
+        .await
+    {
+        Ok(repo) => repo,
+        Err(e) => {
+            let error_msg = format!("Failed to get repository info: {}", e);
+            error!("{}", error_msg);
+            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationError {
+                repository_id: repository_id.to_string(),
+                error: error_msg,
+            });
+            return Err(e.into());
+        }
+    };
+
+    // Send initial progress update
+    let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
         repository_id: repository_id.to_string(),
-        wiki_content: "Wiki generated successfully".to_string(),
+        stage: "Initializing wiki generation...".to_string(),
+        percentage: 10.0,
     });
 
-    Ok(())
+    // Generate wiki using wiki service
+    let mut wiki_service = state.wiki_service.write().await;
+    let wiki_config = wikify_wiki::WikiConfig::default();
+
+    // Send progress update for wiki generation start
+    let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
+        repository_id: repository_id.to_string(),
+        stage: "Analyzing repository structure...".to_string(),
+        percentage: 30.0,
+    });
+
+    match wiki_service
+        .generate_wiki(&repository.url, &wiki_config)
+        .await
+    {
+        Ok(wiki_structure) => {
+            // Send progress update for content generation
+            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
+                repository_id: repository_id.to_string(),
+                stage: "Generating wiki content...".to_string(),
+                percentage: 70.0,
+            });
+
+            // Extract actual markdown content from the first page, or create a summary
+            let wiki_content = if let Some(first_page) = wiki_structure.pages.first() {
+                first_page.content.clone()
+            } else {
+                format!(
+                    "# {}\n\n{}\n\nNo content pages were generated.",
+                    wiki_structure.title, wiki_structure.description
+                )
+            };
+
+            // Send progress update for finalization
+            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
+                repository_id: repository_id.to_string(),
+                stage: "Finalizing wiki generation...".to_string(),
+                percentage: 90.0,
+            });
+
+            info!(
+                "Successfully generated wiki for repository: {} with {} pages",
+                repository_id,
+                wiki_structure.pages.len()
+            );
+
+            // Cache the generated wiki
+            let cached_wiki = crate::state::CachedWiki {
+                content: wiki_content.clone(),
+                generated_at: chrono::Utc::now(),
+                repository: repository.url.clone(),
+                format: "markdown".to_string(),
+                structure: Some(wiki_structure.clone()),
+            };
+
+            let mut wiki_cache = state.wiki_cache.write().await;
+            wiki_cache.insert(repository_id.to_string(), cached_wiki);
+            drop(wiki_cache);
+
+            // Send completion update
+            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationComplete {
+                repository_id: repository_id.to_string(),
+                wiki_content,
+            });
+
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to generate wiki: {}", e);
+            error!("{}", error_msg);
+            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationError {
+                repository_id: repository_id.to_string(),
+                error: error_msg,
+            });
+            Err(e.into())
+        }
+    }
 }
 
 /// Initialize repository for processing
@@ -124,7 +220,7 @@ pub async fn initialize_repository(
                             crate::state::IndexingUpdate::Progress {
                                 repository_id: update.repository_id.clone(),
                                 stage: update.message.clone(),
-                                percentage: update.progress * 100.0,
+                                percentage: update.progress, // Keep as 0.0-1.0 range
                                 current_item: Some(format!(
                                     "Processing... {:.1}%",
                                     update.progress * 100.0
@@ -194,7 +290,7 @@ pub async fn initialize_repository(
                             crate::state::IndexingUpdate::Progress {
                                 repository_id: update.repository_id.clone(),
                                 stage: update.message.clone(),
-                                percentage: update.progress * 100.0,
+                                percentage: update.progress, // Keep as 0.0-1.0 range
                                 current_item: Some(format!("Status: {:?}", update.status)),
                                 files_processed: None,
                                 total_files: None,

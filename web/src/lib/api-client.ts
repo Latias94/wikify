@@ -664,6 +664,7 @@ export function createQueryConfig<TData>(
     staleTime?: number;
     cacheTime?: number;
     refetchOnWindowFocus?: boolean;
+    refetchOnMount?: boolean;
   }
 ) {
   return {
@@ -672,6 +673,7 @@ export function createQueryConfig<TData>(
     staleTime: options?.staleTime ?? 5 * 60 * 1000, // 5 minutes
     cacheTime: options?.cacheTime ?? 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: options?.refetchOnWindowFocus ?? false,
+    refetchOnMount: options?.refetchOnMount ?? true, // 默认允许挂载时重新获取
   };
 }
 

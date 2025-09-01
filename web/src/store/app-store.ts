@@ -184,13 +184,30 @@ export const useAppStore = create<AppStore>()(
 
         setRepositories: (repositories) => {
           set((state) => {
+            console.log(
+              `Setting repositories: ${repositories.length} items`,
+              repositories.map((r) => ({ id: r.id, name: r.name }))
+            );
             state.repositories = repositories;
           });
         },
 
         addRepository: (repository) => {
           set((state) => {
-            state.repositories.push(repository);
+            // 检查是否已存在相同ID的仓库，避免重复添加
+            const existingIndex = state.repositories.findIndex(
+              (r) => r.id === repository.id
+            );
+            if (existingIndex === -1) {
+              console.log(
+                `Adding new repository: ${repository.id} - ${repository.name}`
+              );
+              state.repositories.push(repository);
+            } else {
+              console.warn(
+                `Repository ${repository.id} already exists, skipping add`
+              );
+            }
           });
         },
 

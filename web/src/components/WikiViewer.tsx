@@ -31,6 +31,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { StreamingContent } from "@/components/chat/StreamingContent";
 import { WikiSearch } from "@/components/WikiSearch";
 import { WikiExportDialog } from "@/components/WikiExportDialog";
+import { WikiEmptyState } from "@/components/WikiEmptyState";
 
 // Hooks and API
 import { useWiki } from "@/hooks/use-api";
@@ -176,19 +177,43 @@ const WikiViewer = ({ className }: WikiViewerProps) => {
 
   // Error state
   if (error || !wiki) {
+    // Determine error type
+    const isNotFound = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('Not Found');
+    const isServerError = error?.status === 500 || error?.message?.includes('500') || error?.message?.includes('Internal Server Error');
+
+    let emptyStateType: 'not_found' | 'generation_failed' | 'no_content' = 'not_found';
+
+    if (isServerError) {
+      emptyStateType = 'generation_failed';
+    } else if (isNotFound) {
+      emptyStateType = 'not_found';
+    }
+
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <FileText className="h-8 w-8 text-destructive mx-auto mb-4" />
-          <h2 className="text-lg font-semibold mb-2">Failed to Load Wiki</h2>
-          <p className="text-muted-foreground mb-4">
-            {error?.message || "Unable to load wiki documentation"}
-          </p>
-          <Button onClick={handleGoBack}>
-            Return to Home
-          </Button>
-        </div>
-      </div>
+      <WikiEmptyState
+        repositoryId={repositoryId || ''}
+        type={emptyStateType}
+        onGenerateWiki={() => navigate('/')}
+        onRetry={() => {
+          // Trigger a refetch
+          window.location.reload();
+        }}
+      />
+    );
+  }
+
+  // Check if wiki has no content
+  if (wiki && (!wiki.pages || wiki.pages.length === 0)) {
+    return (
+      <WikiEmptyState
+        repositoryId={repositoryId || ''}
+        type="no_content"
+        onGenerateWiki={() => navigate('/')}
+        onRetry={() => {
+          // Trigger a refetch
+          window.location.reload();
+        }}
+      />
     );
   }
 
