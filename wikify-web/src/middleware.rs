@@ -103,12 +103,12 @@ pub async fn user_context_middleware(mut request: Request, next: Next) -> Respon
     if let Some(auth_str) = auth_header {
         if auth_str.starts_with("Bearer ") {
             let token = &auth_str[7..]; // Remove "Bearer " prefix
-            
+
             // 尝试验证JWT token
             match JwtService::verify_token(token) {
                 Ok(claims) => {
                     debug!("Valid JWT token found for user: {}", claims.sub);
-                    
+
                     // 创建User并添加到请求扩展
                     if let Ok(user) = claims.to_user() {
                         debug!("User authenticated via JWT: {}", user.id);

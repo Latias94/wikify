@@ -101,6 +101,23 @@ pub struct RepositoryOptions {
     pub auto_index: bool,
     /// Additional metadata
     pub metadata: Option<HashMap<String, String>>,
+    /// Preferred access mode (API vs Git clone)
+    pub access_mode: Option<RepositoryAccessMode>,
+    /// API token for private repositories
+    pub api_token: Option<String>,
+    /// Whether to extract enhanced metadata
+    pub extract_metadata: bool,
+}
+
+/// Repository access mode preference
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RepositoryAccessMode {
+    /// Prefer API access (faster, less storage)
+    Api,
+    /// Prefer Git clone (full access, works offline)
+    GitClone,
+    /// Auto-detect best method
+    Auto,
 }
 
 impl Default for RepositoryOptions {
@@ -108,6 +125,9 @@ impl Default for RepositoryOptions {
         Self {
             auto_index: true,
             metadata: None,
+            access_mode: Some(RepositoryAccessMode::Auto),
+            api_token: None,
+            extract_metadata: true,
         }
     }
 }

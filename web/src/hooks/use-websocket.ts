@@ -8,6 +8,7 @@ import { WebSocketClient } from "@/lib/websocket-client";
 import { useChatStore } from "@/store/chat-store";
 import { useAppStore } from "@/store/app-store";
 import { useToast } from "@/hooks/use-toast";
+import { useProgressIntegration } from "@/hooks/use-progress-integration";
 import {
   WebSocketConfig,
   WebSocketOptions,
@@ -238,126 +239,6 @@ export function useChatWebSocket(
 }
 
 // ============================================================================
-// Wiki WebSocket Hook
-// ============================================================================
-
-export function useWikiWebSocket(
-  repositoryId?: string,
-  config?: Partial<WebSocketConfig>,
-  options?: Partial<WebSocketOptions>
-) {
-  const wsRef = useRef<WebSocketClient | null>(null);
-  const { toast } = useToast();
-
-  // 初始化 WebSocket 连接
-  useEffect(() => {
-    if (!repositoryId) return;
-
-    const ws = new WebSocketClient("wiki", config, {
-      debug: import.meta.env.DEV,
-      ...options,
-    });
-
-    // 设置事件处理器
-    ws.setHandlers({
-      onConnect: () => {
-        console.log("Wiki WebSocket connected");
-      },
-
-      onDisconnect: () => {
-        console.log("Wiki WebSocket disconnected");
-      },
-
-      onError: (event) => {
-        console.error("Wiki WebSocket error:", event);
-      },
-
-      onWikiProgress: (message: WikiProgressMessage) => {
-        if (message.repository_id !== repositoryId) return;
-
-        console.log(
-          `Wiki generation progress: ${message.progress}% - ${message.current_step}`
-        );
-
-        // 这里可以触发进度更新的回调
-        // 或者更新全局状态
-      },
-
-      onWikiComplete: (message: WikiCompleteMessage) => {
-        if (message.repository_id !== repositoryId) return;
-
-        console.log("Wiki generation completed:", message);
-
-        toast({
-          title: "Wiki Generated",
-          description: `Wiki "${message.title}" has been generated successfully with ${message.pages_count} pages.`,
-        });
-      },
-
-      onWikiError: (message: WikiErrorMessage) => {
-        if (message.repository_id !== repositoryId) return;
-
-        console.error("Wiki generation error:", message.error);
-
-        toast({
-          title: "Wiki Generation Failed",
-          description: message.error,
-          variant: "destructive",
-        });
-      },
-    });
-
-    wsRef.current = ws;
-
-    // 连接到 WebSocket
-    ws.connect().catch((error) => {
-      console.error("Failed to connect to wiki WebSocket:", error);
-    });
-
-    return () => {
-      ws.disconnect();
-      wsRef.current = null;
-    };
-  }, [repositoryId, config, options]);
-
-  // 生成 Wiki
-  const generateWiki = useCallback(
-    (config?: {
-      language?: string;
-      max_pages?: number;
-      include_diagrams?: boolean;
-      comprehensive_view?: boolean;
-    }) => {
-      if (!wsRef.current || !repositoryId) {
-        console.error("WebSocket not connected or repository not available");
-        return;
-      }
-
-      const wikiMessage: WikiGenerateMessage = {
-        type: "WikiGenerate",
-        repository_id: repositoryId,
-        config: config || {
-          language: "en",
-          max_pages: 50,
-          include_diagrams: true,
-          comprehensive_view: false,
-        },
-        timestamp: new Date().toISOString(),
-      };
-
-      wsRef.current.send(wikiMessage);
-    },
-    [repositoryId]
-  );
-
-  return {
-    generateWiki,
-    isConnected: () => wsRef.current?.isConnected() || false,
-    disconnect: () => wsRef.current?.disconnect(),
-  };
-}
-
-// ============================================================================
 // 索引进度 WebSocket Hook
 // ============================================================================
 
@@ -371,6 +252,13 @@ export function useIndexProgressWebSocket(
   const wsRef = useRef<WebSocketClient | null>(null);
   const { toast } = useToast();
   const { updateRepository } = useAppStore();
+  const {
+    handleIndexProgress,
+    handleIndexError,
+    handleWikiProgress,
+    handleWikiComplete,
+    handleWikiError,
+  } = useProgressIntegration();
 
   // 初始化 WebSocket 连接
   useEffect(() => {
@@ -397,6 +285,9 @@ export function useIndexProgressWebSocket(
         console.log(
           `Indexing progress: ${(message.progress * 100).toFixed(1)}%`
         );
+
+        // 集成到统一进度系统
+        handleIndexProgress(message);
 
         // 更新仓库状态
         updateRepository(message.repository_id, {
@@ -433,13 +324,75 @@ export function useIndexProgressWebSocket(
       },
 
       onIndexError: (message: IndexErrorMessage) => {
-        console.error("Indexing error:", message.message);
+        console.error("Indexing error:", message.error);
+
+        // 集成到统一进度系统
+        handleIndexError(message);
 
         onError?.(message);
 
         toast({
           title: "Indexing Failed",
-          description: message.message,
+          description: message.error,
+          variant: "destructive",
+        });
+      },
+
+      // Wiki生成状态处理
+      onWikiProgress: (message: WikiProgressMessage) => {
+        console.log(
+          `Wiki generation progress: ${(message.progress * 100).toFixed(
+            1
+          )}% - ${message.current_step}`
+        );
+
+        // 集成到统一进度系统
+        handleWikiProgress(message);
+
+        // 更新仓库的Wiki状态
+        updateRepository(message.repository_id, {
+          wiki_status: "generating",
+        });
+      },
+
+      onWikiComplete: (message: WikiCompleteMessage) => {
+        console.log(
+          `Wiki generation completed for repository: ${message.repository_id}`
+        );
+
+        // 集成到统一进度系统
+        handleWikiComplete(message);
+
+        // 更新仓库的Wiki状态为已生成
+        updateRepository(message.repository_id, {
+          wiki_status: "generated",
+          wiki_generated_at: new Date().toISOString(),
+        });
+
+        toast({
+          title: "Wiki Generated",
+          description:
+            "Wiki has been successfully generated and is ready to view.",
+        });
+      },
+
+      onWikiError: (message: WikiErrorMessage) => {
+        console.error(
+          `Wiki generation failed for repository: ${message.repository_id}`,
+          message.error
+        );
+
+        // 集成到统一进度系统
+        handleWikiError(message);
+
+        // 更新仓库的Wiki状态为失败
+        updateRepository(message.repository_id, {
+          wiki_status: "failed",
+        });
+
+        toast({
+          title: "Wiki Generation Failed",
+          description: message.error,
           variant: "destructive",
         });
       },
@@ -516,5 +469,81 @@ export function useWebSocket(
     setHandlers,
     getState: () => wsRef.current?.getState(),
     isConnected: () => wsRef.current?.isConnected() || false,
+  };
+}
+
+// ============================================================================
+// 研究进度 WebSocket Hook
+// ============================================================================
+
+export function useResearchWebSocket(
+  researchId?: string,
+  onProgress?: (update: any) => void,
+  onComplete?: (result: any) => void,
+  onError?: (error: string) => void,
+  config?: Partial<WebSocketConfig>,
+  options?: Partial<WebSocketOptions>
+) {
+  const wsRef = useRef<WebSocketClient | null>(null);
+  const { toast } = useToast();
+
+  // 初始化 WebSocket 连接
+  useEffect(() => {
+    if (!researchId) return;
+
+    const ws = new WebSocketClient("research", config, {
+      debug: import.meta.env.DEV,
+      ...options,
+    });
+
+    // 设置事件处理器
+    ws.setHandlers({
+      onConnect: () => {
+        console.log("Research WebSocket connected");
+      },
+
+      onDisconnect: () => {
+        console.log("Research WebSocket disconnected");
+      },
+
+      onError: (event) => {
+        console.error("Research WebSocket error:", event);
+        onError?.("WebSocket connection error");
+      },
+
+      // 研究进度消息处理
+      onMessage: (message: any) => {
+        try {
+          if (message.type === "research_progress") {
+            onProgress?.(message);
+          } else if (message.type === "research_complete") {
+            onComplete?.(message);
+          } else if (message.type === "research_error") {
+            onError?.(message.error);
+          }
+        } catch (error) {
+          console.error("Failed to handle research message:", error);
+          onError?.("Failed to process research update");
+        }
+      },
+    });
+
+    wsRef.current = ws;
+
+    // 连接到 WebSocket
+    ws.connect().catch((error) => {
+      console.error("Failed to connect to research WebSocket:", error);
+      onError?.("Failed to connect to research service");
+    });
+
+    return () => {
+      ws.disconnect();
+      wsRef.current = null;
+    };
+  }, [researchId, onProgress, onComplete, onError, config, options]);
+
+  return {
+    isConnected: () => wsRef.current?.isConnected() || false,
+    disconnect: () => wsRef.current?.disconnect(),
   };
 }

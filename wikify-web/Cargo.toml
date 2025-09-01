@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 # Core dependencies
 wikify-core = { path = "../wikify-core" }
-wikify-applications = { path = "../wikify-applications", features = ["openapi"] }
+wikify-applications = { path = "../wikify-applications", features = ["openapi", "sqlite"] }
 wikify-rag = { path = "../wikify-rag" }
 wikify-wiki = { path = "../wikify-wiki" }
 wikify-indexing = { path = "../wikify-indexing" }

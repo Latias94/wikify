@@ -229,7 +229,6 @@ impl AppState {
     pub async fn cleanup_old_data(&self) {
         // Note: This is now a no-op since we removed session management
         // Repository cleanup is handled by the application layer
-        info!("Data cleanup is no longer needed - using repository-based management");
     }
 
     /// Query RAG pipeline using application layer
@@ -272,5 +271,10 @@ impl AppState {
             .get_repository(&context, repository_id)
             .await
             .ok()
+    }
+
+    /// Subscribe to progress updates
+    pub async fn subscribe_to_progress(&self) -> tokio::sync::broadcast::Receiver<IndexingUpdate> {
+        self.progress_broadcaster.subscribe()
     }
 }

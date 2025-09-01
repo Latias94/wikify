@@ -16,6 +16,8 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 urlencoding = { workspace = true }
 log = { workspace = true }
+ignore = "0.4"
+glob = "0.3"
 
 # Use system git command like DeepWiki does - simple and reliable
 # tokio already includes process support

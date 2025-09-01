@@ -370,7 +370,7 @@ const WikiViewer = ({ className }: WikiViewerProps) => {
                           {currentContent.importance}
                         </Badge>
                         
-                        {currentContent.file_paths.length > 0 && (
+                        {currentContent.file_paths && currentContent.file_paths.length > 0 && (
                           <Badge variant="outline" className="text-xs">
                             <FileText className="h-3 w-3 mr-1" />
                             {currentContent.file_paths.length} files
@@ -389,7 +389,7 @@ const WikiViewer = ({ className }: WikiViewerProps) => {
                   </div>
 
                   {/* Related Pages */}
-                  {'related_pages' in currentContent && currentContent.related_pages.length > 0 && (
+                  {'related_pages' in currentContent && currentContent.related_pages && currentContent.related_pages.length > 0 && (
                     <div className="mt-8 p-4 bg-muted/50 rounded-lg">
                       <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
                         <ExternalLink className="h-4 w-4" />

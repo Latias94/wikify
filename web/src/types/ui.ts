@@ -114,14 +114,6 @@ export interface ChatInputProps {
 // Wiki 相关类型
 // ============================================================================
 
-export interface WikiGenerationState {
-  isGenerating: boolean;
-  progress: number;
-  currentStep: string;
-  totalSteps: number;
-  error?: string;
-}
-
 export interface WikiViewerProps {
   wikiId: string;
   title: string;

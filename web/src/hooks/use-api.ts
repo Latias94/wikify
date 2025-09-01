@@ -14,7 +14,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Repository,
   InitializeRepositoryRequest,
-  Session,
   ChatQueryRequest,
   GenerateWikiRequest,
   PaginationParams,
@@ -182,7 +181,7 @@ export function useInitializeRepository() {
       if (error.status === 409) {
         title = "Repository already being indexed";
         description =
-          "This repository is currently being indexed by another session. Please wait for it to complete or try again later.";
+          "This repository is currently being indexed. Please wait for it to complete or try again later.";
       }
 
       toast({

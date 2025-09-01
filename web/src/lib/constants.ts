@@ -76,9 +76,10 @@ export const WS_MESSAGE_TYPE = {
   WIKI_PROGRESS: "WikiProgress",
   WIKI_COMPLETE: "WikiComplete",
   WIKI_ERROR: "WikiError",
-  INDEX_PROGRESS: "IndexProgress",
-  INDEX_COMPLETE: "IndexComplete",
+  INDEX_PROGRESS: "index_progress",
+  INDEX_COMPLETE: "index_progress",
   INDEX_ERROR: "IndexError",
+  ERROR: "Error",
   PING: "Ping",
   PONG: "Pong",
 } as const;
@@ -148,7 +149,6 @@ export const ROUTES = {
 // ============================================================================
 
 export const STORAGE_KEYS = {
-  AUTH_TOKEN: "wikify_auth_token",
   USER_SETTINGS: "wikify_user_settings",
   THEME: "wikify_theme",
   SIDEBAR_COLLAPSED: "wikify_sidebar_collapsed",

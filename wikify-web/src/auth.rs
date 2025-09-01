@@ -446,7 +446,8 @@ where
         match permission_mode.as_str() {
             "open" => {
                 // Open模式：如果没有认证用户，创建匿名用户
-                if let Some(user_context) = parts.extensions.get::<crate::middleware::UserContext>() {
+                if let Some(user_context) = parts.extensions.get::<crate::middleware::UserContext>()
+                {
                     if user_context.is_default_user() {
                         // 创建匿名用户，拥有所有权限（Open 模式）
                         let anonymous_user = User {

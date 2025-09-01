@@ -12,11 +12,11 @@ use crate::{
         handlers::{AuthFeatures, AuthStatusResponse},
         users::{AuthResponse, LoginRequest, RefreshRequest, RegisterRequest},
     },
-    handlers::{
+    handlers::types::{
         ChatQueryRequest, ChatQueryResponse, DeleteRepositoryResponse, GenerateWikiRequest,
         GenerateWikiResponse, HealthResponse, InitializeRepositoryRequest,
         InitializeRepositoryResponse, ResearchProgressResponse, SourceDocument,
-        StartResearchRequest, WikiGenerationConfig,
+        StartResearchFromTemplateRequest, StartResearchRequest, WikiGenerationConfig,
     },
 };
 
@@ -81,11 +81,16 @@ use crate::{
         crate::handlers::list_templates_by_category,
         crate::handlers::start_research_from_template,
 
-        // Research history endpoints
-        crate::handlers::get_research_history,
-        crate::handlers::get_research_record,
-        crate::handlers::delete_research_record,
-        crate::handlers::get_research_statistics,
+        // Research history endpoints (TODO: Add utoipa::path annotations)
+        // crate::handlers::get_research_history,
+        // crate::handlers::get_research_record,
+        // crate::handlers::delete_research_record,
+        // crate::handlers::get_research_statistics,
+
+        // File operations endpoints
+        crate::handlers::get_file_tree,
+        crate::handlers::get_file_content,
+        crate::handlers::get_readme,
 
         // SQLite-only endpoints (conditionally included)
         #[cfg(feature = "sqlite")]
@@ -115,7 +120,15 @@ use crate::{
             WikiGenerationConfig,
             StartResearchRequest,
             ResearchProgressResponse,
-            crate::handlers::StartResearchFromTemplateRequest,
+            StartResearchFromTemplateRequest,
+            // File operation schemas (TODO: Add when properly imported)
+            // GetFileTreeRequest,
+            // FileTreeResponse,
+            // RepositoryFileInfo,
+            // GetFileContentRequest,
+            // FileContentResponse,
+            // GetReadmeRequest,
+            // ReadmeResponse,
         )
     ),
     tags(

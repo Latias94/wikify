@@ -45,26 +45,21 @@ impl RagPipeline {
     pub async fn initialize(&mut self) -> RagResult<()> {
         log_operation_start!("rag_pipeline_init");
 
-        info!("Initializing RAG pipeline");
+        eprintln!("🚀 Initializing RAG pipeline");
 
         // Initialize LLM client
+        eprintln!("📝 Creating LLM client...");
         self.llm_client = Some(WikifyLlmClient::new(self.config.llm.clone()).await?);
-        info!("✅ LLM client initialized");
-
-        // Test LLM connection
-        if let Some(client) = &self.llm_client {
-            client.test_connection().await?;
-            info!("✅ LLM connection verified");
-        }
+        eprintln!("✅ LLM client initialized");
 
         // Initialize vector store (empty for now)
         self.vector_store = Some(VectorStore::new(self.config.embeddings.dimension));
-        info!("✅ Vector store initialized");
+        eprintln!("✅ Vector store initialized");
 
         self.is_initialized = true;
 
         log_operation_success!("rag_pipeline_init");
-        info!("🚀 RAG pipeline initialization complete");
+        eprintln!("🎉 RAG pipeline initialization complete");
 
         Ok(())
     }
@@ -72,15 +67,16 @@ impl RagPipeline {
     /// Index a repository and prepare it for querying
     pub async fn index_repository<P: AsRef<Path>>(
         &mut self,
-        repo_path: P,
+        repo_path_or_url: P,
     ) -> RagResult<IndexingStats> {
-        self.index_repository_with_progress(repo_path, None).await
+        self.index_repository_with_progress(repo_path_or_url, None)
+            .await
     }
 
     /// Index a repository with progress reporting
     pub async fn index_repository_with_progress<P: AsRef<Path>>(
         &mut self,
-        repo_path: P,
+        repo_path_or_url: P,
         progress_callback: Option<Box<dyn Fn(String, f64, Option<String>) + Send + Sync>>,
     ) -> RagResult<IndexingStats> {
         if !self.is_initialized {
@@ -90,7 +86,29 @@ impl RagPipeline {
         log_operation_start!("rag_index_repository");
         let start_time = Instant::now();
 
-        info!("Starting repository indexing: {:?}", repo_path.as_ref());
+        let path_str = repo_path_or_url.as_ref().to_string_lossy();
+        eprintln!("📁 Starting repository indexing: {}", path_str);
+
+        // Check if this is a URL or local path
+        let local_path = if path_str.starts_with("http://") || path_str.starts_with("https://") {
+            eprintln!("🌐 Remote repository detected, cloning...");
+
+            // Report progress: Cloning
+            if let Some(ref callback) = progress_callback {
+                callback(
+                    "Cloning repository".to_string(),
+                    5.0,
+                    Some("Downloading remote repository".to_string()),
+                );
+            }
+
+            // Clone the repository
+            let cloned_path = self.clone_repository(&path_str).await?;
+            eprintln!("✅ Repository cloned to: {}", cloned_path);
+            std::path::PathBuf::from(cloned_path)
+        } else {
+            repo_path_or_url.as_ref().to_path_buf()
+        };
 
         // Report progress: Starting
         if let Some(ref callback) = progress_callback {
@@ -102,6 +120,7 @@ impl RagPipeline {
         }
 
         // Step 1: Run document indexing pipeline
+        eprintln!("🔧 Creating document indexing pipeline...");
         let indexing_pipeline =
             wikify_indexing::create_deepwiki_compatible_indexer().map_err(RagError::Core)?;
 
@@ -115,16 +134,19 @@ impl RagPipeline {
         }
 
         // Load documents from repository first
-        let documents = self.load_repository_documents(&repo_path).await?;
+        eprintln!("📄 Loading documents from repository...");
+        let documents = self.load_repository_documents(&local_path).await?;
         let documents_count = documents.len();
+        eprintln!("📚 Found {} documents to process", documents_count);
 
         // Index the documents
+        eprintln!("⚙️ Indexing documents...");
         let nodes = indexing_pipeline
             .index_documents(documents)
             .await
             .map_err(RagError::Core)?;
 
-        info!("📚 Indexed documents into {} nodes", nodes.len());
+        eprintln!("📚 Indexed documents into {} nodes", nodes.len());
 
         // Report progress: Embedding generation
         if let Some(ref callback) = progress_callback {
@@ -401,8 +423,11 @@ impl RagPipeline {
 
         let mut documents = Vec::new();
 
+        eprintln!("📂 Loading repository from path: {:?}", repo_path.as_ref());
+
         // Use cheungfun's DirectoryLoader to load documents
         let loader = DirectoryLoader::new(repo_path.as_ref().to_path_buf()).map_err(|e| {
+            eprintln!("❌ Failed to create DirectoryLoader: {}", e);
             RagError::Core(Box::new(wikify_core::WikifyError::Indexing {
                 message: format!("Failed to create directory loader: {}", e),
                 source: None,
@@ -410,6 +435,8 @@ impl RagPipeline {
                     .with_operation("create_loader"),
             }))
         })?;
+
+        eprintln!("🔍 DirectoryLoader created, starting document loading...");
 
         let loaded_docs = loader.load().await.map_err(|e| {
             RagError::Core(Box::new(wikify_core::WikifyError::Indexing {
@@ -423,6 +450,44 @@ impl RagPipeline {
 
         info!("Loaded {} documents from repository", documents.len());
         Ok(documents)
+    }
+
+    /// Clone a remote repository to local storage
+    async fn clone_repository(&self, repo_url: &str) -> RagResult<String> {
+        use wikify_core::RepositoryAccessConfig;
+        use wikify_repo::RepositoryProcessor;
+
+        // Use default base path for cloned repositories
+        let base_path = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("wikify")
+            .join("repos");
+
+        // Create unified processor
+        let processor = RepositoryProcessor::new(&base_path);
+
+        // Configure for Git clone mode with shallow clone
+        let config = RepositoryAccessConfig {
+            preferred_mode: Some(wikify_core::RepoAccessMode::GitClone),
+            api_token: None,      // Force Git clone, don't use API
+            force_mode: true,     // Force the preferred mode
+            clone_depth: Some(1), // Shallow clone for efficiency
+            custom_local_path: None,
+        };
+
+        // Access repository using unified processor
+        let access = processor
+            .access_repository(repo_url, Some(config))
+            .await
+            .map_err(|e| RagError::Core(e))?;
+
+        // Return the local path
+        match access.local_path {
+            Some(path) => Ok(path.to_string_lossy().to_string()),
+            None => Err(RagError::Config(
+                "Repository access did not provide local path".to_string(),
+            )),
+        }
     }
 }
 

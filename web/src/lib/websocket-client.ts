@@ -254,7 +254,10 @@ export class WebSocketClient {
         return;
       }
 
-      // 路由消息到对应的处理器
+      // 首先调用通用消息处理器（如果存在）
+      this.handlers.onMessage?.(message);
+
+      // 然后路由消息到对应的处理器
       this.routeMessage(message);
     } catch (error) {
       this.log("Failed to parse message", { data, error });
@@ -282,16 +285,21 @@ export class WebSocketClient {
         this.handlers.onWikiError?.(message);
         break;
       case "index_progress":
-        this.handlers.onIndexProgress?.(message);
-        break;
-      case "error":
-        // 检查是否是索引错误（通过 code 字段）
-        if (message.code === "INDEXING_ERROR") {
-          this.handlers.onIndexError?.(message);
+        // 检查是否是完成消息（progress = 1.0）
+        if (message.progress === 1.0) {
+          this.handlers.onIndexComplete?.(message);
         } else {
-          // 其他错误类型的处理
-          console.error("WebSocket error:", message);
+          this.handlers.onIndexProgress?.(message);
         }
+        break;
+      case "IndexComplete":
+        this.handlers.onIndexComplete?.(message);
+        break;
+      case "IndexError":
+        this.handlers.onIndexError?.(message);
+        break;
+      case "Error":
+        this.handlers.onGeneralError?.(message);
         break;
       default:
         this.log("Unknown message type", message);

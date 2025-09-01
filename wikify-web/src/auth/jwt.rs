@@ -178,6 +178,8 @@ pub enum AuthError {
     InvalidPermissions,
     #[error("Missing authorization header")]
     MissingAuthHeader,
+    #[error("Database error: {0}")]
+    DatabaseError(String),
 }
 
 impl IntoResponse for AuthError {
@@ -222,6 +224,11 @@ impl IntoResponse for AuthError {
                 StatusCode::UNAUTHORIZED,
                 "missing_auth_header",
                 "Authorization header is required",
+            ),
+            AuthError::DatabaseError(ref msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "database_error",
+                msg.as_str(),
             ),
         };
 

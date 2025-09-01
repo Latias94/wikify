@@ -8,6 +8,7 @@ description = "High-level applications built on Wikify's RAG foundation"
 # Core dependencies
 wikify-core = { path = "../wikify-core" }
 wikify-rag = { path = "../wikify-rag" }
+wikify-repo = { path = "../wikify-repo" }
 siumai = { path = "../repo-ref/siumai" }
 
 # Async runtime

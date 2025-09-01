@@ -4,6 +4,7 @@ use super::{
     jwt::AuthError,
     users::{UserData, UserStore},
 };
+use crate::simple_database::SimpleDatabaseService;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
@@ -13,6 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use wikify_applications::Permission;
+use wikify_wiki::WikiStructure;
 
 /// Database user record
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -391,4 +393,176 @@ pub struct UserStats {
     pub total_users: u64,
     pub admin_users: u64,
     pub recent_users: u64,
+}
+
+/// Wiki database record
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct WikiRecord {
+    pub id: String,
+    pub repository_id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub content: String,
+    pub format: String,
+    pub structure: Option<String>, // JSON representation of WikiStructure
+    pub generated_at: String,
+    pub updated_at: String,
+    pub version: i64,
+    pub metadata: String, // JSON
+}
+
+impl SimpleDatabaseService {
+    /// Store wiki in database
+    pub async fn store_wiki(
+        &self,
+        repository_id: &str,
+        wiki_structure: &WikiStructure,
+        content: &str,
+    ) -> Result<String, AuthError> {
+        let wiki_id = uuid::Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let structure_json = serde_json::to_string(wiki_structure).map_err(|_| {
+            AuthError::DatabaseError("Failed to serialize wiki structure".to_string())
+        })?;
+
+        // Store main wiki record
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO wikis (
+                id, repository_id, title, description, content, format,
+                structure, generated_at, updated_at, version, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
+            "#,
+        )
+        .bind(&wiki_id)
+        .bind(repository_id)
+        .bind(&wiki_structure.title)
+        .bind(&wiki_structure.description)
+        .bind(content)
+        .bind("markdown")
+        .bind(&structure_json)
+        .bind(&now)
+        .bind(&now)
+        .execute(self.pool())
+        .await
+        .map_err(|e| AuthError::DatabaseError(format!("Failed to store wiki: {}", e)))?;
+
+        // Store individual pages
+        for page in &wiki_structure.pages {
+            let page_db_id = uuid::Uuid::new_v4().to_string();
+            let file_paths_json =
+                serde_json::to_string(&page.file_paths).unwrap_or_else(|_| "[]".to_string());
+            let related_pages_json =
+                serde_json::to_string(&page.related_pages).unwrap_or_else(|_| "[]".to_string());
+            let tags_json = serde_json::to_string(&page.tags).unwrap_or_else(|_| "[]".to_string());
+            let source_docs_json =
+                serde_json::to_string(&page.source_documents).unwrap_or_else(|_| "[]".to_string());
+
+            sqlx::query(
+                r#"
+                INSERT INTO wiki_pages (
+                    id, wiki_id, page_id, title, content, description, importance,
+                    file_paths, related_pages, parent_section, tags, reading_time,
+                    generated_at, source_documents
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&page_db_id)
+            .bind(&wiki_id)
+            .bind(&page.id)
+            .bind(&page.title)
+            .bind(&page.content)
+            .bind(&page.description)
+            .bind(format!("{:?}", page.importance))
+            .bind(&file_paths_json)
+            .bind(&related_pages_json)
+            .bind(&page.parent_section)
+            .bind(&tags_json)
+            .bind(page.reading_time as i64)
+            .bind(page.generated_at.to_rfc3339())
+            .bind(&source_docs_json)
+            .execute(self.pool())
+            .await
+            .map_err(|e| AuthError::DatabaseError(format!("Failed to store wiki page: {}", e)))?;
+        }
+
+        // Store sections
+        for section in &wiki_structure.sections {
+            let section_db_id = uuid::Uuid::new_v4().to_string();
+            let pages_json =
+                serde_json::to_string(&section.pages).unwrap_or_else(|_| "[]".to_string());
+            let subsections_json =
+                serde_json::to_string(&section.subsections).unwrap_or_else(|_| "[]".to_string());
+
+            sqlx::query(
+                r#"
+                INSERT INTO wiki_sections (
+                    id, wiki_id, section_id, title, description, pages,
+                    subsections, importance, order_index
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&section_db_id)
+            .bind(&wiki_id)
+            .bind(&section.id)
+            .bind(&section.title)
+            .bind(&section.description)
+            .bind(&pages_json)
+            .bind(&subsections_json)
+            .bind("Medium") // Default importance since WikiSection doesn't have this field
+            .bind(section.order as i64)
+            .execute(self.pool())
+            .await
+            .map_err(|e| {
+                AuthError::DatabaseError(format!("Failed to store wiki section: {}", e))
+            })?;
+        }
+
+        info!("Stored wiki {} for repository {}", wiki_id, repository_id);
+        Ok(wiki_id)
+    }
+
+    /// Get wiki by repository ID
+    pub async fn get_wiki_by_repository(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<WikiRecord>, AuthError> {
+        let row = sqlx::query(
+            "SELECT id, repository_id, title, description, content, format, structure, generated_at, updated_at, version, metadata FROM wikis WHERE repository_id = ? ORDER BY updated_at DESC LIMIT 1"
+        )
+        .bind(repository_id)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(|e| AuthError::DatabaseError(format!("Failed to get wiki: {}", e)))?;
+
+        if let Some(row) = row {
+            let record = WikiRecord {
+                id: row.get("id"),
+                repository_id: row.get("repository_id"),
+                title: row.get("title"),
+                description: row.get("description"),
+                content: row.get("content"),
+                format: row.get("format"),
+                structure: row.get("structure"),
+                generated_at: row.get("generated_at"),
+                updated_at: row.get("updated_at"),
+                version: row.get("version"),
+                metadata: row.get("metadata"),
+            };
+            Ok(Some(record))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Delete wiki by repository ID
+    pub async fn delete_wiki_by_repository(&self, repository_id: &str) -> Result<bool, AuthError> {
+        let result = sqlx::query("DELETE FROM wikis WHERE repository_id = ?")
+            .bind(repository_id)
+            .execute(self.pool())
+            .await
+            .map_err(|e| AuthError::DatabaseError(format!("Failed to delete wiki: {}", e)))?;
+
+        Ok(result.rows_affected() > 0)
+    }
 }

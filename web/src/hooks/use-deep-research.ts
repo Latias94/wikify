@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/api-client";
+import { useResearchWebSocket } from "@/hooks/use-websocket";
 import {
   DeepResearchRequest,
   DeepResearchResponse,
@@ -60,7 +61,37 @@ export const useDeepResearch = () => {
   const [state, setState] = useState<ResearchState>(initialState);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
+
+  // 统一的 WebSocket 连接
+  const { isConnected: wsConnected, disconnect: wsDisconnect } =
+    useResearchWebSocket(
+      state.researchId,
+      // onProgress
+      (update) => {
+        handleProgressUpdate(update);
+      },
+      // onComplete
+      (result) => {
+        setState((prev) => ({
+          ...prev,
+          status: "completed",
+          finalConclusion: result.conclusion || prev.finalConclusion,
+        }));
+      },
+      // onError
+      (error) => {
+        setState((prev) => ({
+          ...prev,
+          status: "failed",
+          error,
+        }));
+        toast({
+          title: "Research Error",
+          description: error,
+          variant: "destructive",
+        });
+      }
+    );
 
   // ============================================================================
   // 工具函数
@@ -158,56 +189,6 @@ export const useDeepResearch = () => {
     []
   );
 
-  // ============================================================================
-  // WebSocket 管理
-  // ============================================================================
-
-  /**
-   * 创建 WebSocket 连接
-   */
-  const createWebSocketConnection = useCallback(
-    (researchId: string) => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-
-      const wsUrl = `${
-        window.location.protocol === "https:" ? "wss:" : "ws:"
-      }//${window.location.host}/api/research/${researchId}/stream`;
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log("Research WebSocket connected");
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const update: ResearchProgressUpdate = JSON.parse(event.data);
-          handleProgressUpdate(update);
-        } catch (error) {
-          console.error("Failed to parse WebSocket message:", error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error("Research WebSocket error:", error);
-        toast({
-          title: "Connection Error",
-          description: "Lost connection to research stream",
-          variant: "destructive",
-        });
-      };
-
-      ws.onclose = () => {
-        console.log("Research WebSocket disconnected");
-      };
-
-      wsRef.current = ws;
-      return ws;
-    },
-    [toast]
-  );
-
   /**
    * 处理进度更新
    */
@@ -272,8 +253,7 @@ export const useDeepResearch = () => {
         isAutoProgressing: true,
       }));
 
-      // 创建 WebSocket 连接监听进度
-      createWebSocketConnection(response.research_id);
+      // WebSocket 连接由 useResearchWebSocket hook 自动管理
 
       toast({
         title: "Research Started",
@@ -294,9 +274,7 @@ export const useDeepResearch = () => {
    * 停止研究
    */
   const stopResearch = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
+    wsDisconnect();
 
     setState((prev) => ({
       ...prev,
@@ -308,18 +286,16 @@ export const useDeepResearch = () => {
       title: "Research Stopped",
       description: "Research process has been stopped",
     });
-  }, [toast]);
+  }, [wsDisconnect, toast]);
 
   /**
    * 重置研究状态
    */
   const resetResearch = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
+    wsDisconnect();
 
     setState(initialState);
-  }, []);
+  }, [wsDisconnect]);
 
   // ============================================================================
   // 导航操作
@@ -394,5 +370,8 @@ export const useDeepResearch = () => {
 
     // 加载状态
     isStarting: startResearchMutation.isPending,
+
+    // WebSocket 状态
+    isConnected: wsConnected(),
   };
 };

@@ -154,14 +154,8 @@ export class ApiClient {
         // 添加请求时间戳
         config.metadata = { startTime: Date.now() };
 
-        // 添加认证头（如果需要）
-        const token = localStorage.getItem("wikify_access_token");
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-          console.log(`🔑 Added Authorization header for ${config.url}`);
-        } else {
-          console.log(`⚠️ No access token found for ${config.url}`);
-        }
+        // 在开放模式下，不需要认证头
+        // 如果将来需要认证，可以在这里添加相应的逻辑
 
         console.log(
           `🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`

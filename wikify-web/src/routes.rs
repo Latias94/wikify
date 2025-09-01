@@ -39,7 +39,9 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         // Configuration (public read)
         .route("/config", get(handlers::get_config))
         // Repository listing (public in open mode, protected by middleware)
-        .route("/repositories", get(handlers::list_repositories));
+        .route("/repositories", get(handlers::list_repositories))
+        // Wiki viewing (public access)
+        .route("/wiki/{repository_id}", get(handlers::get_wiki));
 
     // Protected routes (authentication required)
     let protected_routes = Router::new()
@@ -72,7 +74,6 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         .route("/chat/stream", post(handlers::chat_stream))
         // Wiki generation (requires GenerateWiki permission)
         .route("/wiki/generate", post(handlers::generate_wiki))
-        .route("/wiki/{repository_id}", get(handlers::get_wiki))
         .route("/wiki/{repository_id}/export", post(handlers::export_wiki))
         // Research endpoints (requires Query permission)
         .route("/research/start", post(handlers::start_research))
@@ -114,9 +115,10 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         )
         // Configuration (admin write)
         .route("/config", post(handlers::update_config))
-        // File operations (admin only)
+        // File operations (query permission required)
         .route("/files/tree", post(handlers::get_file_tree))
         .route("/files/content", post(handlers::get_file_content))
+        .route("/files/readme", post(handlers::get_readme))
         // Apply authentication middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             _state.clone(),
@@ -143,6 +145,8 @@ pub fn websocket_routes() -> Router<AppState> {
         .route("/wiki", get(websocket::wiki_handler))
         // Repository indexing WebSocket (for progress updates)
         .route("/index", get(websocket::index_handler))
+        // Global WebSocket (for unified progress updates)
+        .route("/global", get(websocket::global_handler))
 }
 
 /// Create static file routes

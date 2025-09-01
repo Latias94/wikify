@@ -156,6 +156,75 @@ paths:
       responses:
         '200':
           description: Configuration retrieved successfully
+  /api/files/content:
+    post:
+      tags:
+      - Files
+      summary: Get file content
+      operationId: get_file_content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetFileContentRequest'
+        required: true
+      responses:
+        '200':
+          description: File content retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileContentResponse'
+        '404':
+          description: File not found
+        '500':
+          description: Internal server error
+  /api/files/readme:
+    post:
+      tags:
+      - Files
+      summary: Get README content for repository
+      operationId: get_readme
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetReadmeRequest'
+        required: true
+      responses:
+        '200':
+          description: README content retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadmeResponse'
+        '404':
+          description: Repository not found
+        '500':
+          description: Internal server error
+  /api/files/tree:
+    post:
+      tags:
+      - Files
+      summary: Get file tree for repository
+      operationId: get_file_tree
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetFileTreeRequest'
+        required: true
+      responses:
+        '200':
+          description: File tree retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileTreeResponse'
+        '404':
+          description: Repository not found
+        '500':
+          description: Internal server error
   /api/health:
     get:
       tags:
@@ -294,142 +363,37 @@ paths:
           description: Repository is currently being indexed
         '500':
           description: Internal server error
-  /api/research/history:
-    get:
-      tags:
-      - crate::handlers
-      summary: Get research history
-      operationId: get_research_history
-      parameters:
-      - name: status
-        in: query
-        description: Filter by status
-        required: false
-        schema:
-          type: string
-      - name: template_id
-        in: query
-        description: Filter by template ID
-        required: false
-        schema:
-          type: string
-      - name: date_from
-        in: query
-        description: Filter by date from (ISO 8601)
-        required: false
-        schema:
-          type: string
-      - name: date_to
-        in: query
-        description: Filter by date to (ISO 8601)
-        required: false
-        schema:
-          type: string
-      - name: limit
-        in: query
-        description: Limit number of results
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-      - name: offset
-        in: query
-        description: Offset for pagination
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-      responses:
-        '200':
-          description: Research history
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ResearchHistoryRecord'
-        '403':
-          description: Permission denied
-        '500':
-          description: Internal server error
-  /api/research/history/{session_id}:
-    get:
-      tags:
-      - crate::handlers
-      summary: Get specific research record
-      operationId: get_research_record
-      parameters:
-      - name: session_id
-        in: path
-        description: Research session ID
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Research record
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResearchHistoryRecord'
-        '403':
-          description: Permission denied
-        '404':
-          description: Record not found
-        '500':
-          description: Internal server error
-    delete:
-      tags:
-      - crate::handlers
-      summary: Delete research record
-      operationId: delete_research_record
-      parameters:
-      - name: session_id
-        in: path
-        description: Research session ID
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Record deleted successfully
-        '403':
-          description: Permission denied
-        '404':
-          description: Record not found
-        '500':
-          description: Internal server error
   /api/research/iterate/{repository_id}:
     post:
       tags:
-      - crate::handlers
-      summary: Execute one research iteration
+      - Research
+      summary: Execute research iteration
+      description: Execute a single research iteration for a repository
       operationId: research_iteration
       parameters:
       - name: repository_id
         in: path
-        description: Repository ID for research
+        description: Repository ID
         required: true
         schema:
           type: string
       responses:
         '200':
-          description: Research iteration completed
+          description: Research iteration completed successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResearchProgressResponse'
-        '403':
-          description: Permission denied
         '404':
           description: Repository not found
         '500':
-          description: Internal server error
+          description: Failed to execute research iteration
   /api/research/progress/{repository_id}:
     get:
       tags:
-      - crate::handlers
+      - Research
       summary: Get research progress
+      description: Get the current progress of a research session
       operationId: get_research_progress
       parameters:
       - name: repository_id
@@ -440,22 +404,21 @@ paths:
           type: string
       responses:
         '200':
-          description: Research progress retrieved
+          description: Research progress retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResearchProgressResponse'
-        '403':
-          description: Permission denied
         '404':
           description: Research session not found
         '500':
-          description: Internal server error
+          description: Failed to get research progress
   /api/research/start:
     post:
       tags:
-      - crate::handlers
-      summary: Start a deep research session
+      - Research
+      summary: Start research session
+      description: Start a new research session for a repository
       operationId: start_research
       requestBody:
         content:
@@ -465,22 +428,21 @@ paths:
         required: true
       responses:
         '200':
-          description: Research started successfully
+          description: Research session started successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResearchProgressResponse'
-        '400':
-          description: Invalid request
-        '403':
-          description: Permission denied
+                $ref: '#/components/schemas/StartResearchResponse'
+        '404':
+          description: Repository not found
         '500':
-          description: Internal server error
+          description: Failed to start research session
   /api/research/start-from-template:
     post:
       tags:
-      - crate::handlers
+      - Research
       summary: Start research from template
+      description: Start a new research session using a predefined template
       operationId: start_research_from_template
       requestBody:
         content:
@@ -490,58 +452,33 @@ paths:
         required: true
       responses:
         '200':
-          description: Research started from template
+          description: Research session started successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResearchProgressResponse'
-        '400':
-          description: Invalid request
-        '403':
-          description: Permission denied
+                $ref: '#/components/schemas/StartResearchResponse'
         '404':
-          description: Template not found
+          description: Repository or template not found
         '500':
-          description: Internal server error
-  /api/research/statistics:
-    get:
-      tags:
-      - crate::handlers
-      summary: Get research statistics (admin only)
-      operationId: get_research_statistics
-      responses:
-        '200':
-          description: Research statistics
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResearchStatistics'
-        '403':
-          description: Permission denied (admin only)
-        '500':
-          description: Internal server error
+          description: Failed to start research session
   /api/research/templates:
     get:
       tags:
-      - crate::handlers
-      summary: List all research templates
+      - Research
+      summary: List research templates
+      description: List all available research templates
       operationId: list_research_templates
       responses:
         '200':
-          description: List of research templates
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ResearchTemplate'
+          description: Research templates listed successfully
         '500':
-          description: Internal server error
+          description: Failed to list research templates
   /api/research/templates/category/{category}:
     get:
       tags:
-      - crate::handlers
+      - Research
       summary: List templates by category
+      description: List research templates filtered by category
       operationId: list_templates_by_category
       parameters:
       - name: category
@@ -552,22 +489,15 @@ paths:
           type: string
       responses:
         '200':
-          description: List of templates in category
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ResearchTemplate'
-        '400':
-          description: Invalid category
+          description: Research templates listed successfully
         '500':
-          description: Internal server error
+          description: Failed to list research templates
   /api/research/templates/{template_id}:
     get:
       tags:
-      - crate::handlers
-      summary: Get specific research template
+      - Research
+      summary: Get research template
+      description: Get a specific research template by ID
       operationId: get_research_template
       parameters:
       - name: template_id
@@ -578,21 +508,21 @@ paths:
           type: string
       responses:
         '200':
-          description: Research template
+          description: Research template retrieved successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResearchTemplate'
+                $ref: '#/components/schemas/ResearchTemplateResponse'
         '404':
           description: Template not found
         '500':
-          description: Internal server error
+          description: Failed to get research template
   /api/research/{research_id}:
     get:
       tags:
       - Research
       summary: Get research progress by ID
-      description: Get research progress using research session ID (frontend compatibility alias)
+      description: Get the current progress of a research session by research ID
       operationId: get_research_progress_by_id
       parameters:
       - name: research_id
@@ -603,17 +533,15 @@ paths:
           type: string
       responses:
         '200':
-          description: Research progress retrieved
+          description: Research progress retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResearchProgressResponse'
-        '403':
-          description: Permission denied
         '404':
           description: Research session not found
         '500':
-          description: Internal server error
+          description: Failed to get research progress
   /api/research/{research_id}/stop:
     post:
       tags:
@@ -630,13 +558,11 @@ paths:
           type: string
       responses:
         '200':
-          description: Research stopped successfully
-        '403':
-          description: Permission denied
+          description: Research session stopped successfully
         '404':
           description: Research session not found
         '500':
-          description: Internal server error
+          description: Failed to stop research session
   /api/wiki/generate:
     post:
       tags:
@@ -666,7 +592,7 @@ paths:
       tags:
       - Wiki
       summary: Get generated wiki
-      description: Retrieve the generated wiki documentation for a repository
+      description: Retrieve the generated wiki documentation for a repository. No authentication required.
       operationId: get_wiki
       parameters:
       - name: repository_id
@@ -678,8 +604,14 @@ paths:
       responses:
         '200':
           description: Wiki retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WikiResponse'
         '404':
-          description: Wiki not found
+          description: Repository not found
+        '500':
+          description: Failed to generate wiki
   /api/wiki/{repository_id}/export:
     post:
       tags:
@@ -818,6 +750,52 @@ components:
         status:
           type: string
           example: success
+    FileContentResponse:
+      type: object
+      description: Response containing file content
+      required:
+      - repository_id
+      - file_path
+      - content
+      - size
+      - encoding
+      properties:
+        branch:
+          type:
+          - string
+          - 'null'
+        content:
+          type: string
+        encoding:
+          type: string
+        file_path:
+          type: string
+        repository_id:
+          type: string
+        size:
+          type: integer
+          minimum: 0
+    FileTreeResponse:
+      type: object
+      description: Response containing file tree
+      required:
+      - repository_id
+      - files
+      - total_files
+      properties:
+        branch:
+          type:
+          - string
+          - 'null'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepositoryFileInfo'
+        repository_id:
+          type: string
+        total_files:
+          type: integer
+          minimum: 0
     GenerateWikiRequest:
       type: object
       description: Wiki generation request
@@ -853,6 +831,45 @@ components:
         wiki_id:
           type: string
           example: uuid-string
+    GetFileContentRequest:
+      type: object
+      description: Request to get file content
+      required:
+      - repository_id
+      - file_path
+      properties:
+        branch:
+          type:
+          - string
+          - 'null'
+        file_path:
+          type: string
+        repository_id:
+          type: string
+    GetFileTreeRequest:
+      type: object
+      description: Request to get file tree
+      required:
+      - repository_id
+      properties:
+        branch:
+          type:
+          - string
+          - 'null'
+        repository_id:
+          type: string
+    GetReadmeRequest:
+      type: object
+      description: Request to get README content
+      required:
+      - repository_id
+      properties:
+        branch:
+          type:
+          - string
+          - 'null'
+        repository_id:
+          type: string
     HealthResponse:
       type: object
       description: Health check response
@@ -885,6 +902,19 @@ components:
           - boolean
           - 'null'
           example: true
+        auto_index:
+          type:
+          - boolean
+          - 'null'
+          example: true
+        metadata:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
         repo_type:
           type:
           - string
@@ -925,44 +955,25 @@ components:
           type: string
           description: Username or email
           example: john_doe
-    ParameterType:
-      oneOf:
-      - type: string
-        enum:
-        - String
-      - type: string
-        enum:
-        - Integer
-      - type: string
-        enum:
-        - Boolean
-      - type: object
-        required:
-        - Choice
-        properties:
-          Choice:
-            type: array
-            items:
-              type: string
-      description: Parameter type enumeration
-    QuestionSource:
-      type: string
-      description: Question source type
-      enum:
-      - Initial
-      - Generated
-      - FollowUp
-    QuestionType:
-      type: string
-      description: Types of research questions
-      enum:
-      - Conceptual
-      - Technical
-      - Architectural
-      - Historical
-      - Comparative
-      - Diagnostic
-      - Advisory
+    ReadmeResponse:
+      type: object
+      description: Response containing README content
+      required:
+      - repository_id
+      - found
+      properties:
+        branch:
+          type:
+          - string
+          - 'null'
+        content:
+          type:
+          - string
+          - 'null'
+        found:
+          type: boolean
+        repository_id:
+          type: string
     RefreshRequest:
       type: object
       description: Token refresh request
@@ -999,6 +1010,27 @@ components:
           type: string
           description: Username for the new account
           example: john_doe
+    RepositoryFileInfo:
+      type: object
+      description: File information in the repository
+      required:
+      - path
+      - file_type
+      properties:
+        file_type:
+          type: string
+        path:
+          type: string
+        sha:
+          type:
+          - string
+          - 'null'
+        size:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
     ResearchCategory:
       type: string
       description: Research template category
@@ -1010,528 +1042,99 @@ components:
       - Documentation
       - Business
       - Custom
-    ResearchConfig:
+    ResearchConfigRequest:
       type: object
-      description: Research session configuration
-      required:
-      - max_iterations
-      - max_depth
-      - confidence_threshold
-      - max_sources_per_iteration
-      - enable_parallel_research
+      description: Research configuration request
       properties:
-        confidence_threshold:
-          type: number
-          format: double
-          description: Minimum confidence threshold for accepting findings
-        enable_parallel_research:
-          type: boolean
-          description: Whether to enable parallel research paths
-        max_depth:
-          type: integer
-          description: Maximum depth for sub-question decomposition
-          minimum: 0
+        generate_diagrams:
+          type:
+          - boolean
+          - 'null'
+          example: true
+        include_code_analysis:
+          type:
+          - boolean
+          - 'null'
+          example: true
         max_iterations:
-          type: integer
-          description: Maximum number of research iterations
-          minimum: 0
-        max_sources_per_iteration:
-          type: integer
-          description: Maximum number of sources to consider per iteration
-          minimum: 0
-    ResearchContext:
-      type: object
-      description: Research context for maintaining state across iterations
-      required:
-      - id
-      - repository_id
-      - topic
-      - config
-      - questions
-      - findings
-      - iterations
-      - status
-      - created_at
-      - updated_at
-      properties:
-        config:
-          $ref: '#/components/schemas/ResearchConfig'
-          description: Configuration
-        created_at:
-          type: string
-          format: date-time
-          description: Creation time
-        findings:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResearchFinding'
-          description: All findings (as a vector for chronological order)
-        id:
-          type: string
-          description: Research session ID
-        iterations:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResearchIteration'
-          description: Research history
-        questions:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResearchQuestion'
-          description: All questions (as a vector for ordered processing)
-        repository_id:
-          type: string
-          description: Repository ID being researched
-        status:
-          $ref: '#/components/schemas/ResearchStatus'
-          description: Research status
-        topic:
-          type: string
-          description: Original topic
-        updated_at:
-          type: string
-          format: date-time
-          description: Last update time
-    ResearchFinding:
-      type: object
-      description: Research finding from a single source
-      required:
-      - id
-      - question_id
-      - source
-      - content
-      - confidence
-      - relevance
-      - evidence
-      - limitations
-      - timestamp
-      properties:
-        confidence:
-          type: number
-          format: double
-          description: Confidence score (0.0-1.0)
-        content:
-          type: string
-          description: The actual finding content
-        evidence:
-          type: array
-          items:
-            type: string
-          description: Supporting evidence
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier for the finding
-        limitations:
-          type: array
-          items:
-            type: string
-          description: Contradictions or limitations
-        question_id:
-          type: string
-          format: uuid
-          description: Question this finding addresses
-        relevance:
-          type: number
-          format: double
-          description: Relevance score (0.0-1.0)
-        source:
-          $ref: '#/components/schemas/SourceInfo'
-          description: Source information
-        timestamp:
-          type: string
-          format: date-time
-          description: Timestamp when finding was discovered
-    ResearchHistoryRecord:
-      type: object
-      description: Research history record
-      required:
-      - session_id
-      - topic
-      - context
-      - iterations
-      - status
-      - created_at
-      - updated_at
-      - metadata
-      properties:
-        completed_at:
-          type:
-          - string
-          - 'null'
-          format: date-time
-          description: Completion timestamp (if completed)
-        context:
-          $ref: '#/components/schemas/ResearchContext'
-          description: Research context
-        created_at:
-          type: string
-          format: date-time
-          description: Creation timestamp
-        iterations:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResearchIteration'
-          description: All iterations performed
-        metadata:
-          $ref: '#/components/schemas/ResearchMetadata'
-          description: Research metadata
-        session_id:
-          type: string
-          description: Research session ID
-        status:
-          $ref: '#/components/schemas/ResearchStatus'
-          description: Research status
-        summary:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/ResearchSummary'
-            description: Final summary (if completed)
-        template_id:
-          type:
-          - string
-          - 'null'
-          description: Template used (if any)
-        topic:
-          type: string
-          description: Research topic
-        updated_at:
-          type: string
-          format: date-time
-          description: Last updated timestamp
-    ResearchIteration:
-      type: object
-      description: Research iteration result
-      required:
-      - iteration
-      - questions
-      - findings
-      - new_questions
-      - partial_synthesis
-      - confidence
-      - needs_more_research
-      - duration
-      properties:
-        confidence:
-          type: number
-          format: double
-          description: Confidence in current understanding
-        duration:
-          type: string
-          description: Duration of this iteration
-        findings:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResearchFinding'
-          description: Findings discovered
-        iteration:
-          type: integer
-          description: Iteration number (1-based)
-          minimum: 0
-        needs_more_research:
-          type: boolean
-          description: Whether more research is needed
-        new_questions:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResearchQuestion'
-          description: New questions generated
-        partial_synthesis:
-          type: string
-          description: Synthesis of findings so far
-        questions:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResearchQuestion'
-          description: Questions explored in this iteration
-    ResearchMetadata:
-      type: object
-      description: Research metadata
-      required:
-      - total_iterations
-      - total_questions
-      - total_sources
-      properties:
-        duration_seconds:
           type:
           - integer
           - 'null'
-          format: int64
-          description: Research duration in seconds
+          example: 5
           minimum: 0
-        repository_context:
+        max_sources_per_iteration:
           type:
-          - string
+          - integer
           - 'null'
-          description: Repository or session context
-        total_iterations:
-          type: integer
-          description: Total number of iterations
+          example: 10
           minimum: 0
-        total_questions:
-          type: integer
-          description: Total number of questions asked
-          minimum: 0
-        total_sources:
-          type: integer
-          description: Total number of sources consulted
-          minimum: 0
-        user_id:
-          type:
-          - string
-          - 'null'
-          description: User who initiated the research
     ResearchProgressResponse:
       type: object
       description: Research progress response
       required:
       - research_id
-      - repository_id
+      - status
       - current_iteration
       - total_iterations
-      - stage
-      - progress
-      - findings_count
+      - current_focus
+      - findings
+      - progress_percentage
+      - timestamp
       properties:
+        current_focus:
+          type: string
+          example: Analyzing authentication patterns
         current_iteration:
           type: integer
-          description: Current iteration
+          example: 3
           minimum: 0
-        current_question:
-          type:
-          - string
-          - 'null'
-          description: Current question being researched
-        estimated_remaining_seconds:
-          type:
-          - integer
-          - 'null'
-          format: int64
-          description: Estimated time remaining in seconds
-          minimum: 0
-        findings_count:
-          type: integer
-          description: Number of findings so far
-          minimum: 0
-        progress:
+        findings:
+          type: array
+          items:
+            type: string
+        progress_percentage:
           type: number
           format: double
-          description: Progress percentage (0.0-1.0)
-        repository_id:
-          type: string
-          description: Repository ID being researched
+          example: 0.6
         research_id:
           type: string
-          description: Research session ID
-        stage:
+          example: research-uuid-string
+        status:
           type: string
-          description: Current stage description
+          example: in_progress
+        timestamp:
+          type: string
+          format: date-time
         total_iterations:
           type: integer
-          description: Total planned iterations
+          example: 5
           minimum: 0
-    ResearchQualityMetrics:
+    ResearchTemplateResponse:
       type: object
-      description: Research quality metrics
-      required:
-      - completeness_score
-      - accuracy_confidence
-      - source_reliability
-      - coverage_breadth
-      properties:
-        accuracy_confidence:
-          type: number
-          format: double
-          description: Accuracy confidence (0.0 to 1.0)
-        completeness_score:
-          type: number
-          format: double
-          description: Completeness score (0.0 to 1.0)
-        coverage_breadth:
-          type: number
-          format: double
-          description: Coverage breadth (0.0 to 1.0)
-        source_reliability:
-          type: number
-          format: double
-          description: Source reliability score (0.0 to 1.0)
-    ResearchQuestion:
-      type: object
-      description: Research question with metadata
-      required:
-      - id
-      - text
-      - priority
-      - answered
-      - source
-      - created_at
-      properties:
-        answered:
-          type: boolean
-          description: Whether this question has been answered
-        created_at:
-          type: string
-          format: date-time
-          description: Creation time
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier for the question
-        priority:
-          type: number
-          format: double
-          description: Priority level (0.0-1.0, higher is more important)
-        source:
-          $ref: '#/components/schemas/QuestionSource'
-          description: Source of this question
-        text:
-          type: string
-          description: The question text
-    ResearchStatistics:
-      type: object
-      description: Research statistics
-      required:
-      - total_sessions
-      - completed_sessions
-      - in_progress_sessions
-      - failed_sessions
-      - popular_templates
-      - activity_by_date
-      properties:
-        activity_by_date:
-          type: object
-          description: Research activity by date
-          additionalProperties:
-            type: integer
-            minimum: 0
-          propertyNames:
-            type: string
-        average_duration_seconds:
-          type:
-          - number
-          - 'null'
-          format: double
-          description: Average research duration in seconds
-        completed_sessions:
-          type: integer
-          description: Number of completed sessions
-          minimum: 0
-        failed_sessions:
-          type: integer
-          description: Number of failed sessions
-          minimum: 0
-        in_progress_sessions:
-          type: integer
-          description: Number of in-progress sessions
-          minimum: 0
-        popular_templates:
-          type: array
-          items:
-            type: array
-            items: false
-            prefixItems:
-            - type: string
-            - type: integer
-              minimum: 0
-          description: Most used templates
-        total_sessions:
-          type: integer
-          description: Total number of research sessions
-          minimum: 0
-    ResearchStatus:
-      type: string
-      description: Research session status
-      enum:
-      - Active
-      - Completed
-      - Cancelled
-      - Failed
-    ResearchSummary:
-      type: object
-      description: Research summary containing final results
-      required:
-      - session_id
-      - topic
-      - executive_summary
-      - key_findings
-      - detailed_analysis
-      - recommendations
-      - sources
-      - quality_metrics
-      - generated_at
-      properties:
-        detailed_analysis:
-          type: string
-          description: Detailed analysis
-        executive_summary:
-          type: string
-          description: Executive summary
-        generated_at:
-          type: string
-          format: date-time
-          description: Generation timestamp
-        key_findings:
-          type: array
-          items:
-            type: string
-          description: Key findings
-        quality_metrics:
-          $ref: '#/components/schemas/ResearchQualityMetrics'
-          description: Research quality metrics
-        recommendations:
-          type: array
-          items:
-            type: string
-          description: Recommendations
-        session_id:
-          type: string
-          description: Research session ID
-        sources:
-          type: array
-          items:
-            type: string
-          description: Sources consulted
-        topic:
-          type: string
-          description: Research topic
-    ResearchTemplate:
-      type: object
-      description: Research template definition
+      description: Research template response
       required:
       - id
       - name
       - description
       - category
+      - questions
       - config
-      - initial_questions
-      - parameters
       properties:
         category:
           $ref: '#/components/schemas/ResearchCategory'
-          description: Template category
-        config:
-          $ref: '#/components/schemas/ResearchConfig'
-          description: Research configuration
+        config: {}
         description:
           type: string
-          description: Template description
+          example: Comprehensive security analysis template
         id:
           type: string
-          description: Template ID
-        initial_questions:
-          type: array
-          items:
-            $ref: '#/components/schemas/TemplateQuestion'
-          description: Initial research questions
+          example: template-uuid
         name:
           type: string
-          description: Template name
-        parameters:
-          type: object
-          description: Template-specific parameters
-          additionalProperties:
-            $ref: '#/components/schemas/TemplateParameter'
-          propertyNames:
+          example: Security Analysis
+        questions:
+          type: array
+          items:
             type: string
     SourceDocument:
       type: object
@@ -1550,150 +1153,60 @@ components:
           type: number
           format: double
           example: 0.85
-    SourceInfo:
-      type: object
-      description: Information about a research source
-      required:
-      - id
-      - source_type
-      - reliability
-      properties:
-        author:
-          type:
-          - string
-          - 'null'
-          description: Author or maintainer
-        id:
-          type: string
-          description: Source identifier (file path, URL, etc.)
-        last_modified:
-          type:
-          - string
-          - 'null'
-          format: date-time
-          description: Last modified date
-        reliability:
-          type: number
-          format: double
-          description: Source reliability score (0.0-1.0)
-        source_type:
-          $ref: '#/components/schemas/SourceType'
-          description: Source type
-        title:
-          type:
-          - string
-          - 'null'
-          description: Source title or name
-    SourceType:
-      type: string
-      description: Types of research sources
-      enum:
-      - SourceCode
-      - Documentation
-      - Configuration
-      - Test
-      - Readme
-      - Comment
-      - External
     StartResearchFromTemplateRequest:
       type: object
       description: Start research from template request
       required:
-      - session_id
+      - repository_id
       - template_id
-      - topic
       properties:
-        parameters:
-          type: object
-          description: Template parameters
-          additionalProperties:
+        config_overrides: {}
+        custom_questions:
+          type:
+          - array
+          - 'null'
+          items:
             type: string
-          propertyNames:
-            type: string
-        session_id:
+        repository_id:
           type: string
-          description: Session ID for the research
+          example: repo-uuid-string
         template_id:
           type: string
-          description: Template ID to use
-        topic:
-          type: string
-          description: Research topic
+          example: template-uuid
     StartResearchRequest:
       type: object
-      description: Start research request
+      description: Research start request
       required:
       - repository_id
-      - topic
+      - research_question
       properties:
         config:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/ResearchConfig'
-            description: Optional research configuration
+          - $ref: '#/components/schemas/ResearchConfigRequest'
         repository_id:
           type: string
-          description: Repository ID for the research
-        topic:
+          example: repo-uuid-string
+        research_question:
           type: string
-          description: Research topic
-    TemplateParameter:
+          example: Deep analysis of authentication system
+    StartResearchResponse:
       type: object
-      description: Template parameter definition
+      description: Research start response
       required:
-      - name
-      - description
-      - param_type
-      - required
+      - research_id
+      - status
+      - message
       properties:
-        default_value:
-          type:
-          - string
-          - 'null'
-          description: Default value
-        description:
+        message:
           type: string
-          description: Parameter description
-        name:
+          example: Research session started successfully
+        research_id:
           type: string
-          description: Parameter name
-        param_type:
-          $ref: '#/components/schemas/ParameterType'
-          description: Parameter type
-        required:
-          type: boolean
-          description: Whether parameter is required
-    TemplateQuestion:
-      type: object
-      description: Simplified template question for initial research
-      required:
-      - text
-      - question_type
-      - priority
-      - complexity
-      - keywords
-      properties:
-        complexity:
-          type: integer
-          format: int32
-          description: Expected complexity (1-10)
-          minimum: 0
-        keywords:
-          type: array
-          items:
-            type: string
-          description: Keywords for this question
-        priority:
-          type: integer
-          format: int32
-          description: Priority level (1-10)
-          minimum: 0
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-          description: Question type
-        text:
+          example: research-uuid-string
+        status:
           type: string
-          description: Question text
+          example: started
     TokenPair:
       type: object
       description: JWT token pair (access + refresh)
@@ -1791,6 +1304,89 @@ components:
           - 'null'
           example: 50
           minimum: 0
+    WikiPageResponse:
+      type: object
+      description: Wiki page response structure
+      required:
+      - id
+      - title
+      - content
+      - description
+      - importance
+      - file_paths
+      - related_pages
+      - tags
+      - reading_time
+      - generated_at
+      - source_documents
+      properties:
+        content:
+          type: string
+          example: |-
+            # Main Documentation
+
+            This is the main documentation...
+        description:
+          type: string
+          example: Main documentation page
+        file_paths:
+          type: array
+          items:
+            type: string
+        generated_at:
+          type: string
+          example: 2024-01-01T00:00:00Z
+        id:
+          type: string
+          example: main
+        importance:
+          type: string
+          example: Critical
+        reading_time:
+          type: integer
+          example: 5
+          minimum: 0
+        related_pages:
+          type: array
+          items:
+            type: string
+        source_documents:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        title:
+          type: string
+          example: Main Documentation
+    WikiResponse:
+      type: object
+      description: Wiki response structure
+      required:
+      - id
+      - title
+      - description
+      - pages
+      - sections
+      properties:
+        description:
+          type: string
+          example: Generated wiki for repository
+        id:
+          type: string
+          example: repo_123
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/WikiPageResponse'
+        sections:
+          type: array
+          items: {}
+        title:
+          type: string
+          example: Repository Wiki
   securitySchemes:
     api_key:
       type: apiKey

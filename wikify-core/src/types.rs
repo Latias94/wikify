@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Repository information
+/// Repository information - basic metadata about a repository
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepoInfo {
     pub owner: String,
@@ -13,6 +13,34 @@ pub struct RepoInfo {
     pub access_token: Option<String>,
     pub local_path: Option<String>,
     pub access_mode: RepoAccessMode,
+}
+
+/// Repository access handle - encapsulates all information needed to access a repository
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepositoryAccess {
+    /// Basic repository information
+    pub repo_info: RepoInfo,
+    /// Determined access mode (after auto-detection)
+    pub access_mode: RepoAccessMode,
+    /// Local path for GitClone and LocalDirectory modes
+    pub local_path: Option<std::path::PathBuf>,
+    /// Whether the repository is ready for access
+    pub is_ready: bool,
+}
+
+/// Repository file information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepositoryFile {
+    /// Relative path from repository root
+    pub path: String,
+    /// File type (blob, tree, etc.)
+    pub file_type: String,
+    /// File size in bytes
+    pub size: Option<u64>,
+    /// Git SHA hash (if available)
+    pub sha: Option<String>,
+    /// Last modified time (if available)
+    pub last_modified: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Supported repository types
@@ -25,13 +53,42 @@ pub enum RepoType {
     Local,
 }
 
-/// Repository access mode
+/// Repository access mode - three distinct ways to access repository content
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RepoAccessMode {
-    /// Clone the entire repository using git
-    GitClone,
-    /// Access files via API without cloning
+    /// Access remote repository via API (fast, minimal storage, requires network)
     Api,
+    /// Clone remote repository locally (complete, offline capable, more storage)
+    GitClone,
+    /// Access local directory directly (immediate, no network, user-provided path)
+    LocalDirectory,
+}
+
+/// Repository access configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepositoryAccessConfig {
+    /// Preferred access mode (None = auto-detect)
+    pub preferred_mode: Option<RepoAccessMode>,
+    /// API token for authenticated access
+    pub api_token: Option<String>,
+    /// Force the specified mode (ignore auto-detection)
+    pub force_mode: bool,
+    /// Clone depth for GitClone mode (None = full clone, Some(1) = shallow)
+    pub clone_depth: Option<u32>,
+    /// Custom local path for GitClone mode
+    pub custom_local_path: Option<String>,
+}
+
+impl Default for RepositoryAccessConfig {
+    fn default() -> Self {
+        Self {
+            preferred_mode: None, // Auto-detect
+            api_token: None,
+            force_mode: false,
+            clone_depth: Some(1), // Shallow clone by default
+            custom_local_path: None,
+        }
+    }
 }
 
 /// Document information

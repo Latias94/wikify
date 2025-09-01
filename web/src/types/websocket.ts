@@ -35,7 +35,9 @@ export type WebSocketMessageType =
   | "WikiComplete"
   | "WikiError"
   | "index_progress"
-  | "error"
+  | "IndexComplete"
+  | "IndexError"
+  | "Error"
   | "Ping"
   | "Pong";
 
@@ -72,6 +74,7 @@ export interface ChatResponseMessage extends BaseWebSocketMessage {
   sources: SourceDocument[];
   is_streaming?: boolean;
   is_complete?: boolean;
+  chunk_id?: string;
 }
 
 /**
@@ -108,10 +111,11 @@ export interface WikiGenerateMessage extends BaseWebSocketMessage {
 export interface WikiProgressMessage extends BaseWebSocketMessage {
   type: "WikiProgress";
   repository_id: string;
-  progress: number; // 0-100
+  progress: number; // 0.0-1.0 range
   current_step: string;
   total_steps: number;
-  current_step_index: number;
+  completed_steps: number;
+  step_details?: string;
 }
 
 /**
@@ -121,9 +125,13 @@ export interface WikiCompleteMessage extends BaseWebSocketMessage {
   type: "WikiComplete";
   repository_id: string;
   wiki_id: string;
-  title: string;
-  description: string;
   pages_count: number;
+  sections_count: number;
+  metadata?: {
+    title?: string;
+    description?: string;
+    generated_at: string;
+  };
 }
 
 /**
@@ -150,6 +158,7 @@ export interface IndexProgressMessage extends BaseWebSocketMessage {
   current_file?: string;
   files_processed: number;
   total_files: number;
+  processing_rate?: number;
 }
 
 /**
@@ -168,9 +177,25 @@ export interface IndexCompleteMessage extends BaseWebSocketMessage {
  * 索引错误消息
  */
 export interface IndexErrorMessage extends BaseWebSocketMessage {
-  type: "error";
+  type: "IndexError";
+  repository_id: string;
+  error: string;
+  details?: Record<string, any>;
+}
+
+/**
+ * 通用错误消息
+ */
+export interface ErrorMessage extends BaseWebSocketMessage {
+  type: "Error";
   message: string;
-  code?: string;
+  code: string;
+  context: {
+    type: "Chat" | "Wiki" | "Index" | "System";
+    repository_id?: string;
+    step?: string;
+    file_path?: string;
+  };
 }
 
 // ============================================================================
@@ -209,6 +234,7 @@ export type WebSocketMessage =
   | IndexProgressMessage
   | IndexCompleteMessage
   | IndexErrorMessage
+  | ErrorMessage
   | PingMessage
   | PongMessage;
 
@@ -229,6 +255,7 @@ export type ServerMessage =
   | IndexProgressMessage
   | IndexCompleteMessage
   | IndexErrorMessage
+  | ErrorMessage
   | PongMessage;
 
 // ============================================================================
@@ -244,9 +271,11 @@ export interface WebSocketEventHandlers {
   onIndexProgress?: (message: IndexProgressMessage) => void;
   onIndexComplete?: (message: IndexCompleteMessage) => void;
   onIndexError?: (message: IndexErrorMessage) => void;
+  onGeneralError?: (message: ErrorMessage) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: Event) => void;
+  onMessage?: (message: any) => void;
 }
 
 // ============================================================================

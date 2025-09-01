@@ -81,7 +81,7 @@ pub fn create_app(state: AppState) -> Router {
         // API routes
         .nest("/api", routes::api_routes(state.clone()))
         // WebSocket routes
-        .nest("/ws", routes::websocket_routes())
+        .nest("/ws", routes::websocket_routes().with_state(state.clone()))
         // OpenAPI documentation routes
         .nest("/api-docs", routes::openapi_routes())
         // Static file serving

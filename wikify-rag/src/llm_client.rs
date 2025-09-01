@@ -18,10 +18,15 @@ pub struct WikifyLlmClient {
 impl WikifyLlmClient {
     /// Create a new LLM client
     pub async fn new(config: LlmConfig) -> RagResult<Self> {
+        eprintln!(
+            "🔧 Creating LLM client for provider: {} with model: {}",
+            config.provider, config.model
+        );
+
         let client = Self::build_client(&config).await?;
 
-        info!(
-            "Created LLM client for provider: {} with model: {}",
+        eprintln!(
+            "✅ Successfully created LLM client for provider: {} with model: {}",
             config.provider, config.model
         );
 
@@ -30,13 +35,26 @@ impl WikifyLlmClient {
 
     /// Build the appropriate siumai client based on configuration
     async fn build_client(config: &LlmConfig) -> RagResult<Box<dyn LlmClient>> {
+        eprintln!("🔍 Building {} client...", config.provider);
+
         match config.provider.as_str() {
             "openai" => {
+                eprintln!("🔑 Looking for OpenAI API key...");
                 let api_key = config
                     .api_key
                     .clone()
-                    .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                    .or_else(|| {
+                        let key = std::env::var("OPENAI_API_KEY").ok();
+                        if key.is_some() {
+                            eprintln!("✅ Found OPENAI_API_KEY in environment");
+                        } else {
+                            eprintln!("❌ OPENAI_API_KEY not found in environment");
+                        }
+                        key
+                    })
                     .ok_or_else(|| RagError::Config("OpenAI API key not found".to_string()))?;
+
+                eprintln!("🔧 Building OpenAI client with model: {}", config.model);
 
                 let mut builder = LlmBuilder::new()
                     .openai()
@@ -52,11 +70,13 @@ impl WikifyLlmClient {
                     builder = builder.base_url(base_url);
                 }
 
-                let client = builder
-                    .build()
-                    .await
-                    .map_err(|e| RagError::Llm(format!("Failed to build OpenAI client: {}", e)))?;
+                eprintln!("🚀 Attempting to build OpenAI client...");
+                let client = builder.build().await.map_err(|e| {
+                    eprintln!("❌ Failed to build OpenAI client: {}", e);
+                    RagError::Llm(format!("Failed to build OpenAI client: {}", e))
+                })?;
 
+                eprintln!("✅ OpenAI client built successfully");
                 Ok(Box::new(client))
             }
             "anthropic" => {
@@ -192,8 +212,8 @@ impl WikifyLlmClient {
 
     /// Test the connection to the LLM provider
     pub async fn test_connection(&self) -> RagResult<()> {
-        debug!(
-            "Testing connection to LLM provider: {}",
+        eprintln!(
+            "🔍 Testing connection to LLM provider: {}",
             self.config.provider
         );
 
@@ -201,17 +221,24 @@ impl WikifyLlmClient {
             "Hello! Please respond with 'OK' to confirm the connection."
         )];
 
-        match self.generate(test_messages).await {
-            Ok(response) => {
-                info!(
-                    "Connection test successful. Response: {}",
+        // Add timeout to prevent hanging
+        let timeout_duration = std::time::Duration::from_secs(30);
+
+        match tokio::time::timeout(timeout_duration, self.generate(test_messages)).await {
+            Ok(Ok(response)) => {
+                eprintln!(
+                    "✅ Connection test successful. Response: {}",
                     response.chars().take(50).collect::<String>()
                 );
                 Ok(())
             }
-            Err(e) => {
-                warn!("Connection test failed: {}", e);
+            Ok(Err(e)) => {
+                eprintln!("❌ Connection test failed: {}", e);
                 Err(e)
+            }
+            Err(_) => {
+                eprintln!("❌ Connection test timed out after 30 seconds");
+                Err(RagError::Llm("Connection test timed out".to_string()))
             }
         }
     }

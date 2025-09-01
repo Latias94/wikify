@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 wikify-core = { path = "../wikify-core" }
 wikify-indexing = { path = "../wikify-indexing" }
+wikify-repo = { path = "../wikify-repo" }
 
 # Siumai LLM framework
 siumai = { workspace = true }

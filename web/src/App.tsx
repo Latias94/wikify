@@ -12,6 +12,7 @@ import { ChatInterface } from "./components/ChatInterface";
 import { WikiViewer } from "./components/WikiViewer";
 import { AuthProvider, AuthModeDetector, OpenSourceBadge } from "./components/AuthProvider";
 
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/chat/:repositoryId" element={<ChatInterface />} />
               <Route path="/wiki/:repositoryId" element={<WikiViewer />} />
               <Route path="/research/:repositoryId" element={<ResearchPage />} />
+
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

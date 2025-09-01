@@ -8,8 +8,9 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useGlobalWebSocket } from "@/hooks/use-websocket-manager";
 import {
-  Github,
+  GitBranch,
   Plus,
   MessageCircle,
   BookOpen,
@@ -42,8 +43,8 @@ import { Repository, InitializeRepositoryRequest } from "@/types/api";
 import { InitializeRepositoryFormData } from "@/types/ui";
 
 // Components
-import IndexingProgress from "@/components/IndexingProgress";
 import WikiGenerationDialog from "@/components/WikiGenerationDialog";
+import UniversalProgress, { ProgressPanel } from "@/components/UniversalProgress";
 
 const RepositoryManager = () => {
   const navigate = useNavigate();
@@ -75,6 +76,9 @@ const RepositoryManager = () => {
   // Store state
   const repositories = useRepositoriesStore();
   const errors = useErrors();
+
+  // 全局 WebSocket 连接，自动处理所有进度消息
+  const { isConnected: wsConnected, lastError: wsError } = useGlobalWebSocket();
 
   // Derived state
   const isAdding = isSubmitting; // Use local state instead of mutation pending
@@ -178,8 +182,36 @@ const RepositoryManager = () => {
       return;
     }
 
+    // Check wiki status
+    if (repository.wiki_status === 'generating') {
+      toast({
+        title: "Wiki Being Generated",
+        description: "Please wait for the wiki to finish generating.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (repository.wiki_status === 'failed') {
+      toast({
+        title: "Wiki Generation Failed",
+        description: "The wiki generation failed. Please try generating it again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (repository.wiki_status === 'not_generated' || !repository.wiki_status) {
+      toast({
+        title: "Wiki Not Available",
+        description: "No wiki has been generated for this repository yet. Please generate one first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      // Navigate to wiki page using repository.id as session_id
+      // Navigate to wiki page using repository.id
       navigate(`/wiki/${repository.id}`);
     } catch (error) {
       console.error('Failed to navigate to wiki:', error);
@@ -332,7 +364,7 @@ const RepositoryManager = () => {
   const getRepoTypeIcon = (repoType: Repository['repo_type']) => {
     switch (repoType) {
       case 'github':
-        return <Github className="h-5 w-5 text-primary" />;
+        return <GitBranch className="h-5 w-5 text-primary" />;
       case 'git':
         return <Globe className="h-5 w-5 text-primary" />;
       case 'local':
@@ -351,9 +383,20 @@ const RepositoryManager = () => {
           <h1 className="text-3xl font-bold text-foreground">Wikify</h1>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
-          AI-powered code repository documentation and Q&A system. 
+          AI-powered code repository documentation and Q&A system.
           Add your repositories and start asking questions about your codebase.
         </p>
+
+        {/* WebSocket 连接状态 */}
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span className="text-muted-foreground">
+            {wsConnected ? 'Real-time updates connected' : 'Real-time updates disconnected'}
+          </span>
+          {wsError && (
+            <span className="text-red-500 text-xs">({wsError})</span>
+          )}
+        </div>
       </div>
 
       {/* Add Repository Section */}
@@ -374,7 +417,7 @@ const RepositoryManager = () => {
               onClick={() => setFormData(prev => ({ ...prev, repo_type: 'remote' }))}
               className="flex items-center gap-2"
             >
-              <Github className="h-4 w-4" />
+              <GitBranch className="h-4 w-4" />
               Remote Repository
             </Button>
             <Button
@@ -464,6 +507,9 @@ const RepositoryManager = () => {
         </CardContent>
       </Card>
 
+      {/* Progress Panel */}
+      <ProgressPanel className="mb-6" />
+
       {/* Repositories List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -524,7 +570,8 @@ const RepositoryManager = () => {
             {repositories?.map((repo) => (
               <Card key={repo.id} className="shadow-soft hover:shadow-medium transition-smooth">
                 <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
+                  {/* 主要信息行 */}
+                  <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-4 flex-1">
                       <div className="flex-shrink-0 mt-1">
                         {getRepoTypeIcon(repo.repo_type)}
@@ -538,7 +585,7 @@ const RepositoryManager = () => {
                           </Badge>
                         </div>
 
-                        <p className="text-sm text-muted-foreground truncate mb-3">
+                        <p className="text-sm text-muted-foreground truncate mb-2">
                           {repo.repo_path}
                         </p>
 
@@ -547,14 +594,14 @@ const RepositoryManager = () => {
                             {repo.description}
                           </p>
                         )}
-                        
+
                         <div className="flex items-center gap-4 text-sm">
                           <div className="flex items-center gap-1">
                             {getStatusIcon(repo.status)}
                             <span className="font-medium">Status:</span>
                             <span>{getStatusText(repo)}</span>
                           </div>
-                          
+
                           <Separator orientation="vertical" className="h-4" />
                           <span className="text-muted-foreground">
                             Added: {new Date(repo.created_at).toLocaleDateString()}
@@ -569,28 +616,10 @@ const RepositoryManager = () => {
                             </>
                           )}
                         </div>
-
-                        {/* 索引进度显示 */}
-                        {repo.status === 'indexing' && (
-                          <div className="mt-4">
-                            <IndexingProgress
-                              sessionId={repo.id}
-                              onComplete={() => {
-                                // 刷新仓库列表
-                                refetch();
-                              }}
-                              onError={(error) => {
-                                console.error('Indexing error:', error);
-                                // 刷新仓库列表以更新状态
-                                refetch();
-                              }}
-                              className="border-0 shadow-none bg-muted/30"
-                            />
-                          </div>
-                        )}
                       </div>
                     </div>
-                    
+
+                    {/* 右侧按钮区域 */}
                     <div className="flex items-center gap-2 ml-4">
                       <Button
                         size="sm"
@@ -618,10 +647,18 @@ const RepositoryManager = () => {
                         variant="outline"
                         className="flex items-center gap-1"
                         onClick={() => handleStartWiki(repo)}
-                        disabled={repo.status !== 'indexed'}
+                        disabled={
+                          repo.status !== 'indexed' ||
+                          repo.wiki_status === 'generating' ||
+                          repo.wiki_status === 'not_generated' ||
+                          !repo.wiki_status
+                        }
                       >
                         <BookOpen className="h-4 w-4" />
-                        View Wiki
+                        {repo.wiki_status === 'generating' ? 'Generating...' :
+                         repo.wiki_status === 'generated' ? 'View Wiki' :
+                         repo.wiki_status === 'failed' ? 'Wiki Failed' :
+                         'No Wiki'}
                       </Button>
 
                       <Button
@@ -667,6 +704,60 @@ const RepositoryManager = () => {
                       </Button>
                     </div>
                   </div>
+
+                  {/* 索引进度显示 - 独立区域 */}
+                  {repo.status === 'indexing' && (
+                    <div className="mt-4 pt-4 border-t">
+                      <UniversalProgress
+                        repositoryId={repo.id}
+                        type="indexing"
+                        config={{
+                          variant: "inline",
+                          showDetails: true,
+                          showTimeEstimate: true,
+                          showCancelButton: true,
+                        }}
+                        callbacks={{
+                          onComplete: () => {
+                            // 刷新仓库列表
+                            refetch();
+                          },
+                          onError: () => {
+                            console.error('Indexing error for repository:', repo.id);
+                            // 刷新仓库列表以更新状态
+                            refetch();
+                          },
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Wiki 生成进度显示 - 独立区域 */}
+                  {repo.wiki_status === 'generating' && (
+                    <div className="mt-4 pt-4 border-t">
+                      <UniversalProgress
+                        repositoryId={repo.id}
+                        type="wiki_generation"
+                        config={{
+                          variant: "inline",
+                          showDetails: true,
+                          showTimeEstimate: true,
+                          showCancelButton: true,
+                        }}
+                        callbacks={{
+                          onComplete: () => {
+                            // 刷新仓库列表
+                            refetch();
+                          },
+                          onError: () => {
+                            console.error('Wiki generation error for repository:', repo.id);
+                            // 刷新仓库列表以更新状态
+                            refetch();
+                          },
+                        }}
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

@@ -241,7 +241,7 @@ mod tests {
         assert!(admin_user.has_permission(&Permission::GenerateWiki));
         assert!(admin_user.has_permission(&Permission::DeepResearch));
         assert!(admin_user.has_permission(&Permission::Export));
-        assert!(admin_user.has_permission(&Permission::ManageSession));
+        assert!(admin_user.has_permission(&Permission::ManageRepository));
         assert!(admin_user.has_permission(&Permission::Admin));
         assert!(admin_user.is_admin);
     }
@@ -262,7 +262,7 @@ mod tests {
         // Should NOT have other permissions
         assert!(!regular_user.has_permission(&Permission::DeepResearch));
         assert!(!regular_user.has_permission(&Permission::Export));
-        assert!(!regular_user.has_permission(&Permission::ManageSession));
+        assert!(!regular_user.has_permission(&Permission::ManageRepository));
         assert!(!regular_user.has_permission(&Permission::Admin));
         assert!(!regular_user.is_admin);
     }

@@ -14,6 +14,12 @@ export type RepositoryStatus =
   | "indexed"
   | "failed"
   | "archived";
+
+export type WikiStatus =
+  | "not_generated"
+  | "generating"
+  | "generated"
+  | "failed";
 export type MessageRole = "user" | "assistant" | "system";
 
 // ============================================================================
@@ -30,8 +36,10 @@ export interface Repository {
   repo_path: string;
   repo_type: RepoType;
   status: RepositoryStatus;
+  wiki_status?: WikiStatus;
   created_at: string;
   last_indexed_at?: string;
+  wiki_generated_at?: string;
   metadata?: Record<string, any>;
 }
 
@@ -64,36 +72,6 @@ export interface RepositoriesResponse {
 // ============================================================================
 // 用户和会话相关类型
 // ============================================================================
-
-/**
- * 用户信息
- */
-export interface User {
-  id: string;
-  display_name: string;
-  created_at: string;
-  last_seen: string;
-}
-
-/**
- * 会话信息
- */
-export interface Session {
-  id: string;
-  user_id: string;
-  repository_id: string;
-  name?: string;
-  created_at: string;
-  last_activity: string;
-  is_active: boolean;
-}
-
-/**
- * 会话列表响应
- */
-export interface SessionsResponse {
-  sessions: Session[];
-}
 
 // ============================================================================
 // 聊天相关类型
@@ -390,7 +368,6 @@ export type Permission =
   | "GenerateWiki"
   | "DeepResearch"
   | "Export"
-  | "ManageSession"
   | "Admin";
 
 /**
