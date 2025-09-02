@@ -142,7 +142,9 @@ impl EmbeddingGenerator {
 
             // Report progress via callback
             if let Some(callback) = progress_callback {
-                let percentage = 80.0 + (processed_count as f64 / nodes.len() as f64) * 5.0; // 80% to 85%
+                // Calculate actual embedding progress (80% base + 15% for embeddings = 95% total)
+                let embedding_progress = processed_count as f64 / nodes.len() as f64;
+                let percentage = 80.0 + embedding_progress * 15.0; // 80% to 95%
                 callback(
                     "Generating embeddings".to_string(),
                     percentage,

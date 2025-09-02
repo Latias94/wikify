@@ -139,9 +139,8 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
 /// Create WebSocket routes
 pub fn websocket_routes() -> Router<AppState> {
     Router::new()
-        // WebSocket endpoint for all real-time communication
+        // Unified WebSocket endpoint for all real-time communication
         .route("/", get(websocket::unified_handler))
-        .route("/global", get(websocket::unified_handler))
 }
 
 /// Create static file routes
@@ -156,6 +155,9 @@ pub fn openapi_routes() -> Router<AppState> {
         // OpenAPI specification endpoints
         .route("/openapi.json", get(get_openapi_json))
         .route("/openapi.yaml", get(get_openapi_yaml))
+        // AsyncAPI specification endpoints
+        .route("/asyncapi.yaml", get(get_asyncapi_yaml))
+        .route("/asyncapi.json", get(get_asyncapi_json))
         // Swagger UI
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()))
 }
@@ -168,6 +170,23 @@ async fn get_openapi_json() -> Json<utoipa::openapi::OpenApi> {
 /// Get OpenAPI specification as YAML
 async fn get_openapi_yaml() -> String {
     openapi::get_openapi_yaml()
+}
+
+/// Get AsyncAPI specification as YAML
+async fn get_asyncapi_yaml() -> String {
+    include_str!("../docs/asyncapi.yaml").to_string()
+}
+
+/// Get AsyncAPI specification as JSON
+async fn get_asyncapi_json() -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
+    let yaml_content = include_str!("../docs/asyncapi.yaml");
+    match serde_yaml::from_str::<serde_json::Value>(yaml_content) {
+        Ok(json) => Ok(Json(json)),
+        Err(e) => Err((
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to parse AsyncAPI YAML: {}", e),
+        )),
+    }
 }
 
 /// Create all routes combined

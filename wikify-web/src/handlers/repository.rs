@@ -41,7 +41,7 @@ fn user_to_permission_context(user: &crate::auth::User) -> wikify_applications::
 async fn generate_wiki_for_repository(
     state: &AppState,
     repository_id: &str,
-    progress_sender: &tokio::sync::broadcast::Sender<crate::state::IndexingUpdate>,
+    progress_sender: &tokio::sync::broadcast::Sender<crate::state::BroadcastMessage>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting wiki generation for repository: {}", repository_id);
 
@@ -58,31 +58,37 @@ async fn generate_wiki_for_repository(
         Err(e) => {
             let error_msg = format!("Failed to get repository info: {}", e);
             error!("{}", error_msg);
-            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationError {
-                repository_id: repository_id.to_string(),
-                error: error_msg,
-            });
+            let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+                crate::state::IndexingUpdate::WikiGenerationError {
+                    repository_id: repository_id.to_string(),
+                    error: error_msg,
+                },
+            ));
             return Err(e.into());
         }
     };
 
     // Send initial progress update
-    let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
-        repository_id: repository_id.to_string(),
-        stage: "Initializing wiki generation...".to_string(),
-        percentage: 10.0,
-    });
+    let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+        crate::state::IndexingUpdate::WikiGenerationProgress {
+            repository_id: repository_id.to_string(),
+            stage: "Initializing wiki generation...".to_string(),
+            percentage: 0.1, // Use 0.0-1.0 range consistently
+        },
+    ));
 
     // Generate wiki using wiki service
     let mut wiki_service = state.wiki_service.write().await;
     let wiki_config = wikify_wiki::WikiConfig::default();
 
     // Send progress update for wiki generation start
-    let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
-        repository_id: repository_id.to_string(),
-        stage: "Analyzing repository structure...".to_string(),
-        percentage: 30.0,
-    });
+    let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+        crate::state::IndexingUpdate::WikiGenerationProgress {
+            repository_id: repository_id.to_string(),
+            stage: "Analyzing repository structure...".to_string(),
+            percentage: 0.3, // Use 0.0-1.0 range consistently
+        },
+    ));
 
     match wiki_service
         .generate_wiki(&repository.url, &wiki_config)
@@ -90,11 +96,13 @@ async fn generate_wiki_for_repository(
     {
         Ok(wiki_structure) => {
             // Send progress update for content generation
-            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
-                repository_id: repository_id.to_string(),
-                stage: "Generating wiki content...".to_string(),
-                percentage: 70.0,
-            });
+            let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+                crate::state::IndexingUpdate::WikiGenerationProgress {
+                    repository_id: repository_id.to_string(),
+                    stage: "Generating wiki content...".to_string(),
+                    percentage: 0.7, // Use 0.0-1.0 range consistently
+                },
+            ));
 
             // Extract actual markdown content from the first page, or create a summary
             let wiki_content = if let Some(first_page) = wiki_structure.pages.first() {
@@ -107,11 +115,13 @@ async fn generate_wiki_for_repository(
             };
 
             // Send progress update for finalization
-            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationProgress {
-                repository_id: repository_id.to_string(),
-                stage: "Finalizing wiki generation...".to_string(),
-                percentage: 90.0,
-            });
+            let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+                crate::state::IndexingUpdate::WikiGenerationProgress {
+                    repository_id: repository_id.to_string(),
+                    stage: "Finalizing wiki generation...".to_string(),
+                    percentage: 0.9, // Use 0.0-1.0 range consistently
+                },
+            ));
 
             info!(
                 "Successfully generated wiki for repository: {} with {} pages",
@@ -133,20 +143,24 @@ async fn generate_wiki_for_repository(
             drop(wiki_cache);
 
             // Send completion update
-            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationComplete {
-                repository_id: repository_id.to_string(),
-                wiki_content,
-            });
+            let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+                crate::state::IndexingUpdate::WikiGenerationComplete {
+                    repository_id: repository_id.to_string(),
+                    wiki_content,
+                },
+            ));
 
             Ok(())
         }
         Err(e) => {
             let error_msg = format!("Failed to generate wiki: {}", e);
             error!("{}", error_msg);
-            let _ = progress_sender.send(crate::state::IndexingUpdate::WikiGenerationError {
-                repository_id: repository_id.to_string(),
-                error: error_msg,
-            });
+            let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+                crate::state::IndexingUpdate::WikiGenerationError {
+                    repository_id: repository_id.to_string(),
+                    error: error_msg,
+                },
+            ));
             Err(e.into())
         }
     }
@@ -185,7 +199,7 @@ pub async fn initialize_repository(
     let repository_options = wikify_applications::RepositoryOptions {
         auto_index,
         metadata: request.metadata,
-        access_mode: Some(wikify_applications::RepositoryAccessMode::Auto),
+        access_mode: None, // None means auto-detect
         api_token: None,
         extract_metadata: true,
     };
@@ -227,11 +241,13 @@ pub async fn initialize_repository(
             );
 
             // Send initial IndexStart event
-            let _ = web_progress_sender.send(crate::state::IndexingUpdate::Started {
-                repository_id: repo_id_clone.clone(),
-                total_files: None, // Will be updated when we know the actual count
-                estimated_duration: None, // Will be estimated based on repository size
-            });
+            let _ = web_progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
+                crate::state::IndexingUpdate::Started {
+                    repository_id: repo_id_clone.clone(),
+                    total_files: None, // Will be updated when we know the actual count
+                    estimated_duration: None, // Will be estimated based on repository size
+                },
+            ));
 
             tokio::spawn(async move {
                 let mut receiver = app_progress_receiver;
@@ -278,9 +294,11 @@ pub async fn initialize_repository(
 
                                 // Send wiki generation started update
                                 let _ = web_progress_sender.send(
-                                    crate::state::IndexingUpdate::WikiGenerationStarted {
-                                        repository_id: update.repository_id.clone(),
-                                    },
+                                    crate::state::BroadcastMessage::IndexingUpdate(
+                                        crate::state::IndexingUpdate::WikiGenerationStarted {
+                                            repository_id: update.repository_id.clone(),
+                                        },
+                                    ),
                                 );
 
                                 // Generate wiki in background
@@ -298,10 +316,12 @@ pub async fn initialize_repository(
                                     {
                                         error!("Failed to auto-generate wiki: {}", e);
                                         let _ = progress_sender_for_wiki.send(
-                                            crate::state::IndexingUpdate::WikiGenerationError {
-                                                repository_id: repo_id_for_wiki,
-                                                error: e.to_string(),
-                                            },
+                                            crate::state::BroadcastMessage::IndexingUpdate(
+                                                crate::state::IndexingUpdate::WikiGenerationError {
+                                                    repository_id: repo_id_for_wiki,
+                                                    error: e.to_string(),
+                                                },
+                                            ),
                                         );
                                     }
                                 });
@@ -334,7 +354,9 @@ pub async fn initialize_repository(
                     info!("Sending web progress update: {:?}", web_update);
 
                     // Forward to web progress broadcaster
-                    if let Err(e) = web_progress_sender.send(web_update) {
+                    if let Err(e) = web_progress_sender
+                        .send(crate::state::BroadcastMessage::IndexingUpdate(web_update))
+                    {
                         error!("Failed to send progress update: {}", e);
                     }
                 }

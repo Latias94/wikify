@@ -89,6 +89,10 @@ pub async fn chat_query(
                     file_path: source_path.clone(),
                     content: format!("Source: {}", source_path), // TODO: Get actual content
                     similarity_score: 0.8, // TODO: Get actual similarity score
+                    start_line: None,      // TODO: Get actual line information
+                    end_line: None,        // TODO: Get actual line information
+                    chunk_index: None,     // TODO: Get actual chunk information
+                    metadata: None,        // TODO: Get actual metadata
                 })
                 .collect();
 

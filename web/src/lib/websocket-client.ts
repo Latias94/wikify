@@ -57,15 +57,26 @@ export class WebSocketClient {
   private messageQueue: ClientMessage[] = [];
   private isConnecting = false;
 
+  // 消息去重和追踪
+  private receivedMessageIds = new Set<string>();
+  private sentMessageIds = new Map<
+    string,
+    { timestamp: number; type: string }
+  >();
+  private readonly MESSAGE_ID_CLEANUP_INTERVAL = 300000; // 5分钟
+  private readonly MAX_STORED_IDS = 1000;
+  private cleanupTimer: NodeJS.Timeout | null = null;
+
   constructor(
     endpoint: string,
     config: Partial<WebSocketConfig> = {},
     options: Partial<WebSocketOptions> = {}
   ) {
+    // All endpoints now use the unified WebSocket handler
     this.config = {
       ...DEFAULT_CONFIG,
       ...config,
-      url: `${DEFAULT_CONFIG.url}/${endpoint}`,
+      url: DEFAULT_CONFIG.url, // Use unified endpoint only
     };
 
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -74,6 +85,9 @@ export class WebSocketClient {
       status: "disconnected",
       reconnectAttempts: 0,
     };
+
+    // 启动消息ID清理定时器
+    this.startMessageIdCleanup();
 
     this.log("WebSocket client created", { endpoint, config: this.config });
   }
@@ -268,7 +282,25 @@ export class WebSocketClient {
    * 路由消息到对应的处理器
    */
   private routeMessage(message: ServerMessage): void {
+    // 消息去重检查
+    if (message.id && this.receivedMessageIds.has(message.id)) {
+      this.log("Duplicate message received, skipping", {
+        id: message.id,
+        type: message.type,
+      });
+      return;
+    }
+
+    // 记录消息ID
+    if (message.id) {
+      this.receivedMessageIds.add(message.id);
+      this.log("Processing message", { id: message.id, type: message.type });
+    }
+
     switch (message.type) {
+      case "Chat":
+        this.handlers.onChat?.(message);
+        break;
       case "ChatResponse":
         this.handlers.onChatResponse?.(message);
         break;
@@ -287,13 +319,8 @@ export class WebSocketClient {
       case "IndexStart":
         this.handlers.onIndexStart?.(message);
         break;
-      case "index_progress":
-        // 检查是否是完成消息（progress = 1.0）
-        if (message.progress === 1.0) {
-          this.handlers.onIndexComplete?.(message);
-        } else {
-          this.handlers.onIndexProgress?.(message);
-        }
+      case "IndexProgress":
+        this.handlers.onIndexProgress?.(message);
         break;
       case "IndexComplete":
         this.handlers.onIndexComplete?.(message);
@@ -473,5 +500,183 @@ export class WebSocketClient {
    */
   getReadyState(): number | undefined {
     return this.ws?.readyState;
+  }
+
+  // ============================================================================
+  // 便捷方法 - 发送特定类型的消息
+  // ============================================================================
+
+  /**
+   * 发送聊天消息
+   */
+  sendChatMessage(
+    repositoryId: string,
+    question: string,
+    context?: string
+  ): string {
+    const messageId = this.generateMessageId();
+    const message = {
+      type: "Chat" as const,
+      repository_id: repositoryId,
+      question,
+      context,
+      timestamp: new Date().toISOString(),
+      id: messageId,
+    };
+
+    // 追踪发送的消息
+    this.sentMessageIds.set(messageId, {
+      timestamp: Date.now(),
+      type: "Chat",
+    });
+
+    this.send(message);
+    return messageId; // 返回消息ID供调用者追踪
+  }
+
+  /**
+   * 发送Wiki生成请求
+   */
+  sendWikiGenerateRequest(
+    repositoryId: string,
+    config: {
+      include_code_examples?: boolean;
+      max_depth?: number;
+      language?: string;
+    } = {}
+  ): string {
+    const messageId = this.generateMessageId();
+    const message = {
+      type: "WikiGenerate" as const,
+      repository_id: repositoryId,
+      config: {
+        include_code_examples: config.include_code_examples ?? true,
+        max_depth: config.max_depth ?? 3,
+        language: config.language,
+      },
+      timestamp: new Date().toISOString(),
+      id: messageId,
+    };
+
+    // 追踪发送的消息
+    this.sentMessageIds.set(messageId, {
+      timestamp: Date.now(),
+      type: "WikiGenerate",
+    });
+
+    this.send(message);
+    return messageId; // 返回消息ID供调用者追踪
+  }
+
+  /**
+   * 生成唯一消息ID
+   */
+  private generateMessageId(): string {
+    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  // ============================================================================
+  // 消息ID管理
+  // ============================================================================
+
+  /**
+   * 启动消息ID清理定时器
+   */
+  private startMessageIdCleanup(): void {
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupMessageIds();
+    }, this.MESSAGE_ID_CLEANUP_INTERVAL);
+  }
+
+  /**
+   * 清理过期的消息ID
+   */
+  private cleanupMessageIds(): void {
+    const now = Date.now();
+    const expiredThreshold = now - this.MESSAGE_ID_CLEANUP_INTERVAL;
+
+    // 清理接收到的消息ID（保持最近的1000个）
+    if (this.receivedMessageIds.size > this.MAX_STORED_IDS) {
+      const idsArray = Array.from(this.receivedMessageIds);
+      const toKeep = idsArray.slice(-this.MAX_STORED_IDS / 2); // 保留一半
+      this.receivedMessageIds.clear();
+      toKeep.forEach((id) => this.receivedMessageIds.add(id));
+      this.log("Cleaned up received message IDs", {
+        before: idsArray.length,
+        after: this.receivedMessageIds.size,
+      });
+    }
+
+    // 清理发送的消息ID（基于时间）
+    let cleanedSentCount = 0;
+    for (const [id, info] of this.sentMessageIds.entries()) {
+      if (info.timestamp < expiredThreshold) {
+        this.sentMessageIds.delete(id);
+        cleanedSentCount++;
+      }
+    }
+
+    if (cleanedSentCount > 0) {
+      this.log("Cleaned up sent message IDs", {
+        cleaned: cleanedSentCount,
+        remaining: this.sentMessageIds.size,
+      });
+    }
+  }
+
+  /**
+   * 检查消息是否已发送
+   */
+  public isMessageSent(messageId: string): boolean {
+    return this.sentMessageIds.has(messageId);
+  }
+
+  /**
+   * 获取发送消息的信息
+   */
+  public getSentMessageInfo(
+    messageId: string
+  ): { timestamp: number; type: string } | null {
+    return this.sentMessageIds.get(messageId) || null;
+  }
+
+  /**
+   * 获取消息统计信息
+   */
+  public getMessageStats(): {
+    receivedIds: number;
+    sentIds: number;
+    oldestSentTimestamp: number | null;
+  } {
+    let oldestSentTimestamp: number | null = null;
+    for (const info of this.sentMessageIds.values()) {
+      if (
+        oldestSentTimestamp === null ||
+        info.timestamp < oldestSentTimestamp
+      ) {
+        oldestSentTimestamp = info.timestamp;
+      }
+    }
+
+    return {
+      receivedIds: this.receivedMessageIds.size,
+      sentIds: this.sentMessageIds.size,
+      oldestSentTimestamp,
+    };
+  }
+
+  /**
+   * 清理资源
+   */
+  public destroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+
+    this.receivedMessageIds.clear();
+    this.sentMessageIds.clear();
+
+    this.disconnect();
   }
 }

@@ -19,15 +19,6 @@ pub mod auth;
 pub mod repository;
 pub mod research;
 
-// Future modules to be implemented
-// pub mod wiki;
-// pub mod query;
-
-// Workshop module - to be implemented
-// #[cfg(feature = "workshop")]
-// pub mod workshop;
-
-// Re-export main application types
 pub use auth::{
     Permission, PermissionContext, PermissionManager, PermissionMode, UserIdentity, UserType,
 };
@@ -41,9 +32,6 @@ pub use research::{
     ResearchHistoryStorage, ResearchProgress, ResearchQuestion, ResearchResult, ResearchTemplate,
     ResearchTemplateManager,
 };
-// Session module removed - using Repository-based architecture
-
-// Main application exports will be available directly from this module
 
 /// Application-level error type
 #[derive(Debug, thiserror::Error)]
@@ -54,8 +42,8 @@ pub enum ApplicationError {
     #[error("Core error: {0}")]
     Core(#[from] wikify_core::WikifyError),
 
-    #[error("Repository error: {message}")]
-    Repository { message: String },
+    #[error("Repository error: {0}")]
+    Repository(#[from] crate::repository::RepositoryError),
 
     #[error("Permission error: {message}")]
     Permission { message: String },
@@ -84,6 +72,70 @@ pub enum ApplicationError {
 
 pub type ApplicationResult<T> = Result<T, ApplicationError>;
 
+impl ApplicationError {
+    /// Create a permission error
+    pub fn permission<S: Into<String>>(message: S) -> Self {
+        Self::Permission {
+            message: message.into(),
+        }
+    }
+
+    /// Create a configuration error
+    pub fn config<S: Into<String>>(message: S) -> Self {
+        Self::Config {
+            message: message.into(),
+        }
+    }
+
+    /// Create a research error
+    pub fn research<S: Into<String>>(message: S) -> Self {
+        Self::Research {
+            message: message.into(),
+        }
+    }
+
+    /// Create a not found error
+    pub fn not_found<S: Into<String>>(message: S) -> Self {
+        Self::NotFound {
+            message: message.into(),
+        }
+    }
+
+    /// Create an internal error
+    pub fn internal<S: Into<String>>(message: S) -> Self {
+        Self::Internal {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create an internal error with source
+    pub fn internal_with_source<S: Into<String>>(
+        message: S,
+        source: Box<dyn std::error::Error + Send + Sync>,
+    ) -> Self {
+        Self::Internal {
+            message: message.into(),
+            source: Some(source),
+        }
+    }
+
+    /// Create a repository error from a RepositoryError
+    pub fn repository(error: crate::repository::RepositoryError) -> Self {
+        Self::Repository(error)
+    }
+
+    /// Create a repository internal error
+    pub fn repository_internal<M: Into<String>, C: Into<String>>(message: M, component: C) -> Self {
+        Self::Repository(crate::repository::RepositoryError::Internal {
+            message: message.into(),
+            component: component.into(),
+            error_id: uuid::Uuid::new_v4().to_string(),
+            recoverable: true,
+        })
+    }
+}
+
 /// Application configuration
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -106,22 +158,23 @@ impl Default for ApplicationConfig {
 }
 
 impl ApplicationConfig {
-    /// Create configuration for web deployment (open mode)
-    pub fn web_open() -> Self {
+    /// Create configuration with specified permission mode
+    fn with_permissions(permissions: auth::permissions::PermissionConfig) -> Self {
         Self {
-            permissions: auth::permissions::PermissionConfig::open(),
+            permissions,
             rag: wikify_rag::RagConfig::default(),
             storage: StorageConfig::default(),
         }
     }
 
+    /// Create configuration for web deployment (open mode)
+    pub fn web_open() -> Self {
+        Self::with_permissions(auth::permissions::PermissionConfig::open())
+    }
+
     /// Create configuration for web deployment (restricted mode)
     pub fn web_restricted() -> Self {
-        Self {
-            permissions: auth::permissions::PermissionConfig::restricted(),
-            rag: wikify_rag::RagConfig::default(),
-            storage: StorageConfig::default(),
-        }
+        Self::with_permissions(auth::permissions::PermissionConfig::restricted())
     }
 
     /// Create configuration for CLI usage (local mode)
@@ -129,7 +182,7 @@ impl ApplicationConfig {
         Self {
             permissions: auth::permissions::PermissionConfig::local(),
             rag: wikify_rag::RagConfig::default(),
-            storage: StorageConfig::local(),
+            storage: StorageConfig::local(), // CLI uses local storage
         }
     }
 }
@@ -182,56 +235,128 @@ pub struct WikifyApplication {
     config: ApplicationConfig,
 }
 
-impl WikifyApplication {
-    /// Create a new Wikify application
-    pub async fn new(config: ApplicationConfig) -> ApplicationResult<Self> {
-        // Create permission manager
-        let permission_manager = auth::PermissionManager::new(config.permissions.clone());
+/// Builder for WikifyApplication to simplify initialization
+pub struct WikifyApplicationBuilder {
+    config: ApplicationConfig,
+    enable_research: bool,
+    enable_history: bool,
+    custom_history_dir: Option<std::path::PathBuf>,
+    custom_research_config: Option<ResearchConfig>,
+}
 
-        // Create repository manager (new architecture)
-        let repository_manager = std::sync::Arc::new(RepositoryManager::new(config.rag.clone()));
+impl WikifyApplicationBuilder {
+    /// Create a new builder with the given configuration
+    pub fn new(config: ApplicationConfig) -> Self {
+        Self {
+            config,
+            enable_research: true,
+            enable_history: true,
+            custom_history_dir: None,
+            custom_research_config: None,
+        }
+    }
+
+    /// Enable or disable research engine
+    pub fn with_research(mut self, enable: bool) -> Self {
+        self.enable_research = enable;
+        self
+    }
+
+    /// Enable or disable history storage
+    pub fn with_history(mut self, enable: bool) -> Self {
+        self.enable_history = enable;
+        self
+    }
+
+    /// Set custom history directory
+    pub fn with_history_dir<P: Into<std::path::PathBuf>>(mut self, dir: P) -> Self {
+        self.custom_history_dir = Some(dir.into());
+        self
+    }
+
+    /// Set custom research configuration
+    pub fn with_research_config(mut self, config: ResearchConfig) -> Self {
+        self.custom_research_config = Some(config);
+        self
+    }
+
+    /// Build the WikifyApplication
+    pub async fn build(self) -> ApplicationResult<WikifyApplication> {
+        // Create permission manager
+        let permission_manager = auth::PermissionManager::new(self.config.permissions.clone());
+
+        // Create repository manager
+        let repository_manager =
+            std::sync::Arc::new(RepositoryManager::new(self.config.rag.clone()));
 
         // Initialize the global RAG pipeline
         repository_manager.initialize().await?;
 
-        // Create research engine (now based on Repository Manager)
-        let research_engine = Some(ResearchEngine::new(
-            ResearchConfig::default(),
-            repository_manager.clone(),
-        ));
+        // Create research engine if enabled
+        let research_engine = if self.enable_research {
+            let research_config = self.custom_research_config.unwrap_or_default();
+            Some(ResearchEngine::new(
+                research_config,
+                repository_manager.clone(),
+            ))
+        } else {
+            None
+        };
 
         // Create template manager
         let template_manager = ResearchTemplateManager::default();
 
-        // Create history storage (file-based by default)
-        let history_storage = {
-            // Create history directory
-            let history_dir = if let Some(home) = std::env::var_os("HOME") {
-                std::path::PathBuf::from(home).join(".wikify/research_history")
-            } else {
-                std::path::PathBuf::from("./data/research_history")
-            };
-
-            match FileResearchHistoryStorage::new(&history_dir) {
-                Ok(storage) => Some(storage),
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to create research history storage: {}, continuing without history",
-                        e
-                    );
-                    None
-                }
-            }
+        // Create history storage if enabled
+        let history_storage = if self.enable_history {
+            Self::create_history_storage(self.custom_history_dir)
+        } else {
+            None
         };
 
-        Ok(Self {
+        Ok(WikifyApplication {
             permission_manager,
             repository_manager,
             research_engine,
             template_manager,
             history_storage,
-            config,
+            config: self.config,
         })
+    }
+
+    /// Create history storage with optional custom directory
+    fn create_history_storage(
+        custom_dir: Option<std::path::PathBuf>,
+    ) -> Option<FileResearchHistoryStorage> {
+        let history_dir = custom_dir.unwrap_or_else(|| {
+            if let Some(home) = std::env::var_os("HOME") {
+                std::path::PathBuf::from(home).join(".wikify/research_history")
+            } else {
+                std::path::PathBuf::from("./data/research_history")
+            }
+        });
+
+        match FileResearchHistoryStorage::new(&history_dir) {
+            Ok(storage) => Some(storage),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to create research history storage: {}, continuing without history",
+                    e
+                );
+                None
+            }
+        }
+    }
+}
+
+impl WikifyApplication {
+    /// Create a new Wikify application using the builder pattern
+    pub async fn new(config: ApplicationConfig) -> ApplicationResult<Self> {
+        WikifyApplicationBuilder::new(config).build().await
+    }
+
+    /// Create a builder for more advanced configuration
+    pub fn builder(config: ApplicationConfig) -> WikifyApplicationBuilder {
+        WikifyApplicationBuilder::new(config)
     }
 
     // ========================================
@@ -349,24 +474,6 @@ impl WikifyApplication {
         // Query repository using the new manager
         self.repository_manager
             .query_repository(context, repository_id, query)
-            .await
-    }
-
-    /// Remove a repository
-    pub async fn remove_repository(
-        &self,
-        context: &PermissionContext,
-        repository_id: &str,
-    ) -> ApplicationResult<()> {
-        // Check permissions
-        self.permission_manager
-            .check_permission(context, &Permission::Query)
-            .await
-            .map_err(|msg| ApplicationError::Permission { message: msg })?;
-
-        // Remove repository using the new manager
-        self.repository_manager
-            .remove_repository(context, repository_id)
             .await
     }
 
@@ -535,37 +642,63 @@ pub mod prelude {
 }
 
 impl WikifyApplication {
-    /// Create a Wikify application with predefined configuration
-    pub async fn create_with_config(
-        config: ApplicationConfig,
-    ) -> ApplicationResult<WikifyApplication> {
-        WikifyApplication::new(config).await
-    }
-
     /// Create a Wikify application for web deployment (open mode)
     pub async fn create_web_application() -> ApplicationResult<WikifyApplication> {
-        Self::create_with_config(ApplicationConfig::web_open()).await
+        Self::builder(ApplicationConfig::web_open()).build().await
     }
 
     /// Create a Wikify application for web deployment (restricted mode)
     pub async fn create_web_restricted_application() -> ApplicationResult<WikifyApplication> {
-        Self::create_with_config(ApplicationConfig::web_restricted()).await
+        Self::builder(ApplicationConfig::web_restricted())
+            .build()
+            .await
     }
 
     /// Create a Wikify application for CLI usage
     pub async fn create_cli_application() -> ApplicationResult<WikifyApplication> {
-        Self::create_with_config(ApplicationConfig::cli_local()).await
+        Self::builder(ApplicationConfig::cli_local()).build().await
+    }
+
+    /// Create a minimal Wikify application (no research, no history)
+    pub async fn create_minimal() -> ApplicationResult<WikifyApplication> {
+        Self::builder(ApplicationConfig::default())
+            .with_research(false)
+            .with_history(false)
+            .build()
+            .await
+    }
+
+    /// Create a research-focused application with custom history directory
+    pub async fn create_research_focused<P: Into<std::path::PathBuf>>(
+        history_dir: P,
+    ) -> ApplicationResult<WikifyApplication> {
+        Self::builder(ApplicationConfig::default())
+            .with_research(true)
+            .with_history(true)
+            .with_history_dir(history_dir)
+            .build()
+            .await
+    }
+
+    /// Create a web application with custom research configuration
+    pub async fn create_web_with_research(
+        research_config: ResearchConfig,
+    ) -> ApplicationResult<WikifyApplication> {
+        Self::builder(ApplicationConfig::web_open())
+            .with_research(true)
+            .with_research_config(research_config)
+            .build()
+            .await
     }
 
     // ========================================
-    // Research Template Management (TODO)
+    // Research Template Management
     // ========================================
 
     /// List all research templates
     pub async fn list_research_templates(
         &self,
     ) -> ApplicationResult<Vec<research::ResearchTemplate>> {
-        // TODO: Implement research template listing
         Ok(self
             .template_manager
             .list_templates()
@@ -579,12 +712,11 @@ impl WikifyApplication {
         &self,
         template_id: &str,
     ) -> ApplicationResult<research::ResearchTemplate> {
-        // TODO: Implement research template retrieval
         self.template_manager
             .get_template(template_id)
             .cloned()
-            .ok_or_else(|| ApplicationError::NotFound {
-                message: format!("Research template not found: {}", template_id),
+            .ok_or_else(|| {
+                ApplicationError::not_found(format!("Research template not found: {}", template_id))
             })
     }
 
@@ -593,7 +725,6 @@ impl WikifyApplication {
         &self,
         category: research::ResearchCategory,
     ) -> ApplicationResult<Vec<research::ResearchTemplate>> {
-        // TODO: Implement template filtering by category
         Ok(self
             .template_manager
             .list_templates_by_category(&category)
@@ -619,7 +750,7 @@ impl WikifyApplication {
             template.initial_questions = questions
                 .into_iter()
                 .enumerate()
-                .map(|(i, text)| research::TemplateQuestion {
+                .map(|(_i, text)| research::TemplateQuestion {
                     text,
                     question_type: research::QuestionType::Conceptual,
                     priority: 5,
@@ -630,9 +761,9 @@ impl WikifyApplication {
         }
 
         // Apply config overrides if provided
-        if let Some(overrides) = config_overrides {
-            // TODO: Implement config override logic
-            // For now, we'll use the template config as-is
+        if let Some(_overrides) = config_overrides {
+            // Config overrides are not yet implemented
+            // Using template config as-is for now
         }
 
         // Use the first question as the main research question
@@ -770,40 +901,18 @@ impl WikifyApplication {
         repository_id: &str,
         branch: Option<String>,
     ) -> ApplicationResult<Vec<wikify_core::RepositoryFile>> {
-        self.permission_manager
-            .check_permission(context, &Permission::Query)
-            .await
-            .map_err(|msg| ApplicationError::Permission { message: msg })?;
-
-        // Get repository info from storage
-        let repository = self
-            .repository_manager
-            .get_repository(context, repository_id)
-            .await?;
-
-        // Note: Access mode detection is now handled by UnifiedRepositoryProcessor
-
-        // Create repository access configuration from metadata
-        let config = self.create_access_config_from_metadata(&repository.metadata);
-
-        // Create unified processor
-        let base_path = self.get_base_path();
-        let processor = wikify_repo::RepositoryProcessor::new(&base_path);
-
-        // Access repository with unified interface
-        let access = processor
-            .access_repository(&repository.url, Some(config))
-            .await
-            .map_err(|e| ApplicationError::Repository {
-                message: format!("Failed to access repository: {}", e),
-            })?;
+        // Use common helper to get repository access
+        let (processor, access) = self.get_repository_access(context, repository_id).await?;
 
         // Get file tree using unified interface
         processor
             .get_file_tree(&access, branch.as_deref())
             .await
-            .map_err(|e| ApplicationError::Repository {
-                message: format!("Failed to get file tree: {}", e),
+            .map_err(|e| {
+                ApplicationError::repository_internal(
+                    format!("Failed to get file tree: {}", e),
+                    "file_operations",
+                )
             })
     }
 
@@ -848,14 +957,18 @@ impl WikifyApplication {
             })
     }
 
-    /// Get file content from a repository
-    pub async fn get_repository_file_content(
+    /// Get repository access for file operations
+    /// This is a common helper method that handles permission checking,
+    /// repository retrieval, and access setup for file operations
+    async fn get_repository_access(
         &self,
         context: &PermissionContext,
         repository_id: &str,
-        file_path: &str,
-        branch: Option<String>,
-    ) -> ApplicationResult<String> {
+    ) -> ApplicationResult<(
+        wikify_repo::RepositoryProcessor,
+        wikify_core::RepositoryAccess,
+    )> {
+        // Check permissions
         self.permission_manager
             .check_permission(context, &Permission::Query)
             .await
@@ -866,36 +979,6 @@ impl WikifyApplication {
             .repository_manager
             .get_repository(context, repository_id)
             .await?;
-
-        // Use the same access mode detection logic as file tree
-        let access_mode_str = repository
-            .metadata
-            .get("access_mode")
-            .map(|s| s.as_str())
-            .unwrap_or("Auto");
-        let preferred_access_mode = match access_mode_str {
-            "Api" => wikify_core::RepoAccessMode::Api,
-            "GitClone" => wikify_core::RepoAccessMode::GitClone,
-            _ => {
-                // Auto-detect based on available tokens
-                let has_api_token = match repository.repo_type.as_str() {
-                    "github" => std::env::var("GITHUB_TOKEN").is_ok(),
-                    "gitlab" => std::env::var("GITLAB_TOKEN").is_ok(),
-                    "bitbucket" => std::env::var("BITBUCKET_TOKEN").is_ok(),
-                    "gitea" => {
-                        std::env::var("GITEA_TOKEN").is_ok()
-                            && std::env::var("GITEA_BASE_URL").is_ok()
-                    }
-                    _ => false,
-                };
-
-                if has_api_token {
-                    wikify_core::RepoAccessMode::Api
-                } else {
-                    wikify_core::RepoAccessMode::GitClone
-                }
-            }
-        };
 
         // Create repository access configuration from metadata
         let config = self.create_access_config_from_metadata(&repository.metadata);
@@ -908,16 +991,36 @@ impl WikifyApplication {
         let access = processor
             .access_repository(&repository.url, Some(config))
             .await
-            .map_err(|e| ApplicationError::Repository {
-                message: format!("Failed to access repository: {}", e),
+            .map_err(|e| {
+                ApplicationError::repository_internal(
+                    format!("Failed to access repository: {}", e),
+                    "repository_access",
+                )
             })?;
+
+        Ok((processor, access))
+    }
+
+    /// Get file content from a repository
+    pub async fn get_repository_file_content(
+        &self,
+        context: &PermissionContext,
+        repository_id: &str,
+        file_path: &str,
+        branch: Option<String>,
+    ) -> ApplicationResult<String> {
+        // Use common helper to get repository access
+        let (processor, access) = self.get_repository_access(context, repository_id).await?;
 
         // Get file content using unified interface
         processor
             .get_file_content(&access, file_path, branch.as_deref())
             .await
-            .map_err(|e| ApplicationError::Repository {
-                message: format!("Failed to get file content: {}", e),
+            .map_err(|e| {
+                ApplicationError::repository_internal(
+                    format!("Failed to get file content: {}", e),
+                    "file_operations",
+                )
             })
     }
 
@@ -928,40 +1031,18 @@ impl WikifyApplication {
         repository_id: &str,
         branch: Option<String>,
     ) -> ApplicationResult<Option<String>> {
-        self.permission_manager
-            .check_permission(context, &Permission::Query)
-            .await
-            .map_err(|msg| ApplicationError::Permission { message: msg })?;
-
-        // Get repository info from storage
-        let repository = self
-            .repository_manager
-            .get_repository(context, repository_id)
-            .await?;
-
-        // Note: Access mode detection is now handled by UnifiedRepositoryProcessor
-
-        // Create repository access configuration from metadata
-        let config = self.create_access_config_from_metadata(&repository.metadata);
-
-        // Create unified processor
-        let base_path = self.get_base_path();
-        let processor = wikify_repo::RepositoryProcessor::new(&base_path);
-
-        // Access repository with unified interface
-        let access = processor
-            .access_repository(&repository.url, Some(config))
-            .await
-            .map_err(|e| ApplicationError::Repository {
-                message: format!("Failed to access repository: {}", e),
-            })?;
+        // Use common helper to get repository access
+        let (processor, access) = self.get_repository_access(context, repository_id).await?;
 
         // Get README using unified interface
         processor
             .get_readme(&access, branch.as_deref())
             .await
-            .map_err(|e| ApplicationError::Repository {
-                message: format!("Failed to get README: {}", e),
+            .map_err(|e| {
+                ApplicationError::repository_internal(
+                    format!("Failed to get README: {}", e),
+                    "file_operations",
+                )
             })
     }
 }

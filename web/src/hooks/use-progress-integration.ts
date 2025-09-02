@@ -22,7 +22,25 @@ import {
   IndexingProgressState,
   WikiGenerationProgressState,
   ResearchProgressState,
+  RagQueryProgressState,
 } from "@/types/progress";
+
+// ============================================================================
+// 配置类型定义
+// ============================================================================
+
+interface RagQueryConfig {
+  queryId?: string;
+  timeout?: number;
+  maxTokens?: number;
+}
+
+interface ResearchConfig {
+  researchId?: string;
+  totalStages?: number;
+  totalDocuments?: number;
+  maxIterations?: number;
+}
 
 // ============================================================================
 // 进度集成 Hook
@@ -35,6 +53,10 @@ export function useProgressIntegration() {
   // 存储活跃的进度 ID - 使用 useRef 确保在组件重新渲染时保持状态
   const progressMapRef = useRef(new Map<string, string>()); // key: type_repositoryId, value: progressId
   const progressMap = progressMapRef.current;
+
+  // 消息ID映射：用于关联消息ID和进度状态
+  const messageIdMapRef = useRef(new Map<string, string>()); // key: messageId, value: progressId
+  const messageIdMap = messageIdMapRef.current;
 
   // ============================================================================
   // 索引进度处理
@@ -59,9 +81,14 @@ export function useProgressIntegration() {
       const progressId = startProgress(initialState);
       progressMap.set(key, progressId);
 
+      // 如果有消息ID，建立映射关系
+      if (message.id) {
+        messageIdMap.set(message.id, progressId);
+      }
+
       return progressId;
     },
-    [startProgress, progressMap]
+    [startProgress, progressMap, messageIdMap]
   );
 
   const handleIndexProgress = useCallback(
@@ -69,41 +96,71 @@ export function useProgressIntegration() {
       const key = `indexing_${message.repository_id}`;
       let progressId = progressMap.get(key);
 
+      // 如果有消息ID，先尝试通过消息ID查找
+      if (message.id && messageIdMap.has(message.id)) {
+        progressId = messageIdMap.get(message.id);
+      }
+
       if (!progressId) {
         // 创建新的进度状态
         const initialState: Omit<IndexingProgressState, "id" | "startTime"> = {
           type: "indexing",
           status: "running",
           progress: message.progress,
-          repositoryId: message.repository_id,
-          currentFile: message.current_file,
-          filesProcessed: message.files_processed,
-          totalFiles: message.total_files,
-          processingRate: message.processing_rate,
+          repositoryId: message.repository_id, // snake_case -> camelCase
+          currentFile: message.current_file, // snake_case -> camelCase
+          filesProcessed: message.files_processed, // snake_case -> camelCase
+          totalFiles: message.total_files, // snake_case -> camelCase
+          processingRate: message.processing_rate, // snake_case -> camelCase
         };
 
         progressId = startProgress(initialState);
         progressMap.set(key, progressId);
+
+        // 建立消息ID映射
+        if (message.id) {
+          messageIdMap.set(message.id, progressId);
+        }
       } else {
         // 更新现有进度
         const updates: Partial<IndexingProgressState> = {
           progress: message.progress,
-          currentFile: message.current_file,
-          filesProcessed: message.files_processed,
-          totalFiles: message.total_files,
-          processingRate: message.processing_rate,
+          currentFile: message.current_file, // snake_case -> camelCase
+          filesProcessed: message.files_processed, // snake_case -> camelCase
+          totalFiles: message.total_files, // snake_case -> camelCase
+          processingRate: message.processing_rate, // snake_case -> camelCase
         };
 
         updateProgress(progressId, updates);
+
+        // 更新消息ID映射
+        if (message.id) {
+          messageIdMap.set(message.id, progressId);
+        }
       }
 
-      // 检查是否完成
-      if (message.progress >= 1.0) {
+      // 注意：不在这里判断完成状态，应该等待 IndexComplete 消息
+    },
+    [startProgress, updateProgress, progressMap, messageIdMap]
+  );
+
+  const handleIndexComplete = useCallback(
+    (message: IndexCompleteMessage) => {
+      const key = `indexing_${message.repository_id}`;
+      const progressId = progressMap.get(key);
+
+      if (progressId) {
+        // 更新为完成状态
+        updateProgress(progressId, {
+          progress: 1.0,
+          filesProcessed: message.total_files,
+          totalFiles: message.total_files,
+        });
         completeProgress(progressId);
         progressMap.delete(key);
       }
     },
-    [startProgress, updateProgress, completeProgress]
+    [updateProgress, completeProgress, progressMap]
   );
 
   const handleIndexError = useCallback(
@@ -116,7 +173,7 @@ export function useProgressIntegration() {
         progressMap.delete(key);
       }
     },
-    [errorProgress]
+    [errorProgress, progressMap]
   );
 
   // ============================================================================
@@ -128,6 +185,11 @@ export function useProgressIntegration() {
       const key = `wiki_generation_${message.repository_id}`;
       let progressId = progressMap.get(key);
 
+      // 如果有消息ID，先尝试通过消息ID查找
+      if (message.id && messageIdMap.has(message.id)) {
+        progressId = messageIdMap.get(message.id);
+      }
+
       if (!progressId) {
         // 创建新的进度状态
         const initialState: Omit<
@@ -137,29 +199,39 @@ export function useProgressIntegration() {
           type: "wiki_generation",
           status: "running",
           progress: message.progress,
-          repositoryId: message.repository_id,
-          currentStep: message.current_step,
-          totalSteps: message.total_steps,
-          completedSteps: message.completed_steps,
-          stepDetails: message.step_details,
+          repositoryId: message.repository_id, // snake_case -> camelCase
+          currentStep: message.current_step, // snake_case -> camelCase
+          totalSteps: message.total_steps, // snake_case -> camelCase
+          completedSteps: message.completed_steps, // snake_case -> camelCase
+          stepDetails: message.step_details, // snake_case -> camelCase
         };
 
         progressId = startProgress(initialState);
         progressMap.set(key, progressId);
+
+        // 建立消息ID映射
+        if (message.id) {
+          messageIdMap.set(message.id, progressId);
+        }
       } else {
         // 更新现有进度
         const updates: Partial<WikiGenerationProgressState> = {
           progress: message.progress,
-          currentStep: message.current_step,
-          totalSteps: message.total_steps,
-          completedSteps: message.completed_steps,
-          stepDetails: message.step_details,
+          currentStep: message.current_step, // snake_case -> camelCase
+          totalSteps: message.total_steps, // snake_case -> camelCase
+          completedSteps: message.completed_steps, // snake_case -> camelCase
+          stepDetails: message.step_details, // snake_case -> camelCase
         };
 
         updateProgress(progressId, updates);
+
+        // 更新消息ID映射
+        if (message.id) {
+          messageIdMap.set(message.id, progressId);
+        }
       }
     },
-    [startProgress, updateProgress]
+    [startProgress, updateProgress, progressMap, messageIdMap]
   );
 
   const handleWikiComplete = useCallback(
@@ -180,7 +252,7 @@ export function useProgressIntegration() {
         progressMap.delete(key);
       }
     },
-    [updateProgress, completeProgress]
+    [updateProgress, completeProgress, progressMap]
   );
 
   const handleWikiError = useCallback(
@@ -193,7 +265,7 @@ export function useProgressIntegration() {
         progressMap.delete(key);
       }
     },
-    [errorProgress]
+    [errorProgress, progressMap]
   );
 
   // ============================================================================
@@ -204,8 +276,8 @@ export function useProgressIntegration() {
     (
       type: "rag_query" | "research",
       repositoryId: string,
-      config: any = {}
-    ) => {
+      config: Record<string, unknown> = {}
+    ): string => {
       const key = `${type}_${repositoryId}`;
 
       // 如果已经有进度，返回现有的
@@ -214,33 +286,37 @@ export function useProgressIntegration() {
         return existingProgressId;
       }
 
-      let initialState: any;
+      let initialState:
+        | Omit<RagQueryProgressState, "id" | "startTime">
+        | Omit<ResearchProgressState, "id" | "startTime">;
 
       if (type === "rag_query") {
+        const ragConfig = config as RagQueryConfig;
         initialState = {
           type: "rag_query",
           status: "running",
           progress: 0,
           repositoryId,
-          queryId: config.queryId || `query_${Date.now()}`,
+          queryId: ragConfig.queryId || `query_${Date.now()}`,
           currentPhase: "embedding",
           phaseDetails: "Embedding query...",
           isStreaming: false,
           tokensGenerated: 0,
-        };
-      } else if (type === "research") {
+        } as Omit<RagQueryProgressState, "id" | "startTime">;
+      } else {
+        const researchConfig = config as ResearchConfig;
         initialState = {
           type: "research",
           status: "running",
           progress: 0,
           repositoryId,
-          researchId: config.researchId || `research_${Date.now()}`,
+          researchId: researchConfig.researchId || `research_${Date.now()}`,
           currentStage: "Initializing research...",
-          totalStages: config.totalStages || 5,
+          totalStages: researchConfig.totalStages || 5,
           completedStages: 0,
           documentsProcessed: 0,
-          totalDocuments: config.totalDocuments || 100,
-        };
+          totalDocuments: researchConfig.totalDocuments || 100,
+        } as Omit<ResearchProgressState, "id" | "startTime">;
       }
 
       const progressId = startProgress(initialState);
@@ -248,11 +324,20 @@ export function useProgressIntegration() {
 
       return progressId;
     },
-    [startProgress]
+    [startProgress, progressMap]
   );
 
   const updateManualProgress = useCallback(
-    (type: "rag_query" | "research", repositoryId: string, updates: any) => {
+    (
+      type: "rag_query" | "research",
+      repositoryId: string,
+      updates: Partial<
+        Omit<
+          RagQueryProgressState | ResearchProgressState,
+          "id" | "startTime" | "type"
+        >
+      >
+    ) => {
       const key = `${type}_${repositoryId}`;
       const progressId = progressMap.get(key);
 
@@ -260,13 +345,13 @@ export function useProgressIntegration() {
         updateProgress(progressId, updates);
 
         // 检查是否完成
-        if (updates.progress >= 1.0) {
+        if (updates.progress && updates.progress >= 1.0) {
           completeProgress(progressId);
           progressMap.delete(key);
         }
       }
     },
-    [updateProgress, completeProgress]
+    [updateProgress, completeProgress, progressMap]
   );
 
   const completeManualProgress = useCallback(
@@ -279,7 +364,7 @@ export function useProgressIntegration() {
         progressMap.delete(key);
       }
     },
-    [completeProgress]
+    [completeProgress, progressMap]
   );
 
   const errorManualProgress = useCallback(
@@ -292,7 +377,7 @@ export function useProgressIntegration() {
         progressMap.delete(key);
       }
     },
-    [errorProgress]
+    [errorProgress, progressMap]
   );
 
   // ============================================================================
@@ -391,12 +476,14 @@ export function useProgressIntegration() {
 
   const clearAllProgress = useCallback(() => {
     progressMap.clear();
-  }, []);
+    messageIdMap.clear();
+  }, [progressMap, messageIdMap]);
 
   return {
     // WebSocket 消息处理
     handleIndexStart,
     handleIndexProgress,
+    handleIndexComplete,
     handleIndexError,
     handleWikiProgress,
     handleWikiComplete,
@@ -434,7 +521,9 @@ export function useRagQueryProgress(repositoryId: string) {
   );
 
   const updateQuery = useCallback(
-    (updates: any) => {
+    (
+      updates: Partial<Omit<RagQueryProgressState, "id" | "startTime" | "type">>
+    ) => {
       integration.updateManualProgress("rag_query", repositoryId, updates);
     },
     [integration, repositoryId]
@@ -463,14 +552,20 @@ export function useResearchProgress(repositoryId: string) {
   const integration = useProgressIntegration();
 
   const startResearch = useCallback(
-    (config?: any) => {
-      return integration.startManualProgress("research", repositoryId, config);
+    (config?: ResearchConfig) => {
+      return integration.startManualProgress(
+        "research",
+        repositoryId,
+        (config || {}) as Record<string, unknown>
+      );
     },
     [integration, repositoryId]
   );
 
   const updateResearch = useCallback(
-    (updates: any) => {
+    (
+      updates: Partial<Omit<ResearchProgressState, "id" | "startTime" | "type">>
+    ) => {
       integration.updateManualProgress("research", repositoryId, updates);
     },
     [integration, repositoryId]

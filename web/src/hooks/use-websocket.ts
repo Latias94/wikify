@@ -62,7 +62,7 @@ export function useChatWebSocket(
   useEffect(() => {
     if (!repositoryId) return;
 
-    const ws = new WebSocketClient("chat", config, {
+    const ws = new WebSocketClient("unified", config, {
       debug: import.meta.env.DEV,
       ...options,
     });
@@ -287,7 +287,7 @@ export function useIndexProgressWebSocket(
 
   // 初始化 WebSocket 连接
   useEffect(() => {
-    const ws = new WebSocketClient("index", config, {
+    const ws = new WebSocketClient("unified", config, {
       debug: import.meta.env.DEV,
       ...options,
     });
@@ -533,7 +533,7 @@ export function useResearchWebSocket(
   useEffect(() => {
     if (!researchId) return;
 
-    const ws = new WebSocketClient("research", config, {
+    const ws = new WebSocketClient("unified", config, {
       debug: import.meta.env.DEV,
       ...options,
     });

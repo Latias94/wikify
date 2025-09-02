@@ -8,7 +8,7 @@ use crate::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
 use wikify_applications::{ApplicationConfig, PermissionContext, UserIdentity, WikifyApplication};
 use wikify_wiki::WikiService;
@@ -89,6 +89,21 @@ pub enum IndexingUpdate {
     },
 }
 
+/// Unified broadcast message for all real-time communication
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type")]
+pub enum BroadcastMessage {
+    /// Repository indexing progress updates
+    #[serde(rename = "indexing")]
+    IndexingUpdate(IndexingUpdate),
+    /// WebSocket message for real-time communication
+    #[serde(rename = "websocket")]
+    WebSocketMessage {
+        #[serde(flatten)]
+        message: crate::websocket::WsMessage,
+    },
+}
+
 /// Cached wiki content
 #[derive(Debug, Clone)]
 pub struct CachedWiki {
@@ -113,8 +128,8 @@ pub struct AppState {
     pub wiki_service: Arc<RwLock<WikiService>>,
     /// Cache for generated wikis
     pub wiki_cache: Arc<RwLock<HashMap<String, CachedWiki>>>,
-    /// Progress broadcaster for web-specific indexing updates
-    pub progress_broadcaster: broadcast::Sender<IndexingUpdate>,
+    /// Progress broadcaster for web-specific indexing updates and real-time communication
+    pub progress_broadcaster: broadcast::Sender<BroadcastMessage>,
     /// User service for authentication and user management
     pub user_service: UserService,
     /// API Key service for API key management
@@ -157,7 +172,7 @@ impl AppState {
         };
 
         // Create progress broadcaster with a buffer of 100 messages
-        let (progress_broadcaster, _) = broadcast::channel::<IndexingUpdate>(100);
+        let (progress_broadcaster, _) = broadcast::channel::<BroadcastMessage>(100);
 
         // Create user service with appropriate storage backend
         let user_service = {
@@ -308,7 +323,9 @@ impl AppState {
     }
 
     /// Subscribe to progress updates
-    pub async fn subscribe_to_progress(&self) -> tokio::sync::broadcast::Receiver<IndexingUpdate> {
+    pub async fn subscribe_to_progress(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<BroadcastMessage> {
         self.progress_broadcaster.subscribe()
     }
 }

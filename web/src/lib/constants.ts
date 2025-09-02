@@ -77,7 +77,7 @@ export const WS_MESSAGE_TYPE = {
   WIKI_COMPLETE: "WikiComplete",
   WIKI_ERROR: "WikiError",
   INDEX_START: "IndexStart",
-  INDEX_PROGRESS: "index_progress",
+  INDEX_PROGRESS: "IndexProgress", // 修复：应该是 "IndexProgress" 而不是 "index_progress"
   INDEX_COMPLETE: "IndexComplete",
   INDEX_ERROR: "IndexError",
   RESEARCH_START: "ResearchStart",

@@ -311,15 +311,27 @@ impl SqliteRepositoryStorage {
                 })?,
             status,
             progress: 0.0, // Not stored in current schema, will be calculated
-            created_at: row
-                .try_get("created_at")
-                .map_err(|e| RepositoryError::Internal {
-                    message: format!("Failed to get created_at column: {}", e),
-                    component: "sqlite_storage".to_string(),
-                    error_id: uuid::Uuid::new_v4().to_string(),
-                    recoverable: false,
-                })?,
-            indexed_at: row.try_get("last_indexed_at").ok(),
+            created_at: {
+                let created_str: String =
+                    row.try_get("created_at")
+                        .map_err(|e| RepositoryError::Internal {
+                            message: format!("Failed to get created_at column: {}", e),
+                            component: "sqlite_storage".to_string(),
+                            error_id: uuid::Uuid::new_v4().to_string(),
+                            recoverable: false,
+                        })?;
+                chrono::DateTime::parse_from_rfc3339(&created_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now())
+            },
+            indexed_at: {
+                let indexed_str: Option<String> = row.try_get("last_indexed_at").ok();
+                indexed_str.and_then(|s| {
+                    chrono::DateTime::parse_from_rfc3339(&s)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .ok()
+                })
+            },
             updated_at: Utc::now(), // Will be set to current time
             owner_id: Some("default".to_string()), // Default owner for now
             metadata,
@@ -364,8 +376,8 @@ impl RepositoryStorage for SqliteRepositoryStorage {
         .bind("") // Empty description
         .bind(&repo.url)
         .bind(&repo.repo_type)
-        .bind(repo.created_at)
-        .bind(repo.indexed_at)
+        .bind(repo.created_at.to_rfc3339())
+        .bind(repo.indexed_at.map(|dt| dt.to_rfc3339()))
         .bind(status_str)
         .bind(metadata_json)
         .execute(&self.pool)
@@ -406,7 +418,7 @@ impl RepositoryStorage for SqliteRepositoryStorage {
 
     async fn list_repositories(
         &self,
-        owner_id: Option<&str>,
+        _owner_id: Option<&str>,
     ) -> RepositoryResult<Vec<RepositoryIndex>> {
         let rows = sqlx::query(
             "SELECT id, name, description, repo_path, repo_type, created_at, last_indexed_at, status, metadata FROM repositories ORDER BY created_at DESC"
@@ -476,7 +488,7 @@ impl RepositoryStorage for SqliteRepositoryStorage {
         let result =
             sqlx::query("UPDATE repositories SET status = ?, last_indexed_at = ? WHERE id = ?")
                 .bind(status_str)
-                .bind(indexed_at)
+                .bind(indexed_at.map(|dt| dt.to_rfc3339()))
                 .bind(id)
                 .execute(&self.pool)
                 .await

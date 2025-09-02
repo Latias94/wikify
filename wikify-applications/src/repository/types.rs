@@ -109,23 +109,15 @@ pub struct RepositoryOptions {
     pub extract_metadata: bool,
 }
 
-/// Repository access mode preference
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RepositoryAccessMode {
-    /// Prefer API access (faster, less storage)
-    Api,
-    /// Prefer Git clone (full access, works offline)
-    GitClone,
-    /// Auto-detect best method
-    Auto,
-}
+// Re-export RepoAccessMode from wikify-core to avoid duplication
+pub use wikify_core::RepoAccessMode as RepositoryAccessMode;
 
 impl Default for RepositoryOptions {
     fn default() -> Self {
         Self {
             auto_index: true,
             metadata: None,
-            access_mode: Some(RepositoryAccessMode::Auto),
+            access_mode: None, // None means auto-detect
             api_token: None,
             extract_metadata: true,
         }

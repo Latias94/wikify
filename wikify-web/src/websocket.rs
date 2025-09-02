@@ -18,9 +18,20 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
+use uuid;
+
+/// Error types for unified error handling
+#[derive(Debug, Clone)]
+pub enum ErrorType {
+    Chat,
+    Wiki,
+    Index,
+    Research,
+    General,
+}
 
 /// WebSocket message types
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WsMessage {
     /// Chat message
@@ -35,7 +46,7 @@ pub enum WsMessage {
     ChatResponse {
         repository_id: String,
         answer: String,
-        sources: Vec<WsSourceDocument>,
+        sources: Vec<SourceDocument>,
         timestamp: chrono::DateTime<chrono::Utc>,
         id: Option<String>,
         is_streaming: Option<bool>,
@@ -53,7 +64,7 @@ pub enum WsMessage {
     /// Wiki generation request
     WikiGenerate {
         repository_id: String,
-        config: WsWikiConfig,
+        config: WikiConfig,
         timestamp: chrono::DateTime<chrono::Utc>,
         id: Option<String>,
     },
@@ -74,7 +85,7 @@ pub enum WsMessage {
         wiki_id: String,
         pages_count: usize,
         sections_count: usize,
-        metadata: Option<WsWikiMetadata>,
+        metadata: Option<WikiMetadata>,
         timestamp: chrono::DateTime<chrono::Utc>,
         id: Option<String>,
     },
@@ -95,7 +106,6 @@ pub enum WsMessage {
         id: Option<String>,
     },
     /// Indexing progress
-    #[serde(rename = "index_progress")]
     IndexProgress {
         repository_id: String,
         progress: f64,
@@ -171,48 +181,97 @@ pub enum WsMessage {
     Pong {
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// General system error
+    Error {
+        message: String,
+        code: Option<String>,
+        details: Option<serde_json::Value>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        id: Option<String>,
+    },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WsSourceDocument {
-    pub content: String,
-    pub metadata: Option<serde_json::Value>,
-    pub score: Option<f64>,
+// Use the unified SourceDocument from handlers::types
+use crate::handlers::types::SourceDocument;
+
+// Use unified types from handlers::types
+use crate::handlers::types::{WikiConfig, WikiMetadata};
+
+/// Generate a unique message ID
+fn generate_message_id() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WsWikiConfig {
-    pub include_code_examples: bool,
-    pub max_depth: usize,
-    pub language: Option<String>,
+/// Send a WebSocket message with proper error handling
+async fn send_message(
+    socket: &mut WebSocket,
+    message: WsMessage,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let msg_str = serde_json::to_string(&message)?;
+    socket.send(Message::Text(msg_str.into())).await?;
+    Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WsWikiMetadata {
-    pub generation_time: f64,
-    pub total_tokens: usize,
-    pub model_used: String,
+/// Send an error response with unified error handling
+async fn send_error_response(
+    socket: &mut WebSocket,
+    repository_id: String,
+    error: String,
+    error_type: ErrorType,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let error_msg = match error_type {
+        ErrorType::Chat => WsMessage::ChatError {
+            repository_id,
+            error,
+            details: None,
+            timestamp: chrono::Utc::now(),
+            id: Some(generate_message_id()),
+        },
+        ErrorType::Wiki => WsMessage::WikiError {
+            repository_id,
+            error,
+            details: None,
+            timestamp: chrono::Utc::now(),
+            id: Some(generate_message_id()),
+        },
+        ErrorType::Index => WsMessage::IndexError {
+            repository_id,
+            error,
+            details: None,
+            timestamp: chrono::Utc::now(),
+            id: Some(generate_message_id()),
+        },
+        ErrorType::Research => WsMessage::ResearchError {
+            repository_id,
+            research_id: "unknown".to_string(), // Default research_id for errors
+            error,
+            details: None,
+            timestamp: chrono::Utc::now(),
+            id: Some(generate_message_id()),
+        },
+        ErrorType::General => WsMessage::Error {
+            message: error,
+            code: None,
+            details: None,
+            timestamp: chrono::Utc::now(),
+            id: Some(generate_message_id()),
+        },
+    };
+
+    send_message(socket, error_msg).await
+}
+
+/// Create a message with guaranteed ID
+fn create_message_with_id<F>(create_fn: F) -> WsMessage
+where
+    F: FnOnce(String) -> WsMessage,
+{
+    let id = generate_message_id();
+    create_fn(id)
 }
 
 /// Unified WebSocket handler for all real-time communication
 pub async fn unified_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle_unified_socket(socket, state))
-}
-
-// Legacy handlers for backward compatibility - all redirect to unified handler
-pub async fn chat_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle_unified_socket(socket, state))
-}
-
-pub async fn wiki_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle_unified_socket(socket, state))
-}
-
-pub async fn index_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle_unified_socket(socket, state))
-}
-
-pub async fn global_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_unified_socket(socket, state))
 }
 
@@ -222,16 +281,18 @@ async fn handle_unified_socket(mut socket: WebSocket, state: AppState) {
     info!("New unified WebSocket connection established");
 
     // Send welcome message
-    let welcome = WsMessage::ChatResponse {
+    let welcome = create_message_with_id(|id| {
+        WsMessage::ChatResponse {
         repository_id: "system".to_string(),
         answer: "WebSocket connection established. You will receive real-time updates for all operations.".to_string(),
         sources: vec![],
         timestamp: chrono::Utc::now(),
-        id: None,
+        id: Some(id),
         is_streaming: Some(false),
         is_complete: Some(true),
         chunk_id: None,
-    };
+    }
+    });
 
     if let Ok(msg) = serde_json::to_string(&welcome) {
         if socket.send(Message::Text(msg.into())).await.is_err() {
@@ -273,37 +334,44 @@ async fn handle_unified_socket(mut socket: WebSocket, state: AppState) {
                 }
             }
 
-            // Handle progress updates from broadcaster
-            update_result = progress_receiver.recv() => {
-                match update_result {
-                    Ok(update) => {
+            // Handle broadcast messages from broadcaster
+            broadcast_result = progress_receiver.recv() => {
+                match broadcast_result {
+                    Ok(broadcast_msg) => {
                         // Create unique message ID to prevent duplicates
-                        let message_id = match &update {
-                            crate::state::IndexingUpdate::Started { repository_id, .. } => {
-                                format!("started-{}", repository_id)
+                        let message_id = match &broadcast_msg {
+                            crate::state::BroadcastMessage::IndexingUpdate(update) => {
+                                match update {
+                                    crate::state::IndexingUpdate::Started { repository_id, .. } => {
+                                        format!("started-{}", repository_id)
+                                    }
+                                    crate::state::IndexingUpdate::Progress { repository_id, percentage, .. } => {
+                                        format!("progress-{}-{:.3}", repository_id, percentage)
+                                    }
+                                    crate::state::IndexingUpdate::Complete { repository_id, .. } => {
+                                        format!("complete-{}", repository_id)
+                                    }
+                                    crate::state::IndexingUpdate::Error { repository_id, .. } => {
+                                        format!("error-{}", repository_id)
+                                    }
+                                    crate::state::IndexingUpdate::ResearchStarted { repository_id, research_id, .. } => {
+                                        format!("research-started-{}-{}", repository_id, research_id)
+                                    }
+                                    crate::state::IndexingUpdate::ResearchProgress { repository_id, research_id, current_iteration, .. } => {
+                                        format!("research-progress-{}-{}-{}", repository_id, research_id, current_iteration)
+                                    }
+                                    crate::state::IndexingUpdate::ResearchComplete { repository_id, research_id, .. } => {
+                                        format!("research-complete-{}-{}", repository_id, research_id)
+                                    }
+                                    crate::state::IndexingUpdate::ResearchError { repository_id, research_id, .. } => {
+                                        format!("research-error-{}-{}", repository_id, research_id)
+                                    }
+                                    _ => format!("indexing-other-{}", chrono::Utc::now().timestamp_millis())
+                                }
                             }
-                            crate::state::IndexingUpdate::Progress { repository_id, percentage, .. } => {
-                                format!("progress-{}-{:.3}", repository_id, percentage)
+                            crate::state::BroadcastMessage::WebSocketMessage { message: _ } => {
+                                format!("ws-{}", chrono::Utc::now().timestamp_millis())
                             }
-                            crate::state::IndexingUpdate::Complete { repository_id, .. } => {
-                                format!("complete-{}", repository_id)
-                            }
-                            crate::state::IndexingUpdate::Error { repository_id, .. } => {
-                                format!("error-{}", repository_id)
-                            }
-                            crate::state::IndexingUpdate::ResearchStarted { repository_id, research_id, .. } => {
-                                format!("research-started-{}-{}", repository_id, research_id)
-                            }
-                            crate::state::IndexingUpdate::ResearchProgress { repository_id, research_id, current_iteration, .. } => {
-                                format!("research-progress-{}-{}-{}", repository_id, research_id, current_iteration)
-                            }
-                            crate::state::IndexingUpdate::ResearchComplete { repository_id, research_id, .. } => {
-                                format!("research-complete-{}-{}", repository_id, research_id)
-                            }
-                            crate::state::IndexingUpdate::ResearchError { repository_id, research_id, .. } => {
-                                format!("research-error-{}-{}", repository_id, research_id)
-                            }
-                            _ => format!("other-{}", chrono::Utc::now().timestamp_millis())
                         };
 
                         // Skip if we've already sent this message
@@ -317,13 +385,22 @@ async fn handle_unified_socket(mut socket: WebSocket, state: AppState) {
                             sent_messages.clear();
                         }
 
-                        info!("Processing progress update: {:?}", update);
+                        info!("Processing broadcast message: {:?}", broadcast_msg);
 
                         // Convert to WebSocket message and send
-                        if let Some(ws_message) = convert_update_to_message(update) {
-                            if let Ok(msg) = serde_json::to_string(&ws_message) {
+                        let ws_message = match broadcast_msg {
+                            crate::state::BroadcastMessage::IndexingUpdate(update) => {
+                                convert_update_to_message(update)
+                            }
+                            crate::state::BroadcastMessage::WebSocketMessage { message } => {
+                                Some(message)
+                            }
+                        };
+
+                        if let Some(ws_msg) = ws_message {
+                            if let Ok(msg) = serde_json::to_string(&ws_msg) {
                                 if socket.send(Message::Text(msg.into())).await.is_err() {
-                                    error!("Failed to send progress update, connection closed");
+                                    error!("Failed to send broadcast message, connection closed");
                                     break;
                                 }
                             }
@@ -374,9 +451,7 @@ async fn handle_unified_message(
             let pong = WsMessage::Pong {
                 timestamp: chrono::Utc::now(),
             };
-            if let Ok(msg) = serde_json::to_string(&pong) {
-                socket.send(Message::Text(msg.into())).await?;
-            }
+            send_message(socket, pong).await?;
         }
         WsMessage::Pong { .. } => {
             // Acknowledge pong, no action needed
@@ -387,6 +462,31 @@ async fn handle_unified_message(
     }
 
     Ok(())
+}
+
+/// Calculate wiki generation steps based on stage and progress
+fn calculate_wiki_steps(stage: &str, progress: f64) -> (usize, usize) {
+    // 定义Wiki生成的主要阶段
+    let stages = [
+        "Initializing wiki generation",
+        "Analyzing repository structure",
+        "Generating wiki content",
+        "Finalizing wiki generation",
+    ];
+
+    let total_steps = stages.len();
+
+    // 根据阶段名称确定当前步骤
+    let current_stage_index = stages.iter().position(|&s| stage.contains(s)).unwrap_or(0);
+
+    // 计算完成的步骤数：前面完成的步骤 + 当前步骤的进度
+    let completed_steps = if progress >= 1.0 {
+        total_steps // 如果当前阶段完成，所有步骤都完成
+    } else {
+        current_stage_index + if progress > 0.0 { 1 } else { 0 }
+    };
+
+    (total_steps, completed_steps.min(total_steps))
 }
 
 /// Convert IndexingUpdate to WebSocket message
@@ -401,7 +501,7 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
             total_files,
             estimated_duration,
             timestamp: chrono::Utc::now(),
-            id: None,
+            id: Some(generate_message_id()),
         }),
         crate::state::IndexingUpdate::Progress {
             repository_id,
@@ -410,16 +510,28 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
             total_files,
             current_item,
             ..
-        } => Some(WsMessage::IndexProgress {
-            repository_id,
-            progress: percentage, // percentage is already in 0.0-1.0 range
-            files_processed: files_processed.unwrap_or(0),
-            total_files: total_files.unwrap_or(0),
-            current_file: current_item,
-            processing_rate: None,
-            timestamp: chrono::Utc::now(),
-            id: None,
-        }),
+        } => {
+            let processed = files_processed.unwrap_or(0);
+            let total = total_files.unwrap_or(0);
+
+            // 简单的处理速率估算：假设每个文件平均处理时间为0.1秒
+            let processing_rate = if processed > 0 && total > 0 {
+                Some(10.0) // 大约10文件/秒的估算值
+            } else {
+                None
+            };
+
+            Some(WsMessage::IndexProgress {
+                repository_id,
+                progress: percentage, // percentage is already in 0.0-1.0 range
+                files_processed: processed,
+                total_files: total,
+                current_file: current_item,
+                processing_rate,
+                timestamp: chrono::Utc::now(),
+                id: Some(generate_message_id()),
+            })
+        }
         crate::state::IndexingUpdate::Complete {
             repository_id,
             total_files,
@@ -429,7 +541,7 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
             total_files,
             processing_time: None,
             timestamp: chrono::Utc::now(),
-            id: None,
+            id: Some(generate_message_id()),
         }),
         crate::state::IndexingUpdate::Error {
             repository_id,
@@ -447,16 +559,22 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
             stage,
             percentage,
             ..
-        } => Some(WsMessage::WikiProgress {
-            repository_id,
-            progress: percentage,
-            current_step: stage,
-            total_steps: 100,
-            completed_steps: (percentage * 100.0) as usize,
-            step_details: None,
-            timestamp: chrono::Utc::now(),
-            id: None,
-        }),
+        } => {
+            let clamped_progress = percentage.clamp(0.0, 1.0);
+            // 根据阶段确定总步骤数和当前步骤
+            let (total_steps, completed_steps) = calculate_wiki_steps(&stage, clamped_progress);
+
+            Some(WsMessage::WikiProgress {
+                repository_id,
+                progress: clamped_progress,
+                current_step: stage,
+                total_steps,
+                completed_steps,
+                step_details: None,
+                timestamp: chrono::Utc::now(),
+                id: None,
+            })
+        }
         crate::state::IndexingUpdate::WikiGenerationComplete { repository_id, .. } => {
             Some(WsMessage::WikiComplete {
                 repository_id,
@@ -464,6 +582,18 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
                 pages_count: 0,
                 sections_count: 0,
                 metadata: None,
+                timestamp: chrono::Utc::now(),
+                id: None,
+            })
+        }
+        crate::state::IndexingUpdate::WikiGenerationStarted { repository_id } => {
+            Some(WsMessage::WikiProgress {
+                repository_id,
+                progress: 0.0,
+                current_step: "Starting wiki generation...".to_string(),
+                total_steps: 4, // 预设的Wiki生成步骤数
+                completed_steps: 0,
+                step_details: None,
                 timestamp: chrono::Utc::now(),
                 id: None,
             })
@@ -550,28 +680,65 @@ async fn handle_chat_request(
     state: &AppState,
     repository_id: String,
     question: String,
-    context: Option<String>,
+    _context: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Processing chat request for repository: {}", repository_id);
 
-    // TODO: Implement actual chat logic here
-    // For now, send a placeholder response
-    let response = WsMessage::ChatResponse {
-        repository_id: repository_id.clone(),
-        answer: format!(
-            "Chat functionality not yet implemented for question: {}",
-            question
-        ),
-        sources: vec![],
-        timestamp: chrono::Utc::now(),
-        id: None,
-        is_streaming: Some(false),
-        is_complete: Some(true),
-        chunk_id: None,
+    // Create a local permission context for system operations
+    let permission_context = wikify_applications::PermissionContext::local();
+
+    // Create repository query
+    let repo_query = wikify_applications::RepositoryQuery {
+        question: question.clone(),
+        max_results: Some(5),
+        parameters: None,
     };
 
-    if let Ok(msg) = serde_json::to_string(&response) {
-        socket.send(Message::Text(msg.into())).await?;
+    // Try to process the chat query using the application layer
+    match state
+        .application
+        .query_repository(&permission_context, &repository_id, repo_query)
+        .await
+    {
+        Ok(repo_response) => {
+            // Convert application response to WebSocket message
+            let sources: Vec<SourceDocument> = repo_response
+                .sources
+                .into_iter()
+                .map(|source_path| SourceDocument {
+                    file_path: source_path.clone(),
+                    content: format!("Source: {}", source_path), // TODO: Get actual content
+                    similarity_score: 0.8, // TODO: Get actual similarity score
+                    start_line: None,      // TODO: Get actual line information
+                    end_line: None,        // TODO: Get actual line information
+                    chunk_index: None,     // TODO: Get actual chunk information
+                    metadata: None,        // TODO: Get actual metadata
+                })
+                .collect();
+
+            let response = create_message_with_id(|id| WsMessage::ChatResponse {
+                repository_id: repository_id.clone(),
+                answer: repo_response.answer,
+                sources,
+                timestamp: chrono::Utc::now(),
+                id: Some(id),
+                is_streaming: Some(false),
+                is_complete: Some(true),
+                chunk_id: None,
+            });
+
+            send_message(socket, response).await?;
+        }
+        Err(e) => {
+            error!("Failed to process chat query: {}", e);
+            send_error_response(
+                socket,
+                repository_id,
+                format!("Failed to process chat query: {}", e),
+                ErrorType::Chat,
+            )
+            .await?;
+        }
     }
 
     Ok(())
@@ -582,28 +749,112 @@ async fn handle_wiki_request(
     socket: &mut WebSocket,
     state: &AppState,
     repository_id: String,
-    config: WsWikiConfig,
+    _config: WikiConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!(
         "Processing wiki generation request for repository: {}",
         repository_id
     );
 
-    // TODO: Implement actual wiki generation logic here
-    // For now, send a placeholder response
-    let response = WsMessage::WikiComplete {
-        repository_id: repository_id.clone(),
-        wiki_id: "placeholder".to_string(),
-        pages_count: 0,
-        sections_count: 0,
-        metadata: None,
-        timestamp: chrono::Utc::now(),
-        id: None,
+    // Create a local permission context for system operations
+    let permission_context = wikify_applications::PermissionContext::local();
+
+    // Get repository information first
+    let repository = match state
+        .application
+        .get_repository(&permission_context, &repository_id)
+        .await
+    {
+        Ok(repo) => repo,
+        Err(e) => {
+            error!("Failed to get repository info: {}", e);
+            send_error_response(
+                socket,
+                repository_id,
+                format!("Repository not found: {}", e),
+                ErrorType::Wiki,
+            )
+            .await?;
+            return Ok(());
+        }
     };
 
-    if let Ok(msg) = serde_json::to_string(&response) {
-        socket.send(Message::Text(msg.into())).await?;
+    // Send wiki generation started message
+    let start_msg = create_message_with_id(|id| WsMessage::WikiProgress {
+        repository_id: repository_id.clone(),
+        progress: 0.1,
+        current_step: "Initializing wiki generation...".to_string(),
+        total_steps: 3,
+        completed_steps: 0,
+        step_details: Some("Setting up wiki generation environment".to_string()),
+        timestamp: chrono::Utc::now(),
+        id: Some(id),
+    });
+    send_message(socket, start_msg).await?;
+
+    // Generate wiki using wiki service
+    let mut wiki_service = state.wiki_service.write().await;
+    let wiki_config = wikify_wiki::WikiConfig::default();
+
+    match wiki_service
+        .generate_wiki(&repository.url, &wiki_config)
+        .await
+    {
+        Ok(wiki_structure) => {
+            // Send completion message
+            let complete_msg = create_message_with_id(|id| WsMessage::WikiComplete {
+                repository_id: repository_id.clone(),
+                wiki_id: format!("wiki-{}", chrono::Utc::now().timestamp()),
+                pages_count: wiki_structure.pages.len(),
+                sections_count: wiki_structure.pages.len(), // Use pages count as sections count for now
+                metadata: Some(WikiMetadata {
+                    generation_time: 2.0, // TODO: Track actual generation time
+                    total_tokens: 1500,   // TODO: Track actual token usage
+                    model_used: "default".to_string(),
+                }),
+                timestamp: chrono::Utc::now(),
+                id: Some(id),
+            });
+            send_message(socket, complete_msg).await?;
+        }
+        Err(e) => {
+            error!("Failed to generate wiki: {}", e);
+            send_error_response(
+                socket,
+                repository_id,
+                format!("Wiki generation failed: {}", e),
+                ErrorType::Wiki,
+            )
+            .await?;
+        }
     }
 
     Ok(())
+}
+
+/// Send a general error message to all connected clients
+pub async fn broadcast_error(
+    state: &AppState,
+    message: String,
+    code: Option<String>,
+    details: Option<serde_json::Value>,
+) {
+    let error_message = create_message_with_id(|id| WsMessage::Error {
+        message,
+        code,
+        details,
+        timestamp: chrono::Utc::now(),
+        id: Some(id),
+    });
+
+    broadcast_message(state, error_message).await;
+}
+
+/// Send a message to all connected clients via broadcast channel
+pub async fn broadcast_message(state: &AppState, message: WsMessage) {
+    let broadcast_message = crate::state::BroadcastMessage::WebSocketMessage { message };
+
+    if let Err(e) = state.progress_broadcaster.send(broadcast_message) {
+        tracing::warn!("Failed to broadcast WebSocket message: {}", e);
+    }
 }

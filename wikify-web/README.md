@@ -175,7 +175,7 @@ Options:
 - `GET /api/chat/history/{session_id}` - Get chat history
 
 ### WebSocket
-- `WS /ws/chat/{session_id}` - Real-time chat connection
+- `WS /ws/` - Unified real-time communication endpoint for all features
 
 For detailed API documentation, see [API.md](docs/API.md).
 

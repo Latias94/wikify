@@ -15,6 +15,9 @@ async fn create_test_server() -> (String, AppState) {
         host: "127.0.0.1".to_string(),
         port: 0, // Let the OS choose a free port
         dev_mode: true,
+        static_dir: None,
+        database_url: Some("sqlite::memory:".to_string()),
+        permission_mode: Some("open".to_string()),
         static_dir: Some("static".to_string()),
         database_url: Some(":memory:".to_string()), // In-memory SQLite for testing
     };

@@ -327,6 +327,8 @@ impl RepositoryError {
 impl From<crate::ApplicationError> for RepositoryError {
     fn from(err: crate::ApplicationError) -> Self {
         match err {
+            // If it's already a Repository error, just extract it
+            crate::ApplicationError::Repository(repo_err) => repo_err,
             crate::ApplicationError::NotFound { message } => {
                 // Try to extract repository_id from message
                 let repository_id = message

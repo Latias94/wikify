@@ -1,0 +1,763 @@
+asyncapi: 3.0.0
+
+info:
+  title: Wikify WebSocket API
+  version: 0.1.0
+  description: |
+    Real-time communication API for Wikify - AI-powered repository documentation and chat system.
+    
+    This WebSocket API provides unified real-time communication for:
+    - Chat messages and responses (including streaming)
+    - Wiki generation progress updates
+    - Repository indexing progress
+    - Research operation progress
+    - System notifications and errors
+  contact:
+    name: Wikify Team
+    email: support@wikify.dev
+  license:
+    name: MIT OR Apache-2.0
+
+servers:
+  development:
+    host: localhost:8080
+    protocol: ws
+    description: Local development server
+    pathname: /ws
+  production:
+    host: api.wikify.dev
+    protocol: wss
+    description: Production server
+    pathname: /ws
+
+channels:
+  unified:
+    address: /ws
+    description: Unified WebSocket endpoint for all real-time communication
+    messages:
+      # Client to Server Messages
+      chatMessage:
+        $ref: '#/components/messages/ChatMessage'
+      wikiGenerate:
+        $ref: '#/components/messages/WikiGenerate'
+      ping:
+        $ref: '#/components/messages/Ping'
+      
+      # Server to Client Messages
+      chatResponse:
+        $ref: '#/components/messages/ChatResponse'
+      chatError:
+        $ref: '#/components/messages/ChatError'
+      wikiProgress:
+        $ref: '#/components/messages/WikiProgress'
+      wikiComplete:
+        $ref: '#/components/messages/WikiComplete'
+      wikiError:
+        $ref: '#/components/messages/WikiError'
+      indexStart:
+        $ref: '#/components/messages/IndexStart'
+      indexProgress:
+        $ref: '#/components/messages/IndexProgress'
+      indexComplete:
+        $ref: '#/components/messages/IndexComplete'
+      indexError:
+        $ref: '#/components/messages/IndexError'
+      researchStart:
+        $ref: '#/components/messages/ResearchStart'
+      researchProgress:
+        $ref: '#/components/messages/ResearchProgress'
+      researchComplete:
+        $ref: '#/components/messages/ResearchComplete'
+      researchError:
+        $ref: '#/components/messages/ResearchError'
+      pong:
+        $ref: '#/components/messages/Pong'
+      error:
+        $ref: '#/components/messages/Error'
+
+operations:
+  sendChatMessage:
+    action: send
+    channel:
+      $ref: '#/channels/unified'
+    messages:
+      - $ref: '#/channels/unified/messages/chatMessage'
+    description: Send a chat message to query the repository
+    
+  sendWikiGenerate:
+    action: send
+    channel:
+      $ref: '#/channels/unified'
+    messages:
+      - $ref: '#/channels/unified/messages/wikiGenerate'
+    description: Request wiki generation for a repository
+    
+  sendPing:
+    action: send
+    channel:
+      $ref: '#/channels/unified'
+    messages:
+      - $ref: '#/channels/unified/messages/ping'
+    description: Send heartbeat ping
+    
+  receiveChatResponse:
+    action: receive
+    channel:
+      $ref: '#/channels/unified'
+    messages:
+      - $ref: '#/channels/unified/messages/chatResponse'
+    description: Receive chat response from AI
+    
+  receiveProgress:
+    action: receive
+    channel:
+      $ref: '#/channels/unified'
+    messages:
+      - $ref: '#/channels/unified/messages/wikiProgress'
+      - $ref: '#/channels/unified/messages/indexProgress'
+      - $ref: '#/channels/unified/messages/researchProgress'
+    description: Receive progress updates for long-running operations
+
+components:
+  messages:
+    # Client to Server Messages
+    ChatMessage:
+      name: ChatMessage
+      title: Chat Message
+      summary: Send a chat message to query the repository
+      payload:
+        $ref: '#/components/schemas/ChatMessagePayload'
+      examples:
+        - name: basicChatMessage
+          summary: Basic chat message
+          payload:
+            type: Chat
+            repository_id: "repo-123"
+            question: "How does authentication work in this project?"
+            timestamp: "2024-01-01T12:00:00Z"
+            
+    WikiGenerate:
+      name: WikiGenerate
+      title: Wiki Generation Request
+      summary: Request wiki generation for a repository
+      payload:
+        $ref: '#/components/schemas/WikiGeneratePayload'
+      examples:
+        - name: basicWikiGenerate
+          summary: Basic wiki generation request
+          payload:
+            type: WikiGenerate
+            repository_id: "repo-123"
+            config:
+              include_code_examples: true
+              max_depth: 3
+              language: "en"
+            timestamp: "2024-01-01T12:00:00Z"
+            
+    Ping:
+      name: Ping
+      title: Heartbeat Ping
+      summary: Send heartbeat ping to keep connection alive
+      payload:
+        $ref: '#/components/schemas/PingPayload'
+        
+    # Server to Client Messages
+    ChatResponse:
+      name: ChatResponse
+      title: Chat Response
+      summary: AI response to chat message
+      payload:
+        $ref: '#/components/schemas/ChatResponsePayload'
+      examples:
+        - name: streamingResponse
+          summary: Streaming chat response
+          payload:
+            type: ChatResponse
+            repository_id: "repo-123"
+            answer: "Authentication in this project uses JWT tokens..."
+            sources: []
+            timestamp: "2024-01-01T12:00:01Z"
+            is_streaming: true
+            is_complete: false
+            chunk_id: "chunk-1"
+            
+    ChatError:
+      name: ChatError
+      title: Chat Error
+      summary: Error response for chat operations
+      payload:
+        $ref: '#/components/schemas/ChatErrorPayload'
+        
+    WikiProgress:
+      name: WikiProgress
+      title: Wiki Generation Progress
+      summary: Progress update for wiki generation
+      payload:
+        $ref: '#/components/schemas/WikiProgressPayload'
+        
+    WikiComplete:
+      name: WikiComplete
+      title: Wiki Generation Complete
+      summary: Wiki generation completion notification
+      payload:
+        $ref: '#/components/schemas/WikiCompletePayload'
+        
+    WikiError:
+      name: WikiError
+      title: Wiki Generation Error
+      summary: Error during wiki generation
+      payload:
+        $ref: '#/components/schemas/WikiErrorPayload'
+        
+    IndexStart:
+      name: IndexStart
+      title: Indexing Started
+      summary: Repository indexing started notification
+      payload:
+        $ref: '#/components/schemas/IndexStartPayload'
+        
+    IndexProgress:
+      name: IndexProgress
+      title: Indexing Progress
+      summary: Progress update for repository indexing
+      payload:
+        $ref: '#/components/schemas/IndexProgressPayload'
+        
+    IndexComplete:
+      name: IndexComplete
+      title: Indexing Complete
+      summary: Repository indexing completion notification
+      payload:
+        $ref: '#/components/schemas/IndexCompletePayload'
+        
+    IndexError:
+      name: IndexError
+      title: Indexing Error
+      summary: Error during repository indexing
+      payload:
+        $ref: '#/components/schemas/IndexErrorPayload'
+        
+    ResearchStart:
+      name: ResearchStart
+      title: Research Started
+      summary: Research operation started notification
+      payload:
+        $ref: '#/components/schemas/ResearchStartPayload'
+        
+    ResearchProgress:
+      name: ResearchProgress
+      title: Research Progress
+      summary: Progress update for research operation
+      payload:
+        $ref: '#/components/schemas/ResearchProgressPayload'
+        
+    ResearchComplete:
+      name: ResearchComplete
+      title: Research Complete
+      summary: Research operation completion notification
+      payload:
+        $ref: '#/components/schemas/ResearchCompletePayload'
+        
+    ResearchError:
+      name: ResearchError
+      title: Research Error
+      summary: Error during research operation
+      payload:
+        $ref: '#/components/schemas/ResearchErrorPayload'
+        
+    Pong:
+      name: Pong
+      title: Heartbeat Pong
+      summary: Response to heartbeat ping
+      payload:
+        $ref: '#/components/schemas/PongPayload'
+        
+    Error:
+      name: Error
+      title: General Error
+      summary: General system error notification
+      payload:
+        $ref: '#/components/schemas/ErrorPayload'
+
+  schemas:
+    # Base schemas
+    BaseMessage:
+      type: object
+      required:
+        - type
+        - timestamp
+      properties:
+        type:
+          type: string
+          description: Message type identifier
+        timestamp:
+          type: string
+          format: date-time
+          description: Message timestamp in ISO 8601 format
+        id:
+          type: string
+          description: Optional unique message identifier
+
+    RepositoryMessage:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          required:
+            - repository_id
+          properties:
+            repository_id:
+              type: string
+              description: Repository identifier
+
+    # Client to Server Message Payloads
+    ChatMessagePayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - question
+          properties:
+            type:
+              const: Chat
+            question:
+              type: string
+              description: User's question or query
+            context:
+              type: string
+              description: Optional additional context for the query
+
+    WikiGeneratePayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - config
+          properties:
+            type:
+              const: WikiGenerate
+            config:
+              $ref: '#/components/schemas/WikiConfig'
+
+    PingPayload:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          properties:
+            type:
+              const: Ping
+
+    # Server to Client Message Payloads
+    ChatResponsePayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - answer
+            - sources
+          properties:
+            type:
+              const: ChatResponse
+            answer:
+              type: string
+              description: AI-generated response to the user's question
+            sources:
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceDocument'
+              description: Source documents used to generate the response
+            is_streaming:
+              type: boolean
+              description: Whether this is part of a streaming response
+            is_complete:
+              type: boolean
+              description: Whether this completes the response
+            chunk_id:
+              type: string
+              description: Identifier for streaming chunks
+
+    ChatErrorPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - error
+          properties:
+            type:
+              const: ChatError
+            error:
+              type: string
+              description: Error message
+            details:
+              type: object
+              description: Additional error details
+
+    WikiProgressPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - progress
+            - current_step
+            - total_steps
+            - completed_steps
+          properties:
+            type:
+              const: WikiProgress
+            progress:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Progress as a decimal between 0 and 1
+            current_step:
+              type: string
+              description: Description of the current step
+            total_steps:
+              type: integer
+              minimum: 1
+              description: Total number of steps
+            completed_steps:
+              type: integer
+              minimum: 0
+              description: Number of completed steps
+            step_details:
+              type: string
+              description: Additional details about the current step
+
+    WikiCompletePayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - wiki_id
+            - pages_count
+            - sections_count
+          properties:
+            type:
+              const: WikiComplete
+            wiki_id:
+              type: string
+              description: Generated wiki identifier
+            pages_count:
+              type: integer
+              minimum: 0
+              description: Number of generated pages
+            sections_count:
+              type: integer
+              minimum: 0
+              description: Number of generated sections
+            metadata:
+              $ref: '#/components/schemas/WikiMetadata'
+
+    WikiErrorPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - error
+          properties:
+            type:
+              const: WikiError
+            error:
+              type: string
+              description: Error message
+            details:
+              type: object
+              description: Additional error details
+
+    IndexStartPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          properties:
+            type:
+              const: IndexStart
+            total_files:
+              type: integer
+              minimum: 0
+              description: Total number of files to index
+            estimated_duration:
+              type: integer
+              minimum: 0
+              description: Estimated duration in seconds
+
+    IndexProgressPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - progress
+            - files_processed
+            - total_files
+          properties:
+            type:
+              const: IndexProgress
+            progress:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Progress as a decimal between 0 and 1
+            files_processed:
+              type: integer
+              minimum: 0
+              description: Number of files processed
+            total_files:
+              type: integer
+              minimum: 1
+              description: Total number of files to process
+            current_file:
+              type: string
+              description: Currently processing file
+            processing_rate:
+              type: number
+              minimum: 0
+              description: Files processed per second
+
+    IndexCompletePayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - total_files
+          properties:
+            type:
+              const: IndexComplete
+            total_files:
+              type: integer
+              minimum: 0
+              description: Total number of files processed
+            processing_time:
+              type: integer
+              minimum: 0
+              description: Total processing time in seconds
+
+    IndexErrorPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - error
+          properties:
+            type:
+              const: IndexError
+            error:
+              type: string
+              description: Error message
+            details:
+              type: object
+              description: Additional error details
+
+    ResearchStartPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - research_id
+            - query
+            - total_iterations
+          properties:
+            type:
+              const: ResearchStart
+            research_id:
+              type: string
+              description: Research operation identifier
+            query:
+              type: string
+              description: Research query or topic
+            total_iterations:
+              type: integer
+              minimum: 1
+              description: Total number of research iterations planned
+
+    ResearchProgressPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - research_id
+            - current_iteration
+            - total_iterations
+            - current_focus
+            - progress
+            - findings
+          properties:
+            type:
+              const: ResearchProgress
+            research_id:
+              type: string
+              description: Research operation identifier
+            current_iteration:
+              type: integer
+              minimum: 1
+              description: Current iteration number
+            total_iterations:
+              type: integer
+              minimum: 1
+              description: Total number of iterations
+            current_focus:
+              type: string
+              description: Current research focus or topic
+            progress:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Progress as a decimal between 0 and 1
+            findings:
+              type: array
+              items:
+                type: string
+              description: Current research findings
+
+    ResearchCompletePayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - research_id
+            - total_iterations
+            - final_conclusion
+            - all_findings
+          properties:
+            type:
+              const: ResearchComplete
+            research_id:
+              type: string
+              description: Research operation identifier
+            total_iterations:
+              type: integer
+              minimum: 1
+              description: Total number of iterations completed
+            final_conclusion:
+              type: string
+              description: Final research conclusion
+            all_findings:
+              type: array
+              items:
+                type: string
+              description: All research findings
+            processing_time:
+              type: integer
+              minimum: 0
+              description: Total processing time in seconds
+
+    ResearchErrorPayload:
+      allOf:
+        - $ref: '#/components/schemas/RepositoryMessage'
+        - type: object
+          required:
+            - research_id
+            - error
+          properties:
+            type:
+              const: ResearchError
+            research_id:
+              type: string
+              description: Research operation identifier
+            error:
+              type: string
+              description: Error message
+            details:
+              type: object
+              description: Additional error details
+
+    PongPayload:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          properties:
+            type:
+              const: Pong
+
+    ErrorPayload:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          required:
+            - message
+          properties:
+            type:
+              const: Error
+            message:
+              type: string
+              description: Error message
+            code:
+              type: string
+              description: Error code
+            details:
+              type: object
+              description: Additional error details
+
+    # Supporting Types
+    SourceDocument:
+      type: object
+      required:
+        - file_path
+        - content
+        - similarity_score
+      properties:
+        file_path:
+          type: string
+          description: Path to the source file
+          example: "src/main.rs"
+        content:
+          type: string
+          description: Document content or excerpt
+        similarity_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Similarity score for the document
+          example: 0.85
+        start_line:
+          type: integer
+          minimum: 1
+          description: Starting line number in the source file
+          example: 42
+        end_line:
+          type: integer
+          minimum: 1
+          description: Ending line number in the source file
+          example: 58
+        chunk_index:
+          type: integer
+          minimum: 0
+          description: Index of the chunk within the document
+          example: 3
+        metadata:
+          type: object
+          description: Additional metadata about the source
+
+    WikiConfig:
+      type: object
+      required:
+        - include_code_examples
+        - max_depth
+      properties:
+        include_code_examples:
+          type: boolean
+          description: Whether to include code examples in the wiki
+        max_depth:
+          type: integer
+          minimum: 1
+          description: Maximum depth for wiki generation
+        language:
+          type: string
+          description: Language for the generated wiki (e.g., "en", "zh")
+
+    WikiMetadata:
+      type: object
+      required:
+        - generation_time
+        - total_tokens
+        - model_used
+      properties:
+        generation_time:
+          type: number
+          minimum: 0
+          description: Time taken to generate the wiki in seconds
+        total_tokens:
+          type: integer
+          minimum: 0
+          description: Total number of tokens used
+        model_used:
+          type: string
+          description: AI model used for generation

@@ -22,12 +22,16 @@ import {
 } from 'lucide-react';
 
 import { useProgressStore } from '@/store/progress-store';
-import { 
-  ProgressState, 
-  ProgressType, 
+import {
+  ProgressState,
+  ProgressType,
   ProgressStatus,
   ProgressDisplayConfig,
-  ProgressCallbacks
+  ProgressCallbacks,
+  IndexingProgressState,
+  WikiGenerationProgressState,
+  RagQueryProgressState,
+  ResearchProgressState
 } from '@/types/progress';
 
 // ============================================================================
@@ -233,32 +237,32 @@ export function UniversalProgress({
   const getProgressDetails = (state: ProgressState) => {
     switch (state.type) {
       case "indexing":
-        const indexingState = state as any;
+        const indexingState = state as IndexingProgressState;
         return {
           primary: `${indexingState.filesProcessed || 0} / ${indexingState.totalFiles || 0} files`,
           secondary: indexingState.currentFile,
           rate: indexingState.processingRate ? `${indexingState.processingRate.toFixed(1)} files/s` : undefined,
         };
       case "wiki_generation":
-        const wikiState = state as any;
+        const wikiState = state as WikiGenerationProgressState;
         return {
           primary: `Step ${wikiState.completedSteps || 0} / ${wikiState.totalSteps || 0}`,
           secondary: wikiState.currentStep,
           extra: wikiState.stepDetails,
         };
       case "rag_query":
-        const ragState = state as any;
+        const ragState = state as RagQueryProgressState;
         return {
           primary: `Phase: ${ragState.currentPhase || 'unknown'}`,
           secondary: ragState.phaseDetails,
           extra: ragState.tokensGenerated ? `${ragState.tokensGenerated} tokens` : undefined,
         };
       case "research":
-        const researchState = state as any;
+        const researchState = state as ResearchProgressState;
         return {
           primary: `Stage ${researchState.completedStages || 0} / ${researchState.totalStages || 0}`,
           secondary: researchState.currentStage,
-          extra: researchState.documentsProcessed ? 
+          extra: researchState.documentsProcessed ?
             `${researchState.documentsProcessed} / ${researchState.totalDocuments || 0} docs` : undefined,
         };
       default:

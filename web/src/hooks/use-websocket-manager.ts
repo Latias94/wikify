@@ -45,7 +45,7 @@ export function useWebSocketManager() {
     if (wsRef.current) return;
 
     const ws = new WebSocketClient(
-      "global",
+      "unified",
       {
         reconnectInterval: 3000,
         maxReconnectAttempts: 10,

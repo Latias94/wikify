@@ -499,8 +499,8 @@ impl RepositoryManager {
         let progress_tx_clone = progress_tx.clone();
         let progress_callback = Box::new(
             move |stage: String, percentage: f64, current_item: Option<String>| {
-                // RAG pipeline sends percentage as 0.0-100.0, convert to 0.0-1.0 for IndexingUpdate
-                let normalized_percentage = percentage / 100.0;
+                // RAG pipeline should send percentage as 0.0-100.0, convert to 0.0-1.0 for IndexingUpdate
+                let normalized_percentage = (percentage / 100.0).clamp(0.0, 1.0);
 
                 // Create stage description with current item if available
                 let stage_description = if let Some(item) = current_item {

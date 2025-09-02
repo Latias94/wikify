@@ -83,12 +83,14 @@ pub async fn start_research(
             let _ =
                 state
                     .progress_broadcaster
-                    .send(crate::state::IndexingUpdate::ResearchStarted {
-                        repository_id: request.repository_id.clone(),
-                        research_id: research_id.clone(),
-                        query: request.research_question,
-                        total_iterations: research_config.max_iterations,
-                    });
+                    .send(crate::state::BroadcastMessage::IndexingUpdate(
+                        crate::state::IndexingUpdate::ResearchStarted {
+                            repository_id: request.repository_id.clone(),
+                            research_id: research_id.clone(),
+                            query: request.research_question,
+                            total_iterations: research_config.max_iterations,
+                        },
+                    ));
             info!("Research session started successfully: {}", research_id);
             Ok(Json(StartResearchResponse {
                 research_id,

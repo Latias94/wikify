@@ -4,6 +4,11 @@
 
 The Wikify Web API provides RESTful endpoints and WebSocket connections for repository analysis, chat functionality, and wiki generation.
 
+## API Specifications
+
+- **REST API**: [OpenAPI 3.0 Specification](/api-docs/openapi.yaml) | [Swagger UI](/docs)
+- **WebSocket API**: [AsyncAPI 3.0 Specification](/api-docs/asyncapi.yaml)
+
 ## Base URL
 
 ```
@@ -247,11 +252,11 @@ Retrieve generated wiki content.
 
 ## WebSocket Endpoints
 
-### Chat WebSocket
+### Unified WebSocket
 
-**WS** `/ws/chat`
+**WS** `/ws/`
 
-Real-time chat communication.
+Unified real-time communication endpoint for all features including chat, wiki generation, indexing progress, and research updates.
 
 **Message Types:**
 

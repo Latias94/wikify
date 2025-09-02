@@ -5,6 +5,19 @@
 
 import { SourceDocument } from "./api";
 
+// Import unified types to match backend
+interface WikiConfig {
+  include_code_examples: boolean; // required
+  max_depth: number; // usize -> number (note: potential precision loss for very large values)
+  language?: string; // optional
+}
+
+interface WikiMetadata {
+  generation_time: number; // in seconds (f64 -> number)
+  total_tokens: number; // usize -> number (note: potential precision loss for very large values)
+  model_used: string;
+}
+
 // ============================================================================
 // WebSocket 连接状态
 // ============================================================================
@@ -23,6 +36,10 @@ export interface WebSocketState {
 }
 
 // ============================================================================
+// 注意：现在 WebSocket 和 REST API 使用统一的 SourceDocument 类型
+// ============================================================================
+
+// ============================================================================
 // 基础消息类型
 // ============================================================================
 
@@ -35,7 +52,7 @@ export type WebSocketMessageType =
   | "WikiComplete"
   | "WikiError"
   | "IndexStart"
-  | "index_progress"
+  | "IndexProgress"
   | "IndexComplete"
   | "IndexError"
   | "ResearchStart"
@@ -76,7 +93,7 @@ export interface ChatResponseMessage extends BaseWebSocketMessage {
   type: "ChatResponse";
   repository_id: string;
   answer: string;
-  sources: SourceDocument[];
+  sources: SourceDocument[]; // 现在使用统一的 SourceDocument 类型
   is_streaming?: boolean;
   is_complete?: boolean;
   chunk_id?: string;
@@ -102,12 +119,7 @@ export interface ChatErrorMessage extends BaseWebSocketMessage {
 export interface WikiGenerateMessage extends BaseWebSocketMessage {
   type: "WikiGenerate";
   repository_id: string;
-  config: {
-    language?: string;
-    max_pages?: number;
-    include_diagrams?: boolean;
-    comprehensive_view?: boolean;
-  };
+  config: WikiConfig; // Use unified WikiConfig type
 }
 
 /**
@@ -132,11 +144,7 @@ export interface WikiCompleteMessage extends BaseWebSocketMessage {
   wiki_id: string;
   pages_count: number;
   sections_count: number;
-  metadata?: {
-    title?: string;
-    description?: string;
-    generated_at: string;
-  };
+  metadata?: WikiMetadata; // Use unified WikiMetadata type
 }
 
 /**
@@ -160,14 +168,14 @@ export interface IndexStartMessage extends BaseWebSocketMessage {
   type: "IndexStart";
   repository_id: string;
   total_files?: number;
-  estimated_duration?: number; // in milliseconds
+  estimated_duration?: number; // in seconds (to match AsyncAPI)
 }
 
 /**
  * 索引进度消息
  */
 export interface IndexProgressMessage extends BaseWebSocketMessage {
-  type: "index_progress";
+  type: "IndexProgress";
   repository_id: string;
   progress: number; // 0.0-1.0 range
   current_file?: string;
@@ -183,7 +191,7 @@ export interface IndexCompleteMessage extends BaseWebSocketMessage {
   type: "IndexComplete";
   repository_id: string;
   total_files: number;
-  processing_time?: number; // in milliseconds
+  processing_time?: number; // in seconds (to match AsyncAPI)
 }
 
 /**
@@ -235,7 +243,7 @@ export interface ResearchCompleteMessage extends BaseWebSocketMessage {
   total_iterations: number;
   final_conclusion: string;
   all_findings: string[];
-  processing_time?: number; // in milliseconds
+  processing_time?: number; // in seconds (to match AsyncAPI)
 }
 
 /**
@@ -250,28 +258,13 @@ export interface ResearchErrorMessage extends BaseWebSocketMessage {
 }
 
 /**
- * 索引错误消息
- */
-export interface IndexErrorMessage extends BaseWebSocketMessage {
-  type: "IndexError";
-  repository_id: string;
-  error: string;
-  details?: Record<string, any>;
-}
-
-/**
  * 通用错误消息
  */
 export interface ErrorMessage extends BaseWebSocketMessage {
   type: "Error";
   message: string;
-  code: string;
-  context: {
-    type: "Chat" | "Wiki" | "Index" | "System";
-    repository_id?: string;
-    step?: string;
-    file_path?: string;
-  };
+  code?: string; // Optional to match AsyncAPI
+  details?: Record<string, any>; // Changed from context to details
 }
 
 // ============================================================================
@@ -349,6 +342,7 @@ export type ServerMessage =
 // ============================================================================
 
 export interface WebSocketEventHandlers {
+  onChat?: (message: ChatMessage) => void;
   onChatResponse?: (message: ChatResponseMessage) => void;
   onChatError?: (message: ChatErrorMessage) => void;
   onWikiProgress?: (message: WikiProgressMessage) => void;
