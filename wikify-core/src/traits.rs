@@ -47,9 +47,9 @@ pub trait RagSystem {
     async fn add_conversation(&self, question: &str, answer: &str) -> WikifyResult<()>;
 }
 
-/// Wiki生成器trait
+/// Wiki生成器trait - 使用泛型以保持核心模块的通用性
 #[async_trait]
-pub trait WikiGenerator {
+pub trait WikiGenerator<WikiStructure, WikiPage> {
     /// 生成Wiki结构
     async fn generate_structure(&self, documents: &[DocumentInfo]) -> WikifyResult<WikiStructure>;
 
@@ -64,9 +64,9 @@ pub trait WikiGenerator {
     async fn generate_diagrams(&self, documents: &[DocumentInfo]) -> WikifyResult<Vec<Diagram>>;
 }
 
-/// 存储系统trait
+/// 存储系统trait - 使用泛型以保持核心模块的通用性
 #[async_trait]
-pub trait StorageSystem {
+pub trait StorageSystem<WikiStructure> {
     /// 保存Wiki数据
     async fn save_wiki(&self, wiki: &WikiStructure) -> WikifyResult<()>;
 

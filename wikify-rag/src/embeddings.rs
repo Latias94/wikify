@@ -125,7 +125,7 @@ impl EmbeddingGenerator {
             );
 
             let batch_chunks = self
-                .process_batch_with_progress(batch, &pb, &mut processed_count, nodes.len(), progress_callback.as_ref())
+                .process_batch_with_progress(batch, &pb, &mut processed_count, nodes.len(), progress_callback)
                 .await?;
 
             let batch_duration = batch_start.elapsed();

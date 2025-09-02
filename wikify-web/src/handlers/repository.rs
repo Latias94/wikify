@@ -148,7 +148,7 @@ async fn generate_wiki_for_repository(
                     repository_id: repository_id.to_string(),
                     wiki_content: wiki_content.clone(),
                     pages_count: wiki_structure.pages.len(),
-                    sections_count: wiki_structure.pages.iter().map(|p| p.sections.len()).sum(),
+                    sections_count: wiki_structure.sections.len(),
                 },
             ));
 

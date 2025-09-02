@@ -111,44 +111,8 @@ pub enum FileType {
     Other,
 }
 
-/// Wiki页面
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WikiPage {
-    pub id: String,
-    pub title: String,
-    pub content: String,
-    pub file_paths: Vec<String>,
-    pub importance: Importance,
-    pub related_pages: Vec<String>,
-    pub sections: Vec<WikiSection>,
-}
-
-/// Wiki章节
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WikiSection {
-    pub id: String,
-    pub title: String,
-    pub content: String,
-    pub subsections: Vec<WikiSection>,
-}
-
-/// 重要性级别
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Importance {
-    High,
-    Medium,
-    Low,
-}
-
-/// Wiki结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WikiStructure {
-    pub id: String,
-    pub title: String,
-    pub description: String,
-    pub pages: Vec<WikiPage>,
-    pub root_sections: Vec<String>,
-}
+// Wiki相关类型已移动到wikify-wiki crate中
+// 这里保留核心的基础类型定义
 
 /// RAG查询结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
