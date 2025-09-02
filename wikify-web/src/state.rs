@@ -20,6 +20,11 @@ use crate::simple_database::SimpleDatabaseService;
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type")]
 pub enum IndexingUpdate {
+    Started {
+        repository_id: String,
+        total_files: Option<usize>,
+        estimated_duration: Option<u64>,
+    },
     Progress {
         repository_id: String,
         stage: String,
@@ -52,6 +57,34 @@ pub enum IndexingUpdate {
     },
     WikiGenerationError {
         repository_id: String,
+        error: String,
+    },
+    ResearchStarted {
+        repository_id: String,
+        research_id: String,
+        query: String,
+        total_iterations: usize,
+    },
+    ResearchProgress {
+        repository_id: String,
+        research_id: String,
+        current_iteration: usize,
+        total_iterations: usize,
+        current_focus: String,
+        progress: f64,
+        findings: Vec<String>,
+    },
+    ResearchComplete {
+        repository_id: String,
+        research_id: String,
+        total_iterations: usize,
+        final_conclusion: String,
+        all_findings: Vec<String>,
+        processing_time: Option<u64>,
+    },
+    ResearchError {
+        repository_id: String,
+        research_id: String,
         error: String,
     },
 }

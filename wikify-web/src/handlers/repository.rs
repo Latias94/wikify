@@ -13,6 +13,25 @@ use axum::{
 };
 use tracing::{error, info, warn};
 
+/// Extract progress numbers from message strings like "Processing 37/53 nodes"
+fn extract_progress_numbers(message: &str) -> (Option<usize>, Option<usize>) {
+    // Look for patterns like "37/53", "Processing 37/53", etc.
+    use regex::Regex;
+    if let Ok(re) = Regex::new(r"(\d+)/(\d+)") {
+        if let Some(captures) = re.captures(message) {
+            if let (Some(processed_match), Some(total_match)) = (captures.get(1), captures.get(2)) {
+                if let (Ok(processed), Ok(total)) = (
+                    processed_match.as_str().parse::<usize>(),
+                    total_match.as_str().parse::<usize>(),
+                ) {
+                    return (Some(processed), Some(total));
+                }
+            }
+        }
+    }
+    (None, None)
+}
+
 /// Helper function to convert User to PermissionContext for application layer
 fn user_to_permission_context(user: &crate::auth::User) -> wikify_applications::PermissionContext {
     user.to_permission_context()
@@ -207,6 +226,13 @@ pub async fn initialize_repository(
                 repository_id
             );
 
+            // Send initial IndexStart event
+            let _ = web_progress_sender.send(crate::state::IndexingUpdate::Started {
+                repository_id: repo_id_clone.clone(),
+                total_files: None, // Will be updated when we know the actual count
+                estimated_duration: None, // Will be estimated based on repository size
+            });
+
             tokio::spawn(async move {
                 let mut receiver = app_progress_receiver;
                 while let Ok(update) = receiver.recv().await {
@@ -217,6 +243,10 @@ pub async fn initialize_repository(
                         update
                             if update.status == wikify_applications::IndexingStatus::Indexing =>
                         {
+                            // Extract files processed and total from the message if available
+                            let (files_processed, total_files) =
+                                extract_progress_numbers(&update.message);
+
                             crate::state::IndexingUpdate::Progress {
                                 repository_id: update.repository_id.clone(),
                                 stage: update.message.clone(),
@@ -225,8 +255,8 @@ pub async fn initialize_repository(
                                     "Processing... {:.1}%",
                                     update.progress * 100.0
                                 )),
-                                files_processed: None,
-                                total_files: None,
+                                files_processed,
+                                total_files,
                             }
                         }
                         update
@@ -287,13 +317,16 @@ pub async fn initialize_repository(
                         }
                         _ => {
                             // Handle other statuses as progress updates
+                            let (files_processed, total_files) =
+                                extract_progress_numbers(&update.message);
+
                             crate::state::IndexingUpdate::Progress {
                                 repository_id: update.repository_id.clone(),
                                 stage: update.message.clone(),
                                 percentage: update.progress, // Keep as 0.0-1.0 range
                                 current_item: Some(format!("Status: {:?}", update.status)),
-                                files_processed: None,
-                                total_files: None,
+                                files_processed,
+                                total_files,
                             }
                         }
                     };

@@ -198,7 +198,9 @@ impl RagPipeline {
         let mut embedding_generator = EmbeddingGenerator::new(self.config.embeddings.clone());
         embedding_generator.initialize().await?;
 
-        let embedded_chunks = embedding_generator.generate_embeddings(nodes).await?;
+        let embedded_chunks = embedding_generator
+            .generate_embeddings_with_progress(nodes, progress_callback.as_ref())
+            .await?;
 
         let embedded_chunks_count = embedded_chunks.len();
         info!("🔢 Generated {} embeddings", embedded_chunks_count);

@@ -284,6 +284,9 @@ export class WebSocketClient {
       case "WikiError":
         this.handlers.onWikiError?.(message);
         break;
+      case "IndexStart":
+        this.handlers.onIndexStart?.(message);
+        break;
       case "index_progress":
         // 检查是否是完成消息（progress = 1.0）
         if (message.progress === 1.0) {
@@ -297,6 +300,18 @@ export class WebSocketClient {
         break;
       case "IndexError":
         this.handlers.onIndexError?.(message);
+        break;
+      case "ResearchStart":
+        this.handlers.onResearchStart?.(message);
+        break;
+      case "ResearchProgress":
+        this.handlers.onResearchProgress?.(message);
+        break;
+      case "ResearchComplete":
+        this.handlers.onResearchComplete?.(message);
+        break;
+      case "ResearchError":
+        this.handlers.onResearchError?.(message);
         break;
       case "Error":
         this.handlers.onGeneralError?.(message);

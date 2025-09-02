@@ -73,6 +73,15 @@ impl EmbeddingGenerator {
 
     /// Generate embeddings for a batch of nodes
     pub async fn generate_embeddings(&self, nodes: Vec<Node>) -> RagResult<Vec<EmbeddedChunk>> {
+        self.generate_embeddings_with_progress(nodes, None).await
+    }
+
+    /// Generate embeddings for a batch of nodes with progress reporting
+    pub async fn generate_embeddings_with_progress(
+        &self,
+        nodes: Vec<Node>,
+        progress_callback: Option<&Box<dyn Fn(String, f64, Option<String>) + Send + Sync>>,
+    ) -> RagResult<Vec<EmbeddedChunk>> {
         if self.client.is_none() {
             return Err(RagError::Config(
                 "Embedding client not initialized".to_string(),
@@ -130,6 +139,20 @@ impl EmbeddingGenerator {
             );
 
             embedded_chunks.extend(batch_chunks);
+
+            // Report progress via callback
+            if let Some(callback) = progress_callback {
+                let percentage = 80.0 + (processed_count as f64 / nodes.len() as f64) * 5.0; // 80% to 85%
+                callback(
+                    "Generating embeddings".to_string(),
+                    percentage,
+                    Some(format!(
+                        "Processing {}/{} nodes",
+                        processed_count,
+                        nodes.len()
+                    )),
+                );
+            }
 
             // Small delay to avoid rate limits
             if processed_count < nodes.len() {

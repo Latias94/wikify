@@ -86,6 +86,14 @@ pub enum WsMessage {
         timestamp: chrono::DateTime<chrono::Utc>,
         id: Option<String>,
     },
+    /// Indexing started
+    IndexStart {
+        repository_id: String,
+        total_files: Option<usize>,
+        estimated_duration: Option<u64>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        id: Option<String>,
+    },
     /// Indexing progress
     #[serde(rename = "index_progress")]
     IndexProgress {
@@ -109,6 +117,47 @@ pub enum WsMessage {
     /// Indexing error
     IndexError {
         repository_id: String,
+        error: String,
+        details: Option<serde_json::Value>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        id: Option<String>,
+    },
+    /// Research started
+    ResearchStart {
+        repository_id: String,
+        research_id: String,
+        query: String,
+        total_iterations: usize,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        id: Option<String>,
+    },
+    /// Research progress
+    ResearchProgress {
+        repository_id: String,
+        research_id: String,
+        current_iteration: usize,
+        total_iterations: usize,
+        current_focus: String,
+        progress: f64,
+        findings: Vec<String>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        id: Option<String>,
+    },
+    /// Research complete
+    ResearchComplete {
+        repository_id: String,
+        research_id: String,
+        total_iterations: usize,
+        final_conclusion: String,
+        all_findings: Vec<String>,
+        processing_time: Option<u64>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        id: Option<String>,
+    },
+    /// Research error
+    ResearchError {
+        repository_id: String,
+        research_id: String,
         error: String,
         details: Option<serde_json::Value>,
         timestamp: chrono::DateTime<chrono::Utc>,
@@ -230,6 +279,9 @@ async fn handle_unified_socket(mut socket: WebSocket, state: AppState) {
                     Ok(update) => {
                         // Create unique message ID to prevent duplicates
                         let message_id = match &update {
+                            crate::state::IndexingUpdate::Started { repository_id, .. } => {
+                                format!("started-{}", repository_id)
+                            }
                             crate::state::IndexingUpdate::Progress { repository_id, percentage, .. } => {
                                 format!("progress-{}-{:.3}", repository_id, percentage)
                             }
@@ -238,6 +290,18 @@ async fn handle_unified_socket(mut socket: WebSocket, state: AppState) {
                             }
                             crate::state::IndexingUpdate::Error { repository_id, .. } => {
                                 format!("error-{}", repository_id)
+                            }
+                            crate::state::IndexingUpdate::ResearchStarted { repository_id, research_id, .. } => {
+                                format!("research-started-{}-{}", repository_id, research_id)
+                            }
+                            crate::state::IndexingUpdate::ResearchProgress { repository_id, research_id, current_iteration, .. } => {
+                                format!("research-progress-{}-{}-{}", repository_id, research_id, current_iteration)
+                            }
+                            crate::state::IndexingUpdate::ResearchComplete { repository_id, research_id, .. } => {
+                                format!("research-complete-{}-{}", repository_id, research_id)
+                            }
+                            crate::state::IndexingUpdate::ResearchError { repository_id, research_id, .. } => {
+                                format!("research-error-{}-{}", repository_id, research_id)
                             }
                             _ => format!("other-{}", chrono::Utc::now().timestamp_millis())
                         };
@@ -328,6 +392,17 @@ async fn handle_unified_message(
 /// Convert IndexingUpdate to WebSocket message
 fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsMessage> {
     match update {
+        crate::state::IndexingUpdate::Started {
+            repository_id,
+            total_files,
+            estimated_duration,
+        } => Some(WsMessage::IndexStart {
+            repository_id,
+            total_files,
+            estimated_duration,
+            timestamp: chrono::Utc::now(),
+            id: None,
+        }),
         crate::state::IndexingUpdate::Progress {
             repository_id,
             percentage,
@@ -399,6 +474,67 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
             ..
         } => Some(WsMessage::WikiError {
             repository_id,
+            error,
+            details: None,
+            timestamp: chrono::Utc::now(),
+            id: None,
+        }),
+        crate::state::IndexingUpdate::ResearchStarted {
+            repository_id,
+            research_id,
+            query,
+            total_iterations,
+        } => Some(WsMessage::ResearchStart {
+            repository_id,
+            research_id,
+            query,
+            total_iterations,
+            timestamp: chrono::Utc::now(),
+            id: None,
+        }),
+        crate::state::IndexingUpdate::ResearchProgress {
+            repository_id,
+            research_id,
+            current_iteration,
+            total_iterations,
+            current_focus,
+            progress,
+            findings,
+        } => Some(WsMessage::ResearchProgress {
+            repository_id,
+            research_id,
+            current_iteration,
+            total_iterations,
+            current_focus,
+            progress,
+            findings,
+            timestamp: chrono::Utc::now(),
+            id: None,
+        }),
+        crate::state::IndexingUpdate::ResearchComplete {
+            repository_id,
+            research_id,
+            total_iterations,
+            final_conclusion,
+            all_findings,
+            processing_time,
+        } => Some(WsMessage::ResearchComplete {
+            repository_id,
+            research_id,
+            total_iterations,
+            final_conclusion,
+            all_findings,
+            processing_time,
+            timestamp: chrono::Utc::now(),
+            id: None,
+        }),
+        crate::state::IndexingUpdate::ResearchError {
+            repository_id,
+            research_id,
+            error,
+        } => Some(WsMessage::ResearchError {
+            repository_id,
+            research_id,
             error,
             details: None,
             timestamp: chrono::Utc::now(),

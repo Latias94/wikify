@@ -84,7 +84,16 @@ export function useWebSocketManager() {
           console.log("WebSocket message received:", message.type, message);
 
           switch (message.type) {
-            // 索引进度消息
+            // 索引相关消息
+            case "IndexStart":
+              console.log(
+                `Index started for repository: ${message.repository_id}`
+              );
+              updateRepository(message.repository_id, {
+                status: "indexing",
+              });
+              break;
+
             case "IndexProgress":
             case "index_progress":
               handleIndexProgress(message);
@@ -143,7 +152,36 @@ export function useWebSocketManager() {
               });
               break;
 
-            // 研究进度消息
+            // Research 相关消息
+            case "ResearchStart":
+              console.log(
+                `Research started for repository: ${message.repository_id}, research_id: ${message.research_id}`
+              );
+              // 可以在这里更新研究状态或触发UI更新
+              break;
+
+            case "ResearchProgress":
+              console.log(
+                `Research progress for repository: ${message.repository_id}, iteration: ${message.current_iteration}/${message.total_iterations}`
+              );
+              // 可以在这里更新研究进度
+              break;
+
+            case "ResearchComplete":
+              console.log(
+                `Research completed for repository: ${message.repository_id}, research_id: ${message.research_id}`
+              );
+              // 可以在这里处理研究完成事件
+              break;
+
+            case "ResearchError":
+              console.log(
+                `Research error for repository: ${message.repository_id}, research_id: ${message.research_id}: ${message.error}`
+              );
+              // 可以在这里处理研究错误
+              break;
+
+            // 兼容旧的研究消息格式
             case "research_progress":
             case "research_complete":
             case "research_error":

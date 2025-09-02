@@ -20,9 +20,15 @@ import {
   WikiProgressMessage,
   WikiCompleteMessage,
   WikiErrorMessage,
+  IndexStartMessage,
   IndexProgressMessage,
   IndexCompleteMessage,
   IndexErrorMessage,
+  ResearchStartMessage,
+  ResearchProgressMessage,
+  ResearchCompleteMessage,
+  ResearchErrorMessage,
+  ErrorMessage,
 } from "@/types/websocket";
 import { UIChatMessage } from "@/types/ui";
 
@@ -130,6 +136,20 @@ export function useChatWebSocket(
           title: "Chat Error",
           description: message.error,
           variant: "destructive",
+        });
+      },
+
+      onIndexStart: (message: IndexStartMessage) => {
+        console.log(
+          `Index started for repository: ${message.repository_id}${
+            message.total_files ? ` (${message.total_files} files)` : ""
+          }`
+        );
+
+        // 更新仓库的索引状态
+        updateRepository(message.repository_id, {
+          status: "indexing",
+          indexing_progress: 0,
         });
       },
 
@@ -253,11 +273,16 @@ export function useIndexProgressWebSocket(
   const { toast } = useToast();
   const { updateRepository } = useAppStore();
   const {
+    handleIndexStart,
     handleIndexProgress,
     handleIndexError,
     handleWikiProgress,
     handleWikiComplete,
     handleWikiError,
+    handleResearchStart,
+    handleResearchProgress,
+    handleResearchComplete,
+    handleResearchError,
   } = useProgressIntegration();
 
   // 初始化 WebSocket 连接
@@ -279,6 +304,23 @@ export function useIndexProgressWebSocket(
 
       onError: (event) => {
         console.error("Index progress WebSocket error:", event);
+      },
+
+      onIndexStart: (message: IndexStartMessage) => {
+        console.log(
+          `Index started for repository: ${message.repository_id}${
+            message.total_files ? ` (${message.total_files} files)` : ""
+          }`
+        );
+
+        // 集成到统一进度系统
+        handleIndexStart(message);
+
+        // 更新仓库状态
+        updateRepository(message.repository_id, {
+          status: "indexing",
+          indexing_progress: 0,
+        });
       },
 
       onIndexProgress: (message: IndexProgressMessage) => {
@@ -511,9 +553,47 @@ export function useResearchWebSocket(
         onError?.("WebSocket connection error");
       },
 
-      // 研究进度消息处理
+      // 研究进度消息处理 - 使用新的消息格式
+      onResearchStart: (message) => {
+        console.log("Research started:", message);
+
+        // 集成到统一进度系统
+        handleResearchStart(message);
+
+        // 可以在这里处理研究开始事件
+      },
+
+      onResearchProgress: (message) => {
+        console.log("Research progress:", message);
+
+        // 集成到统一进度系统
+        handleResearchProgress(message);
+
+        onProgress?.(message);
+      },
+
+      onResearchComplete: (message) => {
+        console.log("Research completed:", message);
+
+        // 集成到统一进度系统
+        handleResearchComplete(message);
+
+        onComplete?.(message);
+      },
+
+      onResearchError: (message) => {
+        console.error("Research error:", message);
+
+        // 集成到统一进度系统
+        handleResearchError(message);
+
+        onError?.(message.error);
+      },
+
+      // 兼容旧格式的通用消息处理
       onMessage: (message: any) => {
         try {
+          // 处理旧格式的研究消息（向后兼容）
           if (message.type === "research_progress") {
             onProgress?.(message);
           } else if (message.type === "research_complete") {

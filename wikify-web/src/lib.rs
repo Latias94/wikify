@@ -164,7 +164,9 @@ impl WebConfig {
     }
 
     /// Load configuration from TOML file
-    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file<P: AsRef<std::path::Path>>(
+        path: P,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
         let toml_value: toml::Value = toml::from_str(&content)?;
 

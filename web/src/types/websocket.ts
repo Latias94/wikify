@@ -34,9 +34,14 @@ export type WebSocketMessageType =
   | "WikiProgress"
   | "WikiComplete"
   | "WikiError"
+  | "IndexStart"
   | "index_progress"
   | "IndexComplete"
   | "IndexError"
+  | "ResearchStart"
+  | "ResearchProgress"
+  | "ResearchComplete"
+  | "ResearchError"
   | "Error"
   | "Ping"
   | "Pong";
@@ -149,6 +154,16 @@ export interface WikiErrorMessage extends BaseWebSocketMessage {
 // ============================================================================
 
 /**
+ * 索引开始消息
+ */
+export interface IndexStartMessage extends BaseWebSocketMessage {
+  type: "IndexStart";
+  repository_id: string;
+  total_files?: number;
+  estimated_duration?: number; // in milliseconds
+}
+
+/**
  * 索引进度消息
  */
 export interface IndexProgressMessage extends BaseWebSocketMessage {
@@ -162,15 +177,76 @@ export interface IndexProgressMessage extends BaseWebSocketMessage {
 }
 
 /**
- * 索引完成消息 (实际上是进度消息的特殊情况，progress = 1.0)
+ * 索引完成消息
  */
 export interface IndexCompleteMessage extends BaseWebSocketMessage {
-  type: "index_progress";
+  type: "IndexComplete";
   repository_id: string;
-  progress: 1.0;
-  current_file?: string; // Contains completion summary
-  files_processed: number;
   total_files: number;
+  processing_time?: number; // in milliseconds
+}
+
+/**
+ * 索引错误消息
+ */
+export interface IndexErrorMessage extends BaseWebSocketMessage {
+  type: "IndexError";
+  repository_id: string;
+  error: string;
+  details?: Record<string, any>;
+}
+
+// ============================================================================
+// 研究相关消息
+// ============================================================================
+
+/**
+ * 研究开始消息
+ */
+export interface ResearchStartMessage extends BaseWebSocketMessage {
+  type: "ResearchStart";
+  repository_id: string;
+  research_id: string;
+  query: string;
+  total_iterations: number;
+}
+
+/**
+ * 研究进度消息
+ */
+export interface ResearchProgressMessage extends BaseWebSocketMessage {
+  type: "ResearchProgress";
+  repository_id: string;
+  research_id: string;
+  current_iteration: number;
+  total_iterations: number;
+  current_focus: string;
+  progress: number; // 0.0-1.0 range
+  findings: string[];
+}
+
+/**
+ * 研究完成消息
+ */
+export interface ResearchCompleteMessage extends BaseWebSocketMessage {
+  type: "ResearchComplete";
+  repository_id: string;
+  research_id: string;
+  total_iterations: number;
+  final_conclusion: string;
+  all_findings: string[];
+  processing_time?: number; // in milliseconds
+}
+
+/**
+ * 研究错误消息
+ */
+export interface ResearchErrorMessage extends BaseWebSocketMessage {
+  type: "ResearchError";
+  repository_id: string;
+  research_id: string;
+  error: string;
+  details?: Record<string, any>;
 }
 
 /**
@@ -231,9 +307,14 @@ export type WebSocketMessage =
   | WikiProgressMessage
   | WikiCompleteMessage
   | WikiErrorMessage
+  | IndexStartMessage
   | IndexProgressMessage
   | IndexCompleteMessage
   | IndexErrorMessage
+  | ResearchStartMessage
+  | ResearchProgressMessage
+  | ResearchCompleteMessage
+  | ResearchErrorMessage
   | ErrorMessage
   | PingMessage
   | PongMessage;
@@ -252,9 +333,14 @@ export type ServerMessage =
   | WikiProgressMessage
   | WikiCompleteMessage
   | WikiErrorMessage
+  | IndexStartMessage
   | IndexProgressMessage
   | IndexCompleteMessage
   | IndexErrorMessage
+  | ResearchStartMessage
+  | ResearchProgressMessage
+  | ResearchCompleteMessage
+  | ResearchErrorMessage
   | ErrorMessage
   | PongMessage;
 
@@ -268,9 +354,14 @@ export interface WebSocketEventHandlers {
   onWikiProgress?: (message: WikiProgressMessage) => void;
   onWikiComplete?: (message: WikiCompleteMessage) => void;
   onWikiError?: (message: WikiErrorMessage) => void;
+  onIndexStart?: (message: IndexStartMessage) => void;
   onIndexProgress?: (message: IndexProgressMessage) => void;
   onIndexComplete?: (message: IndexCompleteMessage) => void;
   onIndexError?: (message: IndexErrorMessage) => void;
+  onResearchStart?: (message: ResearchStartMessage) => void;
+  onResearchProgress?: (message: ResearchProgressMessage) => void;
+  onResearchComplete?: (message: ResearchCompleteMessage) => void;
+  onResearchError?: (message: ResearchErrorMessage) => void;
   onGeneralError?: (message: ErrorMessage) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
