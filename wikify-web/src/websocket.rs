@@ -430,6 +430,15 @@ async fn handle_unified_message(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let message: WsMessage = serde_json::from_str(text)?;
 
+    // Skip logging for ping/pong messages to avoid spam
+    if !matches!(message, WsMessage::Ping { .. } | WsMessage::Pong { .. }) {
+        debug!("Received WebSocket message: {}", match &message {
+            WsMessage::Chat { .. } => "Chat",
+            WsMessage::WikiGenerate { .. } => "WikiGenerate",
+            _ => "Other"
+        });
+    }
+
     match message {
         WsMessage::Chat {
             repository_id,
@@ -447,14 +456,14 @@ async fn handle_unified_message(
             handle_wiki_request(socket, state, repository_id, config).await?;
         }
         WsMessage::Ping { .. } => {
-            // Respond with pong
+            // Respond with pong (no logging to avoid spam)
             let pong = WsMessage::Pong {
                 timestamp: chrono::Utc::now(),
             };
             send_message(socket, pong).await?;
         }
         WsMessage::Pong { .. } => {
-            // Acknowledge pong, no action needed
+            // Acknowledge pong, no action needed (no logging to avoid spam)
         }
         _ => {
             warn!("Received unsupported message type in unified handler");
@@ -575,13 +584,22 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
                 id: None,
             })
         }
-        crate::state::IndexingUpdate::WikiGenerationComplete { repository_id, .. } => {
+        crate::state::IndexingUpdate::WikiGenerationComplete {
+            repository_id,
+            pages_count,
+            sections_count,
+            ..
+        } => {
             Some(WsMessage::WikiComplete {
                 repository_id,
-                wiki_id: "generated".to_string(),
-                pages_count: 0,
-                sections_count: 0,
-                metadata: None,
+                wiki_id: format!("wiki-{}", chrono::Utc::now().timestamp()),
+                pages_count,
+                sections_count,
+                metadata: Some(WikiMetadata {
+                    generation_time: 0.0, // TODO: Track actual generation time
+                    total_tokens: 0,      // TODO: Track actual token usage
+                    model_used: "default".to_string(),
+                }),
                 timestamp: chrono::Utc::now(),
                 id: None,
             })

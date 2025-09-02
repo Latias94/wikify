@@ -54,6 +54,8 @@ pub enum IndexingUpdate {
     WikiGenerationComplete {
         repository_id: String,
         wiki_content: String,
+        pages_count: usize,
+        sections_count: usize,
     },
     WikiGenerationError {
         repository_id: String,

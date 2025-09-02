@@ -125,7 +125,7 @@ impl EmbeddingGenerator {
             );
 
             let batch_chunks = self
-                .process_batch_with_progress(batch, &pb, &mut processed_count)
+                .process_batch_with_progress(batch, &pb, &mut processed_count, nodes.len(), progress_callback.as_ref())
                 .await?;
 
             let batch_duration = batch_start.elapsed();
@@ -140,21 +140,7 @@ impl EmbeddingGenerator {
 
             embedded_chunks.extend(batch_chunks);
 
-            // Report progress via callback
-            if let Some(callback) = progress_callback {
-                // Calculate actual embedding progress (80% base + 15% for embeddings = 95% total)
-                let embedding_progress = processed_count as f64 / nodes.len() as f64;
-                let percentage = 80.0 + embedding_progress * 15.0; // 80% to 95%
-                callback(
-                    "Generating embeddings".to_string(),
-                    percentage,
-                    Some(format!(
-                        "Processing {}/{} nodes",
-                        processed_count,
-                        nodes.len()
-                    )),
-                );
-            }
+            // Progress is now reported at the individual node level to match console progress
 
             // Small delay to avoid rate limits
             if processed_count < nodes.len() {
@@ -164,6 +150,19 @@ impl EmbeddingGenerator {
 
         let total_duration = start_time.elapsed();
         pb.finish_with_message("✅ Embeddings generated");
+
+        // Report final completion progress
+        if let Some(callback) = progress_callback {
+            callback(
+                "Generating embeddings".to_string(),
+                95.0,
+                Some(format!(
+                    "Completed {}/{} nodes",
+                    processed_count,
+                    nodes.len()
+                )),
+            );
+        }
 
         info!(
             "🎉 Embedding generation completed - Provider: {}, Model: {}, Total: {} embeddings, Duration: {:?}, Average rate: {:.2} embeddings/sec",
@@ -182,6 +181,8 @@ impl EmbeddingGenerator {
         nodes: &[Node],
         pb: &ProgressBar,
         processed_count: &mut usize,
+        total_nodes: usize,
+        progress_callback: Option<&Box<dyn Fn(String, f64, Option<String>) + Send + Sync>>,
     ) -> RagResult<Vec<EmbeddedChunk>> {
         let client = self.client.as_ref().unwrap();
         let mut embedded_chunks = Vec::new();
@@ -220,6 +221,23 @@ impl EmbeddingGenerator {
 
             *processed_count += 1;
             pb.set_position(*processed_count as u64);
+
+            // Report fine-grained progress after each node (only every 5 nodes to reduce WebSocket traffic)
+            if let Some(callback) = progress_callback {
+                if *processed_count % 5 == 0 {
+                    let embedding_progress = *processed_count as f64 / total_nodes as f64;
+                    let percentage = 20.0 + embedding_progress * 75.0; // 20% to 95%
+                    callback(
+                        "Generating embeddings".to_string(),
+                        percentage,
+                        Some(format!(
+                            "Processing {}/{} nodes",
+                            *processed_count,
+                            total_nodes
+                        )),
+                    );
+                }
+            }
         }
 
         Ok(embedded_chunks)

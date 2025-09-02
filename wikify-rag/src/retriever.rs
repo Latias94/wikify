@@ -234,9 +234,9 @@ pub async fn create_default_retriever(
     embedding_config: EmbeddingConfig,
 ) -> RagResult<DocumentRetriever> {
     let retrieval_config = RetrievalConfig {
-        top_k: 5,
-        similarity_threshold: 0.5, // Lowered from 0.7 for better recall
-        max_context_length: 8000,
+        top_k: 8,
+        similarity_threshold: 0.3, // Optimized for better recall
+        max_context_length: 12000,
         enable_reranking: false,
     };
 

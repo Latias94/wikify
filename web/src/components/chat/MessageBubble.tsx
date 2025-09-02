@@ -3,7 +3,7 @@
  * 参考 Vercel AI Chatbot 的设计
  */
 
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -35,14 +35,14 @@ interface MessageBubbleProps {
   className?: string;
 }
 
-const MessageBubble = memo(({
+const MessageBubble = memo(forwardRef<HTMLDivElement, MessageBubbleProps>(({
   message,
   isLast = false,
   onCopy,
   onRetry,
   onRegenerate,
   className
-}: MessageBubbleProps) => {
+}, ref) => {
   const { toast } = useToast();
   const [showActions, setShowActions] = useState(false);
   const [showSources, setShowSources] = useState(false);
@@ -93,10 +93,11 @@ const MessageBubble = memo(({
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ 
+      transition={{
         duration: 0.3,
         ease: [0.25, 0.46, 0.45, 0.94]
       }}
@@ -207,7 +208,7 @@ const MessageBubble = memo(({
       </div>
     </motion.div>
   );
-});
+}));
 
 MessageBubble.displayName = 'MessageBubble';
 

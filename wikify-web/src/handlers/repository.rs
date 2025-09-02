@@ -142,11 +142,13 @@ async fn generate_wiki_for_repository(
             wiki_cache.insert(repository_id.to_string(), cached_wiki);
             drop(wiki_cache);
 
-            // Send completion update
+            // Send completion update with actual wiki structure info
             let _ = progress_sender.send(crate::state::BroadcastMessage::IndexingUpdate(
                 crate::state::IndexingUpdate::WikiGenerationComplete {
                     repository_id: repository_id.to_string(),
-                    wiki_content,
+                    wiki_content: wiki_content.clone(),
+                    pages_count: wiki_structure.pages.len(),
+                    sections_count: wiki_structure.pages.iter().map(|p| p.sections.len()).sum(),
                 },
             ));
 

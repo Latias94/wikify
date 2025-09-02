@@ -217,7 +217,7 @@ const ChatInterface = () => {
           <div className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-primary" />
             <h1 className="font-semibold">
-              {selectedRepository?.name || activeSession?.name || '聊天会话'}
+              {selectedRepository?.name || '聊天会话'}
             </h1>
           </div>
           

@@ -255,18 +255,41 @@ export class WebSocketClient {
   }
 
   /**
+   * 发送消息（不记录日志，用于心跳等频繁消息）
+   */
+  private sendRaw(message: ClientMessage): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      const messageStr = JSON.stringify({
+        ...message,
+        timestamp: new Date().toISOString(),
+      });
+
+      this.ws.send(messageStr);
+      // 不记录日志，避免频繁输出
+    } else {
+      // 心跳消息不加入队列，避免堆积
+      if (message.type !== "Ping") {
+        this.messageQueue.push(message);
+      }
+    }
+  }
+
+  /**
    * 处理接收到的消息
    */
   private handleMessage(data: string): void {
     try {
       const message: ServerMessage = JSON.parse(data);
-      this.log("Message received", message);
 
       // 处理心跳响应
       if (message.type === "Pong") {
         this.lastPongTime = Date.now();
+        // 不记录pong消息日志，避免频繁输出
         return;
       }
+
+      // 只记录非心跳消息的日志
+      this.log("Message received", message);
 
       // 首先调用通用消息处理器（如果存在）
       this.handlers.onMessage?.(message);
@@ -420,7 +443,8 @@ export class WebSocketClient {
           timestamp: new Date().toISOString(),
         };
 
-        this.send(pingMessage);
+        // 发送ping消息但不记录日志，避免频繁输出
+        this.sendRaw(pingMessage);
 
         // 检查上次 pong 的时间
         const now = Date.now();

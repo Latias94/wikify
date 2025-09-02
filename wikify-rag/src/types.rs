@@ -96,9 +96,9 @@ impl Default for RagConfig {
                 batch_size: 100,
             },
             retrieval: RetrievalConfig {
-                top_k: 5,
-                similarity_threshold: 0.7,
-                max_context_length: 8000,
+                top_k: 8,
+                similarity_threshold: 0.3, // Lowered for better recall
+                max_context_length: 12000,
                 enable_reranking: false,
             },
             generation: GenerationConfig {

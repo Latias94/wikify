@@ -128,7 +128,7 @@ impl RagPipeline {
         if let Some(ref callback) = progress_callback {
             callback(
                 "Processing documents".to_string(),
-                10.0,
+                5.0,
                 Some("Loading and chunking files".to_string()),
             );
         }
@@ -137,7 +137,7 @@ impl RagPipeline {
         if let Some(ref callback) = progress_callback {
             callback(
                 "Loading documents from repository".to_string(),
-                10.0,
+                5.0,
                 Some(format!("Scanning repository: {}", local_path.display())),
             );
         }
@@ -152,7 +152,7 @@ impl RagPipeline {
         if let Some(ref callback) = progress_callback {
             callback(
                 "Documents loaded".to_string(),
-                30.0,
+                10.0,
                 Some(format!("Found {} documents", documents_count)),
             );
         }
@@ -164,7 +164,7 @@ impl RagPipeline {
         if let Some(ref callback) = progress_callback {
             callback(
                 "Indexing documents".to_string(),
-                40.0,
+                15.0,
                 Some(format!("Processing {} documents", documents_count)),
             );
         }
@@ -180,19 +180,12 @@ impl RagPipeline {
         if let Some(ref callback) = progress_callback {
             callback(
                 "Document indexing complete".to_string(),
-                60.0,
+                20.0,
                 Some(format!("Created {} nodes", nodes.len())),
             );
         }
 
-        // Report progress: Embedding generation
-        if let Some(ref callback) = progress_callback {
-            callback(
-                "Generating embeddings".to_string(),
-                80.0,
-                Some(format!("Processing {} nodes", nodes.len())),
-            );
-        }
+        // Note: Embedding generation progress will be reported by the embedding generator itself
 
         // Step 2: Generate embeddings for all nodes
         let mut embedding_generator = EmbeddingGenerator::new(self.config.embeddings.clone());
@@ -209,7 +202,7 @@ impl RagPipeline {
         if let Some(ref callback) = progress_callback {
             callback(
                 "Storing vectors".to_string(),
-                85.0,
+                96.0,
                 Some(format!(
                     "Adding {} chunks to vector store",
                     embedded_chunks.len()
