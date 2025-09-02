@@ -16,7 +16,7 @@ request_timeout = "30s"
 
 [database]
 # Database configuration (optional)
-# url = "sqlite:data/wikify.db"
+url = "sqlite:data/wikify.db"
 # url = "postgresql://user:password@localhost/wikify"
 
 [permissions]

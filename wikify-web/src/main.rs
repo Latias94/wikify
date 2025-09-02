@@ -54,8 +54,8 @@ async fn main() {
     // Load environment variables
     dotenvy::dotenv().ok();
 
-    // Create web configuration
-    let mut config = WebConfig::from_env();
+    // Load configuration with layered approach: config file -> env vars -> defaults
+    let mut config = WebConfig::load();
 
     // Override with command line arguments
     config.host = args.host;

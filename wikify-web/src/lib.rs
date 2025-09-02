@@ -129,7 +129,23 @@ impl Default for WebConfig {
 }
 
 impl WebConfig {
-    /// Load configuration from environment variables
+    /// Load configuration with layered approach: config file -> env vars -> defaults
+    pub fn load() -> Self {
+        // Start with defaults
+        let mut config = Self::default();
+
+        // Try to load from config file
+        if let Ok(file_config) = Self::from_file("config/wikify.toml") {
+            config = config.merge_with(file_config);
+        }
+
+        // Override with environment variables
+        config = config.merge_with(Self::from_env());
+
+        config
+    }
+
+    /// Load configuration from environment variables only
     pub fn from_env() -> Self {
         Self {
             host: std::env::var("WIKIFY_HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
@@ -145,6 +161,67 @@ impl WebConfig {
             database_url: std::env::var("DATABASE_URL").ok(),
             permission_mode: std::env::var("WIKIFY_PERMISSION_MODE").ok(),
         }
+    }
+
+    /// Load configuration from TOML file
+    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+        let content = std::fs::read_to_string(path)?;
+        let toml_value: toml::Value = toml::from_str(&content)?;
+
+        let mut config = Self::default();
+
+        // Parse server section
+        if let Some(server) = toml_value.get("server") {
+            if let Some(host) = server.get("host").and_then(|v| v.as_str()) {
+                config.host = host.to_string();
+            }
+            if let Some(port) = server.get("port").and_then(|v| v.as_integer()) {
+                config.port = port as u16;
+            }
+            if let Some(dev_mode) = server.get("dev_mode").and_then(|v| v.as_bool()) {
+                config.dev_mode = dev_mode;
+            }
+            if let Some(static_dir) = server.get("static_dir").and_then(|v| v.as_str()) {
+                config.static_dir = Some(static_dir.to_string());
+            }
+        }
+
+        // Parse database section
+        if let Some(database) = toml_value.get("database") {
+            if let Some(url) = database.get("url").and_then(|v| v.as_str()) {
+                config.database_url = Some(url.to_string());
+            }
+        }
+
+        // Parse permissions section
+        if let Some(permissions) = toml_value.get("permissions") {
+            if let Some(mode) = permissions.get("mode").and_then(|v| v.as_str()) {
+                config.permission_mode = Some(mode.to_string());
+            }
+        }
+
+        Ok(config)
+    }
+
+    /// Merge this config with another, with the other taking precedence for non-None values
+    pub fn merge_with(mut self, other: Self) -> Self {
+        if other.host != "127.0.0.1" || self.host == "127.0.0.1" {
+            self.host = other.host;
+        }
+        if other.port != 8080 || self.port == 8080 {
+            self.port = other.port;
+        }
+        self.dev_mode = other.dev_mode || self.dev_mode;
+        if other.static_dir.is_some() {
+            self.static_dir = other.static_dir;
+        }
+        if other.database_url.is_some() {
+            self.database_url = other.database_url;
+        }
+        if other.permission_mode.is_some() {
+            self.permission_mode = other.permission_mode;
+        }
+        self
     }
 
     /// Get the server address
