@@ -432,11 +432,14 @@ async fn handle_unified_message(
 
     // Skip logging for ping/pong messages to avoid spam
     if !matches!(message, WsMessage::Ping { .. } | WsMessage::Pong { .. }) {
-        debug!("Received WebSocket message: {}", match &message {
-            WsMessage::Chat { .. } => "Chat",
-            WsMessage::WikiGenerate { .. } => "WikiGenerate",
-            _ => "Other"
-        });
+        debug!(
+            "Received WebSocket message: {}",
+            match &message {
+                WsMessage::Chat { .. } => "Chat",
+                WsMessage::WikiGenerate { .. } => "WikiGenerate",
+                _ => "Other",
+            }
+        );
     }
 
     match message {

@@ -4,6 +4,7 @@
 //! retrieving relevant context, and generating responses using LLMs.
 
 use crate::embeddings::{EmbeddingGenerator, VectorStore};
+use crate::indexing::traits::DocumentIndexerImpl;
 use crate::llm_client::WikifyLlmClient;
 use crate::retriever::DocumentRetriever;
 use crate::types::{
@@ -71,6 +72,183 @@ impl RagPipeline {
     ) -> RagResult<IndexingStats> {
         self.index_repository_with_progress(repo_path_or_url, None)
             .await
+    }
+
+    /// Index a repository using enhanced indexer with advanced AST-aware code splitting
+    pub async fn index_repository_enhanced<P: AsRef<Path>>(
+        &mut self,
+        repo_path_or_url: P,
+    ) -> RagResult<IndexingStats> {
+        self.index_repository_enhanced_with_progress(repo_path_or_url, None)
+            .await
+    }
+
+    /// Index a repository using enhanced indexer with progress reporting
+    pub async fn index_repository_enhanced_with_progress<P: AsRef<Path>>(
+        &mut self,
+        repo_path_or_url: P,
+        progress_callback: Option<Box<dyn Fn(String, f64, Option<String>) + Send + Sync>>,
+    ) -> RagResult<IndexingStats> {
+        if !self.is_initialized {
+            return Err(RagError::Config("Pipeline not initialized".to_string()));
+        }
+
+        log_operation_start!("rag_index_repository_enhanced");
+        let start_time = Instant::now();
+
+        let path_str = repo_path_or_url.as_ref().to_string_lossy();
+        eprintln!("📁 Starting enhanced repository indexing: {}", path_str);
+
+        // Check if this is a URL or local path
+        let local_path = if path_str.starts_with("http://") || path_str.starts_with("https://") {
+            eprintln!("🌐 Remote repository detected, cloning...");
+
+            // Report progress: Cloning
+            if let Some(ref callback) = progress_callback {
+                callback(
+                    "Cloning repository".to_string(),
+                    5.0,
+                    Some("Downloading remote repository".to_string()),
+                );
+            }
+
+            // Clone the repository
+            let cloned_path = self.clone_repository(&path_str).await?;
+            eprintln!("✅ Repository cloned to: {}", cloned_path);
+            std::path::PathBuf::from(cloned_path)
+        } else {
+            repo_path_or_url.as_ref().to_path_buf()
+        };
+
+        // Report progress: Starting
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Starting enhanced indexing".to_string(),
+                0.0,
+                Some("Initializing enhanced pipeline with AST-aware code splitting".to_string()),
+            );
+        }
+
+        // Step 1: Create enhanced indexing pipeline
+        eprintln!("🔧 Creating enhanced document indexing pipeline...");
+        let enhanced_indexer = crate::create_enhanced_indexer()?;
+
+        // Report progress: Document processing
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Processing documents with enhanced indexer".to_string(),
+                5.0,
+                Some("Loading and chunking files with AST-aware splitting".to_string()),
+            );
+        }
+
+        // Load documents from repository
+        eprintln!("📄 Loading documents from repository...");
+        let documents = self.load_repository_documents(&local_path).await?;
+        let documents_count = documents.len();
+        eprintln!("📚 Found {} documents to process", documents_count);
+
+        // Report progress: Document loading complete
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Documents loaded".to_string(),
+                10.0,
+                Some(format!("Found {} documents", documents_count)),
+            );
+        }
+
+        // Index the documents using enhanced indexer
+        eprintln!("⚙️ Enhanced indexing with AST-aware code splitting...");
+
+        // Report progress: Starting enhanced indexing
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Enhanced indexing in progress".to_string(),
+                15.0,
+                Some(format!(
+                    "Processing {} documents with advanced algorithms",
+                    documents_count
+                )),
+            );
+        }
+
+        let nodes = enhanced_indexer
+            .index_documents(documents)
+            .await
+            .map_err(RagError::Core)?;
+
+        eprintln!("📚 Enhanced indexing created {} nodes", nodes.len());
+
+        // Report progress: Enhanced indexing complete
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Enhanced indexing complete".to_string(),
+                20.0,
+                Some(format!(
+                    "Created {} nodes with advanced parsing",
+                    nodes.len()
+                )),
+            );
+        }
+
+        // Step 2: Generate embeddings for all nodes
+        let mut embedding_generator = EmbeddingGenerator::new(self.config.embeddings.clone());
+        embedding_generator.initialize().await?;
+
+        let embedded_chunks = embedding_generator
+            .generate_embeddings_with_progress(nodes, progress_callback.as_ref())
+            .await?;
+
+        let embedded_chunks_count = embedded_chunks.len();
+        info!("🔢 Generated {} embeddings", embedded_chunks_count);
+
+        // Report progress: Storing vectors
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Storing vectors".to_string(),
+                96.0,
+                Some(format!(
+                    "Adding {} chunks to vector store",
+                    embedded_chunks.len()
+                )),
+            );
+        }
+
+        // Step 3: Add to vector store
+        if let Some(vector_store) = &mut self.vector_store {
+            vector_store.add_chunks(embedded_chunks)?;
+            info!("💾 Added chunks to vector store");
+        }
+
+        // Report progress: Finalizing
+        if let Some(ref callback) = progress_callback {
+            callback(
+                "Finalizing enhanced indexing".to_string(),
+                100.0,
+                Some("Enhanced repository indexing complete".to_string()),
+            );
+        }
+
+        let total_time = start_time.elapsed();
+        let stats = IndexingStats {
+            total_documents: documents_count,
+            total_chunks: embedded_chunks_count,
+            indexing_time_ms: total_time.as_millis() as u64,
+            total_nodes: embedded_chunks_count,
+        };
+
+        log_operation_success!(
+            "rag_index_repository_enhanced",
+            total_documents = stats.total_documents,
+            total_chunks = stats.total_chunks,
+            indexing_time_ms = stats.indexing_time_ms
+        );
+
+        info!(
+            "✅ Enhanced repository indexing complete: {}",
+            stats.summary()
+        );
+        Ok(stats)
     }
 
     /// Index a repository with progress reporting

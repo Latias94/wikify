@@ -1,8 +1,9 @@
-//! Document indexer using cheungfun's indexing capabilities
+//! Legacy document indexer implementation
 //!
-//! This module provides document indexing functionality using cheungfun's
-//! text splitters and node parsers.
+//! This module provides the original wikify-rag document indexing functionality
+//! using cheungfun's text splitters and node parsers with basic configuration.
 
+use async_trait::async_trait;
 use cheungfun_core::{
     traits::{TypedData, TypedTransform},
     Document, Node,
@@ -12,12 +13,16 @@ use cheungfun_indexing::node_parser::{
     text::{CodeSplitter, MarkdownNodeParser, SentenceSplitter, TokenTextSplitter},
     NodeParser,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use wikify_core::{ErrorContext, WikifyError, WikifyResult};
 
-/// Configuration for document indexing
+use crate::indexing::traits::{
+    DocumentIndexerImpl, IndexingConfig, IndexingStats as TraitsIndexingStats,
+};
+
+/// Legacy-specific configuration for document indexing
 #[derive(Debug, Clone)]
-pub struct IndexingConfig {
+pub struct LegacyIndexingConfig {
     /// Chunk size for text splitting (in characters)
     pub chunk_size: usize,
     /// Overlap between chunks (in characters)
@@ -34,7 +39,7 @@ pub struct IndexingConfig {
     pub use_ast_code_splitting: bool,
 }
 
-impl Default for IndexingConfig {
+impl Default for LegacyIndexingConfig {
     fn default() -> Self {
         Self {
             chunk_size: 350, // Following DeepWiki's approach
@@ -48,23 +53,41 @@ impl Default for IndexingConfig {
     }
 }
 
-/// Document indexer that processes documents into searchable nodes
-pub struct DocumentIndexer {
+impl From<IndexingConfig> for LegacyIndexingConfig {
+    fn from(config: IndexingConfig) -> Self {
+        Self {
+            chunk_size: config.chunk_size,
+            chunk_overlap: config.chunk_overlap,
+            sentence_aware: true,       // Legacy default
+            token_based_for_code: true, // Legacy default
+            max_tokens_per_chunk: (config.chunk_size as f64 * 0.7) as usize, // Estimate
+            preserve_markdown_structure: config.preserve_markdown_structure,
+            use_ast_code_splitting: config.enable_ast_code_splitting,
+        }
+    }
+}
+
+/// Legacy document indexer that processes documents into searchable nodes
+#[derive(Debug)]
+pub struct LegacyDocumentIndexer {
     config: IndexingConfig,
+    legacy_config: LegacyIndexingConfig,
     sentence_splitter: SentenceSplitter,
     token_splitter: TokenTextSplitter,
     markdown_parser: MarkdownNodeParser,
     code_splitters: std::collections::HashMap<ProgrammingLanguage, CodeSplitter>,
+    stats: TraitsIndexingStats,
 }
 
-impl DocumentIndexer {
-    /// Create a new document indexer with default configuration
+impl LegacyDocumentIndexer {
+    /// Create a new legacy document indexer with default configuration
     pub fn new() -> WikifyResult<Self> {
         Self::with_config(IndexingConfig::default())
     }
 
-    /// Create a new document indexer with custom configuration
+    /// Create a new legacy document indexer with custom configuration
     pub fn with_config(config: IndexingConfig) -> WikifyResult<Self> {
+        let legacy_config = LegacyIndexingConfig::from(config.clone());
         // Initialize sentence splitter
         let sentence_splitter =
             SentenceSplitter::from_defaults(config.chunk_size, config.chunk_overlap).map_err(
@@ -78,7 +101,7 @@ impl DocumentIndexer {
 
         // Initialize token splitter
         let token_splitter = TokenTextSplitter::from_defaults(
-            config.max_tokens_per_chunk,
+            legacy_config.max_tokens_per_chunk,
             config.chunk_overlap / 4, // Adjust overlap for token-based splitting
         )
         .map_err(|e| WikifyError::Indexing {
@@ -92,7 +115,7 @@ impl DocumentIndexer {
 
         // Initialize code splitters for common languages
         let mut code_splitters = std::collections::HashMap::new();
-        if config.use_ast_code_splitting {
+        if config.enable_ast_code_splitting {
             let common_languages = vec![
                 ProgrammingLanguage::Rust,
                 ProgrammingLanguage::Python,
@@ -104,25 +127,50 @@ impl DocumentIndexer {
             ];
 
             for lang in common_languages {
-                if let Ok(splitter) =
-                    CodeSplitter::from_defaults(lang, config.chunk_size, config.chunk_overlap, 512)
-                {
-                    code_splitters.insert(lang, splitter);
+                // Use optimal configuration for better AST-aware splitting
+                match CodeSplitter::optimal(lang) {
+                    Ok(splitter) => {
+                        debug!("Created optimal AST-aware code splitter for {:?}", lang);
+                        code_splitters.insert(lang, splitter);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to create optimal code splitter for {:?}: {}, trying fallback",
+                            lang, e
+                        );
+                        // Fallback to basic configuration
+                        if let Ok(splitter) = CodeSplitter::from_defaults(
+                            lang,
+                            config.chunk_size / 10, // Convert chars to lines estimate
+                            config.chunk_overlap / 10,
+                            config.chunk_size,
+                        ) {
+                            code_splitters.insert(lang, splitter);
+                        }
+                    }
                 }
             }
         }
 
+        let mut stats = TraitsIndexingStats::new("legacy");
+        stats.chunking_strategies = vec!["sentence".to_string(), "token".to_string()];
+        if config.enable_ast_code_splitting {
+            stats.chunking_strategies.push("ast_code".to_string());
+        }
+
         Ok(Self {
             config,
+            legacy_config,
             sentence_splitter,
             token_splitter,
             markdown_parser,
             code_splitters,
+            stats,
         })
     }
 
-    /// Index a batch of documents into nodes
-    pub async fn index_documents(&self, documents: Vec<Document>) -> WikifyResult<Vec<Node>> {
+    /// Index a batch of documents into nodes (internal implementation)
+    async fn index_documents_impl(&self, documents: Vec<Document>) -> WikifyResult<Vec<Node>> {
         info!("Indexing {} documents", documents.len());
 
         let mut all_nodes = Vec::new();
@@ -150,11 +198,20 @@ impl DocumentIndexer {
                 self.split_with_markdown_parser(document).await?
             }
             // Use AST-aware code splitter for supported languages
-            (Some("code"), Some(lang)) if self.config.use_ast_code_splitting => {
+            (Some("code"), Some(lang)) if self.config.enable_ast_code_splitting => {
                 if let Some(programming_lang) = self.detect_programming_language(lang) {
                     if let Some(code_splitter) = self.code_splitters.get(&programming_lang) {
-                        self.split_with_code_splitter(&document, code_splitter)
-                            .await?
+                        // Try AST splitting first, with fallback to token splitter
+                        match self
+                            .split_with_code_splitter(&document, code_splitter)
+                            .await
+                        {
+                            Ok(nodes) => nodes,
+                            Err(e) => {
+                                warn!("AST code splitting failed for {:?}: {}, falling back to token splitter", programming_lang, e);
+                                self.split_with_token_splitter(document).await?
+                            }
+                        }
                     } else {
                         // Fallback to token splitter for unsupported languages
                         self.split_with_token_splitter(document).await?
@@ -165,7 +222,7 @@ impl DocumentIndexer {
                 }
             }
             // Use token splitter for code files (fallback)
-            (Some("code"), _) if self.config.token_based_for_code => {
+            (Some("code"), _) if self.legacy_config.token_based_for_code => {
                 self.split_with_token_splitter(document).await?
             }
             // Use sentence splitter for everything else
@@ -224,13 +281,27 @@ impl DocumentIndexer {
     async fn split_with_code_splitter(
         &self,
         document: &Document,
-        _code_splitter: &CodeSplitter,
+        code_splitter: &CodeSplitter,
     ) -> WikifyResult<Vec<Node>> {
-        debug!("AST-aware code splitting requested, but falling back to token splitter to avoid runtime conflicts");
+        debug!("Using AST-aware code splitter with cheungfun's enhanced algorithms");
 
-        // TODO: Fix the async runtime conflict in CodeSplitter
-        // For now, fallback to token splitter for code files
-        self.split_with_token_splitter(document.clone()).await
+        // cheungfun has resolved the async runtime conflicts
+        let input = TypedData::from_documents(vec![document.clone()]);
+
+        let result = code_splitter.transform(input).await.map_err(|e| {
+            warn!(
+                "AST code splitting failed: {}, falling back to token splitter",
+                e
+            );
+            // Return the error but we'll handle fallback in the caller
+            WikifyError::Indexing {
+                message: format!("AST code splitting failed: {}", e),
+                source: Some(Box::new(e)),
+                context: ErrorContext::new("document_indexer").with_operation("ast_code_split"),
+            }
+        })?;
+
+        Ok(result.into_nodes())
     }
 
     /// Split document using markdown parser
@@ -252,21 +323,51 @@ impl DocumentIndexer {
         IndexingStats {
             chunk_size: self.config.chunk_size,
             chunk_overlap: self.config.chunk_overlap,
-            sentence_aware: self.config.sentence_aware,
-            token_based_for_code: self.config.token_based_for_code,
-            max_tokens_per_chunk: self.config.max_tokens_per_chunk,
+            sentence_aware: self.legacy_config.sentence_aware,
+            token_based_for_code: self.legacy_config.token_based_for_code,
+            max_tokens_per_chunk: self.legacy_config.max_tokens_per_chunk,
         }
+    }
+
+    /// Get the legacy configuration
+    pub fn get_legacy_config(&self) -> &LegacyIndexingConfig {
+        &self.legacy_config
     }
 }
 
-impl Default for DocumentIndexer {
+impl Default for LegacyDocumentIndexer {
     fn default() -> Self {
-        Self::new().expect("Failed to create default DocumentIndexer")
+        Self::new().expect("Failed to create default LegacyDocumentIndexer")
+    }
+}
+
+// Implement the internal DocumentIndexerImpl trait
+#[async_trait]
+impl DocumentIndexerImpl for LegacyDocumentIndexer {
+    fn config(&self) -> &IndexingConfig {
+        &self.config
+    }
+
+    async fn index_documents(&self, documents: Vec<Document>) -> WikifyResult<Vec<Node>> {
+        self.index_documents_impl(documents).await
+    }
+
+    fn get_stats(&self) -> TraitsIndexingStats {
+        self.stats.clone()
+    }
+
+    fn supported_languages(&self) -> Vec<String> {
+        self.code_splitters
+            .keys()
+            .map(|lang| format!("{:?}", lang).to_lowercase())
+            .collect()
     }
 }
 
 /// Statistics about the indexing process
 #[derive(Debug, Clone)]
+
+/// Legacy-specific indexing statistics (for backward compatibility)
 pub struct IndexingStats {
     pub chunk_size: usize,
     pub chunk_overlap: usize,
@@ -276,16 +377,18 @@ pub struct IndexingStats {
 }
 
 /// Helper function to create a basic indexer with DeepWiki-compatible settings
-pub fn create_deepwiki_compatible_indexer() -> WikifyResult<DocumentIndexer> {
+pub fn create_deepwiki_compatible_indexer() -> WikifyResult<LegacyDocumentIndexer> {
     let config = IndexingConfig {
         chunk_size: 350,    // DeepWiki's chunk size
         chunk_overlap: 100, // DeepWiki's overlap
-        sentence_aware: true,
-        token_based_for_code: true,
-        max_tokens_per_chunk: 250,
+        enable_ast_code_splitting: true,
         preserve_markdown_structure: true,
-        use_ast_code_splitting: true,
+        enable_semantic_splitting: false,
+        batch_size: 32,
+        max_concurrency: 4,
+        continue_on_error: true,
+        implementation_settings: std::collections::HashMap::new(),
     };
 
-    DocumentIndexer::with_config(config)
+    LegacyDocumentIndexer::with_config(config)
 }

@@ -40,3 +40,4 @@ indicatif = "0.18"
 
 # Token counting
 tiktoken-rs = "0.7"
+async-trait.workspace = true

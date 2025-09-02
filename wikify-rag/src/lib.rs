@@ -32,3 +32,27 @@ pub use types::{
 
 // Re-export commonly used types from siumai
 pub use siumai::prelude::{LlmClient, Provider as LlmProvider};
+
+// Re-export unified indexing functions for convenience
+pub use indexing::{
+    create_auto_indexer, create_code_indexer, create_default_indexer, create_documentation_indexer,
+    create_enterprise_indexer, create_indexer_from_string, create_indexer_with_config,
+    create_legacy_indexer, IndexerType, IndexingConfig,
+};
+
+// Legacy compatibility functions
+/// Create an enhanced document indexer optimized for code repositories
+///
+/// **Deprecated**: Use `create_code_indexer()` instead for the unified interface
+#[deprecated(since = "0.2.0", note = "Use create_code_indexer() instead")]
+pub fn create_enhanced_indexer() -> crate::types::RagResult<crate::indexing::DocumentIndexer> {
+    create_code_indexer().map_err(|e| RagError::Core(e))
+}
+
+/// Create an enhanced indexing pipeline
+pub fn create_enhanced_pipeline<P: AsRef<std::path::Path>>(
+    repo_path: P,
+) -> crate::types::RagResult<crate::indexing::pipeline::EnhancedIndexingPipeline> {
+    crate::indexing::pipeline::EnhancedIndexingPipeline::new(repo_path)
+        .map_err(|e| RagError::Core(e))
+}

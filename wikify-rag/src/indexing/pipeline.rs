@@ -3,7 +3,7 @@
 //! This module provides a high-level pipeline that orchestrates the entire
 //! document processing and indexing workflow.
 
-use crate::{DocumentIndexer, DocumentProcessor, IndexingConfig};
+use crate::{DocumentIndexer, DocumentProcessor, EnhancedDocumentIndexer, IndexingConfig};
 use cheungfun_core::{Document, Node};
 use std::path::Path;
 use tracing::info;
@@ -98,7 +98,10 @@ impl IndexingPipeline {
             .with_excluded_files(config.excluded_files.clone());
 
         // Create document indexer
-        let indexer = DocumentIndexer::with_config(config.indexing.clone())?;
+        let indexer = crate::indexing::create_indexer_with_config(
+            crate::indexing::IndexerType::Legacy,
+            config.indexing.clone(),
+        )?;
 
         Ok(Self {
             config,
@@ -146,7 +149,13 @@ impl IndexingPipeline {
             } else {
                 nodes.len() as f64 / documents.len() as f64
             },
-            indexing_stats: self.indexer.get_stats(),
+            indexing_stats: crate::indexing::legacy::indexer::IndexingStats {
+                chunk_size: self.indexer.config().chunk_size,
+                chunk_overlap: self.indexer.config().chunk_overlap,
+                sentence_aware: true,       // Default for legacy
+                token_based_for_code: true, // Default for legacy
+                max_tokens_per_chunk: 250,  // Default for legacy
+            },
         };
 
         let result = PipelineResult {
@@ -285,6 +294,159 @@ impl PipelineResult {
     }
 }
 
+/// Enhanced indexing pipeline using cheungfun's advanced features
+pub struct EnhancedIndexingPipeline {
+    processor: DocumentProcessor,
+    indexer: EnhancedDocumentIndexer,
+    config: PipelineConfig,
+}
+
+impl EnhancedIndexingPipeline {
+    /// Create a new enhanced indexing pipeline
+    pub fn new<P: AsRef<Path>>(repo_path: P) -> WikifyResult<Self> {
+        let processor = DocumentProcessor::new(repo_path);
+        let indexer = EnhancedDocumentIndexer::for_code_repository()?;
+        let config = PipelineConfig::default();
+
+        Ok(Self {
+            processor,
+            indexer,
+            config,
+        })
+    }
+
+    /// Create enhanced pipeline with custom configuration
+    pub fn with_config<P: AsRef<Path>>(repo_path: P, config: PipelineConfig) -> WikifyResult<Self> {
+        let processor = DocumentProcessor::new(repo_path);
+        let indexer = EnhancedDocumentIndexer::for_code_repository()?;
+
+        Ok(Self {
+            processor,
+            indexer,
+            config,
+        })
+    }
+
+    /// Create enhanced pipeline for enterprise use
+    pub fn for_enterprise<P: AsRef<Path>>(repo_path: P) -> WikifyResult<Self> {
+        let processor = DocumentProcessor::new(repo_path);
+        let indexer = EnhancedDocumentIndexer::for_enterprise()?;
+        let config = PipelineConfig::default();
+
+        Ok(Self {
+            processor,
+            indexer,
+            config,
+        })
+    }
+
+    /// Run the enhanced indexing pipeline
+    pub async fn run(&self) -> WikifyResult<EnhancedPipelineResult> {
+        log_operation_start!("enhanced_indexing_pipeline");
+
+        // Step 1: Process repository documents
+        info!("Step 1: Processing repository documents with enhanced pipeline");
+        let documents = self.processor.process_repository().await?;
+
+        if documents.is_empty() {
+            return Err(Box::new(WikifyError::Indexing {
+                message: "No documents found in repository".to_string(),
+                source: None,
+                context: ErrorContext::new("enhanced_indexing_pipeline")
+                    .with_operation("process_documents")
+                    .with_suggestion("Check if the repository contains supported file types")
+                    .with_suggestion("Verify included_extensions configuration"),
+            }));
+        }
+
+        // Apply file limits if configured
+        let documents = self.apply_limits(documents)?;
+        info!(
+            "Processing {} documents after applying limits",
+            documents.len()
+        );
+
+        // Step 2: Index documents using enhanced indexer
+        info!("Step 2: Enhanced indexing with AST-aware code splitting");
+        let nodes = self.indexer.index_documents(documents.clone()).await?;
+
+        // Step 3: Collect enhanced statistics
+        let enhanced_stats = self.indexer.get_enhanced_stats();
+        let stats = EnhancedPipelineStats {
+            total_documents: documents.len(),
+            total_nodes: nodes.len(),
+            avg_nodes_per_document: if documents.is_empty() {
+                0.0
+            } else {
+                nodes.len() as f64 / documents.len() as f64
+            },
+            enhanced_indexing_stats: enhanced_stats,
+        };
+
+        let result = EnhancedPipelineResult {
+            documents,
+            nodes,
+            stats,
+        };
+
+        log_operation_success!("enhanced_indexing_pipeline");
+        Ok(result)
+    }
+
+    /// Apply file limits (same as regular pipeline)
+    fn apply_limits(&self, mut documents: Vec<Document>) -> WikifyResult<Vec<Document>> {
+        // Apply max_files limit
+        if let Some(max_files) = self.config.max_files {
+            if documents.len() > max_files {
+                info!(
+                    "Limiting documents from {} to {} (max_files setting)",
+                    documents.len(),
+                    max_files
+                );
+                documents.truncate(max_files);
+            }
+        }
+
+        // Apply max_file_size_mb limit
+        if let Some(max_size_mb) = self.config.max_file_size_mb {
+            let max_size_bytes = max_size_mb * 1024 * 1024;
+            let original_count = documents.len();
+
+            documents.retain(|doc| {
+                let size_bytes = doc.content.len() as u64;
+                size_bytes <= max_size_bytes
+            });
+
+            if documents.len() < original_count {
+                info!(
+                    "Filtered out {} documents exceeding {}MB size limit",
+                    original_count - documents.len(),
+                    max_size_mb
+                );
+            }
+        }
+
+        Ok(documents)
+    }
+}
+
+/// Enhanced pipeline result with detailed statistics
+#[derive(Debug)]
+pub struct EnhancedPipelineResult {
+    pub documents: Vec<Document>,
+    pub nodes: Vec<Node>,
+    pub stats: EnhancedPipelineStats,
+}
+
+/// Enhanced pipeline statistics
+#[derive(Debug)]
+pub struct EnhancedPipelineStats {
+    pub total_documents: usize,
+    pub total_nodes: usize,
+    pub avg_nodes_per_document: f64,
+    pub enhanced_indexing_stats: crate::indexing::EnhancedIndexingStats,
+}
+
 /// Helper function to create a DeepWiki-compatible pipeline
 pub fn create_deepwiki_compatible_pipeline<P: AsRef<Path>>(
     repo_path: P,
@@ -293,11 +455,13 @@ pub fn create_deepwiki_compatible_pipeline<P: AsRef<Path>>(
         indexing: IndexingConfig {
             chunk_size: 350,    // DeepWiki's chunk size
             chunk_overlap: 100, // DeepWiki's overlap
-            sentence_aware: true,
-            token_based_for_code: true,
-            max_tokens_per_chunk: 250,
+            enable_ast_code_splitting: true,
             preserve_markdown_structure: true,
-            use_ast_code_splitting: true,
+            enable_semantic_splitting: false,
+            batch_size: 32,
+            max_concurrency: 4,
+            continue_on_error: true,
+            implementation_settings: std::collections::HashMap::new(),
         },
         max_files: Some(10000),
         max_file_size_mb: Some(10),
@@ -305,4 +469,18 @@ pub fn create_deepwiki_compatible_pipeline<P: AsRef<Path>>(
     };
 
     IndexingPipeline::with_config(repo_path, config)
+}
+
+/// Helper function to create an enhanced pipeline for code repositories
+pub fn create_enhanced_code_pipeline<P: AsRef<Path>>(
+    repo_path: P,
+) -> WikifyResult<EnhancedIndexingPipeline> {
+    EnhancedIndexingPipeline::new(repo_path)
+}
+
+/// Helper function to create an enhanced pipeline for enterprise use
+pub fn create_enhanced_enterprise_pipeline<P: AsRef<Path>>(
+    repo_path: P,
+) -> WikifyResult<EnhancedIndexingPipeline> {
+    EnhancedIndexingPipeline::for_enterprise(repo_path)
 }
