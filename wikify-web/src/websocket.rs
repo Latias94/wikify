@@ -478,24 +478,31 @@ async fn handle_unified_message(
 
 /// Calculate wiki generation steps based on stage and progress
 fn calculate_wiki_steps(stage: &str, progress: f64) -> (usize, usize) {
-    // 定义Wiki生成的主要阶段
-    let stages = [
-        "Initializing wiki generation",
-        "Analyzing repository structure",
-        "Generating wiki content",
-        "Finalizing wiki generation",
+    // 定义Wiki生成的主要阶段关键词，用于匹配实际的阶段名称
+    let stage_keywords = [
+        ("Starting", 0),      // "Starting wiki generation..."
+        ("Initializing", 0),  // "Initializing wiki generation..."
+        ("Analyzing", 1),     // "Analyzing repository structure..."
+        ("Generating", 2),    // "Generating wiki content..."
+        ("Finalizing", 3),    // "Finalizing wiki generation..."
     ];
 
-    let total_steps = stages.len();
+    let total_steps = 4; // 固定为4个主要步骤
 
-    // 根据阶段名称确定当前步骤
-    let current_stage_index = stages.iter().position(|&s| stage.contains(s)).unwrap_or(0);
+    // 根据阶段名称中的关键词确定当前步骤索引
+    let current_stage_index = stage_keywords
+        .iter()
+        .find(|(keyword, _)| stage.contains(keyword))
+        .map(|(_, index)| *index)
+        .unwrap_or(0);
 
-    // 计算完成的步骤数：前面完成的步骤 + 当前步骤的进度
+    // 计算完成的步骤数
     let completed_steps = if progress >= 1.0 {
-        total_steps // 如果当前阶段完成，所有步骤都完成
+        total_steps // 如果进度完成，所有步骤都完成
     } else {
-        current_stage_index + if progress > 0.0 { 1 } else { 0 }
+        // 当前步骤索引就是已完成的步骤数（因为索引从0开始）
+        // 例如：如果在第2个步骤（索引1），则已完成1个步骤
+        current_stage_index
     };
 
     (total_steps, completed_steps.min(total_steps))
@@ -608,12 +615,17 @@ fn convert_update_to_message(update: crate::state::IndexingUpdate) -> Option<WsM
             })
         }
         crate::state::IndexingUpdate::WikiGenerationStarted { repository_id } => {
+            // 使用与WikiGenerationProgress相同的逻辑来计算步骤
+            let stage = "Starting wiki generation...";
+            let progress = 0.0;
+            let (total_steps, completed_steps) = calculate_wiki_steps(stage, progress);
+
             Some(WsMessage::WikiProgress {
                 repository_id,
-                progress: 0.0,
-                current_step: "Starting wiki generation...".to_string(),
-                total_steps: 4, // 预设的Wiki生成步骤数
-                completed_steps: 0,
+                progress,
+                current_step: stage.to_string(),
+                total_steps,
+                completed_steps,
                 step_details: None,
                 timestamp: chrono::Utc::now(),
                 id: None,
