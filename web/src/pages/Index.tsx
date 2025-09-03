@@ -10,7 +10,8 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Settings, Server } from "lucide-react";
+import { Settings, Server, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 import { backendConnection, BackendEndpoint } from "@/lib/backend-connection";
 import { apiClient } from "@/lib/api-client";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -47,13 +48,23 @@ const Index = () => {
       {/* Header with controls */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">Wikify</h1>
-            {currentBackend && (
-              <span className="text-xs text-muted-foreground">
-                → {currentBackend.name}
-              </span>
-            )}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold">Wikify</h1>
+              {currentBackend && (
+                <span className="text-xs text-muted-foreground">
+                  → {currentBackend.name}
+                </span>
+              )}
+            </div>
+
+            {/* 流式研究演示链接 */}
+            <Link to="/streaming-demo">
+              <Button variant="outline" size="sm" className="flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                流式研究演示
+              </Button>
+            </Link>
           </div>
           <div className="flex items-center gap-4">
             {/* 后端连接状态 */}

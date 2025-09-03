@@ -8,7 +8,8 @@ use crate::indexing::traits::DocumentIndexerImpl;
 use crate::llm_client::WikifyLlmClient;
 use crate::retriever::DocumentRetriever;
 use crate::types::{
-    RagConfig, RagError, RagQuery, RagResponse, RagResponseMetadata, RagResult, SearchResult,
+    DeepResearchConfig, DeepResearchResult, RagConfig, RagError, RagQuery, RagResponse,
+    RagResponseMetadata, RagResult, ResearchStatus, SearchResult,
 };
 use wikify_core::{log_operation_start, log_operation_success};
 
@@ -698,6 +699,408 @@ impl RagPipeline {
                 "Repository access did not provide local path".to_string(),
             )),
         }
+    }
+
+    // ============================================================================
+    // Deep Research Methods
+    // ============================================================================
+
+    /// Execute deep research with multiple iterations
+    ///
+    /// This method implements a multi-stage research process similar to DeepWiki's
+    /// deep research functionality. It iteratively refines queries based on previous
+    /// results to provide comprehensive answers to complex questions.
+    pub async fn deep_research(
+        &mut self,
+        query: &str,
+        config: Option<DeepResearchConfig>,
+    ) -> RagResult<DeepResearchResult> {
+        let research_config = config.unwrap_or_default();
+
+        // Execute research directly in this pipeline instead of using a separate engine
+        self.execute_research_internal(query, research_config).await
+    }
+
+    /// Internal implementation of deep research
+    async fn execute_research_internal(
+        &mut self,
+        query: &str,
+        config: DeepResearchConfig,
+    ) -> RagResult<DeepResearchResult> {
+        let research_id = uuid::Uuid::new_v4().to_string();
+        let start_time = std::time::Instant::now();
+        let started_at = chrono::Utc::now();
+
+        info!("Starting deep research: {} (ID: {})", query, research_id);
+
+        let mut iterations = Vec::new();
+        let mut current_query = query.to_string();
+        let mut all_sources = Vec::new();
+
+        // Execute research iterations
+        for iteration_num in 1..=config.max_iterations {
+            info!(
+                "Executing research iteration {}/{}",
+                iteration_num, config.max_iterations
+            );
+
+            let iteration_start = std::time::Instant::now();
+            let iteration_timestamp = chrono::Utc::now();
+
+            // Build stage-specific prompt
+            let stage_prompt = self.build_research_stage_prompt(
+                &current_query,
+                iteration_num,
+                &config,
+                &iterations,
+            );
+
+            // Execute RAG query
+            let rag_query = RagQuery {
+                question: stage_prompt,
+                context: None,
+                filters: None,
+                retrieval_config: None,
+            };
+
+            let response = self.ask(rag_query).await?;
+            let iteration_duration = iteration_start.elapsed().as_millis() as u64;
+
+            // Create iteration record
+            let iteration = crate::types::ResearchIteration {
+                iteration: iteration_num,
+                query: current_query.clone(),
+                response: response.answer.clone(),
+                sources: response.sources.clone(),
+                duration_ms: iteration_duration,
+                timestamp: iteration_timestamp,
+                confidence_score: None, // TODO: Implement confidence scoring
+            };
+
+            // Collect unique sources
+            for source in &response.sources {
+                if !all_sources
+                    .iter()
+                    .any(|s: &crate::types::SearchResult| s.chunk.id == source.chunk.id)
+                {
+                    all_sources.push(source.clone());
+                }
+            }
+
+            iterations.push(iteration);
+
+            // Check if research is complete
+            if self.is_research_complete(&response.answer, iteration_num, &config) {
+                info!("Research completed after {} iterations", iteration_num);
+                break;
+            }
+
+            // Generate follow-up query for next iteration
+            if iteration_num < config.max_iterations {
+                current_query = self
+                    .generate_research_follow_up_query(query, &iterations)
+                    .await?;
+
+                debug!("Generated follow-up query: {}", current_query);
+
+                // Add delay between iterations if configured
+                if config.iteration_delay_ms > 0 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(
+                        config.iteration_delay_ms,
+                    ))
+                    .await;
+                }
+            }
+        }
+
+        // Synthesize final result
+        let final_synthesis = self
+            .synthesize_research_final_result(query, &iterations)
+            .await?;
+
+        let total_duration = start_time.elapsed().as_millis() as u64;
+        let completed_at = chrono::Utc::now();
+
+        let result = DeepResearchResult {
+            id: research_id,
+            original_query: query.to_string(),
+            iterations,
+            final_synthesis,
+            status: ResearchStatus::Completed,
+            total_duration_ms: total_duration,
+            started_at,
+            completed_at: Some(completed_at),
+            config,
+            all_sources,
+        };
+
+        info!("Deep research completed in {}ms", total_duration);
+        Ok(result)
+    }
+
+    /// Create a clone of this pipeline for research purposes
+    /// This is a simplified approach - in production we'd use better sharing mechanisms
+    fn clone_for_research(&self) -> RagResult<RagPipeline> {
+        if !self.is_initialized {
+            return Err(RagError::Config("Pipeline not initialized".to_string()));
+        }
+
+        // For now, we'll return a reference to self instead of cloning
+        // This is a temporary solution - in production we'd use Arc<Mutex<>> or similar
+        // Since we can't easily clone the complex internal state, we'll use a different approach
+        Err(RagError::Config(
+            "Clone for research not yet implemented - use direct pipeline reference".to_string(),
+        ))
+    }
+
+    /// Generate a follow-up research query
+    pub async fn generate_follow_up_query(
+        &self,
+        original_query: &str,
+        previous_responses: &[String],
+    ) -> RagResult<String> {
+        let context = previous_responses.join("\n\n");
+
+        let prompt = format!(
+            "Based on the previous research findings, generate a focused follow-up question that will help deepen the investigation.\n\n\
+            Original Question: {}\n\n\
+            Previous Findings:\n{}\n\n\
+            Generate a specific, targeted question that addresses gaps or areas needing deeper investigation. \
+            Return only the follow-up question, nothing else.",
+            original_query, context
+        );
+
+        let query = RagQuery {
+            question: prompt,
+            context: None,
+            filters: None,
+            retrieval_config: None,
+        };
+
+        let response = self.ask(query).await?;
+
+        // Extract just the question from the response
+        let follow_up = response
+            .answer
+            .lines()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or(&response.answer)
+            .trim()
+            .to_string();
+
+        Ok(follow_up)
+    }
+
+    /// Synthesize research findings into a comprehensive answer
+    pub async fn synthesize_research_findings(
+        &self,
+        original_query: &str,
+        all_responses: &[String],
+    ) -> RagResult<String> {
+        let all_findings = all_responses
+            .iter()
+            .enumerate()
+            .map(|(i, response)| format!("## Research Iteration {}\n{}", i + 1, response))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let prompt = format!(
+            "Synthesize all research findings into a comprehensive final answer.\n\n\
+            Original Question: {}\n\n\
+            All Research Iterations:\n{}\n\n\
+            Create a well-structured, comprehensive response that:\n\
+            1. Directly answers the original question\n\
+            2. Integrates insights from all research iterations\n\
+            3. Provides technical details and examples\n\
+            4. Offers actionable conclusions\n\n\
+            Structure the response with clear headings and ensure it's complete and authoritative.",
+            original_query, all_findings
+        );
+
+        let query = RagQuery {
+            question: prompt,
+            context: None,
+            filters: None,
+            retrieval_config: None,
+        };
+
+        let response = self.ask(query).await?;
+        Ok(response.answer)
+    }
+
+    /// Build a stage-specific prompt for research iterations
+    fn build_research_stage_prompt(
+        &self,
+        query: &str,
+        iteration: usize,
+        config: &DeepResearchConfig,
+        previous_iterations: &[crate::types::ResearchIteration],
+    ) -> String {
+        let templates = &config.prompt_templates;
+
+        match iteration {
+            1 => {
+                // First iteration - research planning
+                templates.first_iteration.replace("{query}", query)
+            }
+            i if i == config.max_iterations => {
+                // Final iteration - synthesis
+                let previous_findings = self.summarize_research_iterations(previous_iterations);
+                templates
+                    .final_iteration
+                    .replace("{query}", query)
+                    .replace("{previous_findings}", &previous_findings)
+            }
+            _ => {
+                // Intermediate iteration - deep dive
+                let previous_findings = self.summarize_research_iterations(previous_iterations);
+                templates
+                    .intermediate_iteration
+                    .replace("{query}", query)
+                    .replace("{iteration}", &iteration.to_string())
+                    .replace("{max_iterations}", &config.max_iterations.to_string())
+                    .replace("{previous_findings}", &previous_findings)
+            }
+        }
+    }
+
+    /// Generate a follow-up query for research
+    async fn generate_research_follow_up_query(
+        &mut self,
+        original_query: &str,
+        iterations: &[crate::types::ResearchIteration],
+    ) -> RagResult<String> {
+        let previous_findings = self.summarize_research_iterations(iterations);
+        let current_iteration = iterations.len();
+
+        let prompt = format!(
+            "Based on the previous research findings, generate a focused follow-up question that will help deepen the investigation.\n\n\
+            Original Question: {}\n\n\
+            Previous Findings:\n{}\n\n\
+            Current Iteration: {}\n\n\
+            Generate a specific, targeted question that addresses gaps or areas needing deeper investigation. \
+            The question should:\n\
+            - Build upon previous findings\n\
+            - Focus on specific technical aspects\n\
+            - Help complete the overall research objective\n\n\
+            Return only the follow-up question, nothing else.",
+            original_query, previous_findings, current_iteration
+        );
+
+        let rag_query = RagQuery {
+            question: prompt,
+            context: None,
+            filters: None,
+            retrieval_config: None,
+        };
+
+        let response = self.ask(rag_query).await?;
+
+        // Extract just the question from the response
+        let follow_up = response
+            .answer
+            .lines()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or(&response.answer)
+            .trim()
+            .to_string();
+
+        Ok(follow_up)
+    }
+
+    /// Synthesize final research result
+    async fn synthesize_research_final_result(
+        &mut self,
+        original_query: &str,
+        iterations: &[crate::types::ResearchIteration],
+    ) -> RagResult<String> {
+        let all_findings = iterations
+            .iter()
+            .enumerate()
+            .map(|(i, iter)| {
+                format!(
+                    "## Iteration {}\nQuery: {}\nFindings: {}",
+                    i + 1,
+                    iter.query,
+                    iter.response
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let prompt = format!(
+            "Synthesize all research findings into a comprehensive final answer.\n\n\
+            Original Question: {}\n\n\
+            All Research Iterations:\n{}\n\n\
+            Create a well-structured, comprehensive response that:\n\
+            1. Directly answers the original question\n\
+            2. Integrates insights from all research iterations\n\
+            3. Provides technical details and examples\n\
+            4. Offers actionable conclusions\n\n\
+            Structure the response with clear headings and ensure it's complete and authoritative.",
+            original_query, all_findings
+        );
+
+        let rag_query = RagQuery {
+            question: prompt,
+            context: None,
+            filters: None,
+            retrieval_config: None,
+        };
+
+        let response = self.ask(rag_query).await?;
+        Ok(response.answer)
+    }
+
+    /// Check if research should be considered complete
+    fn is_research_complete(
+        &self,
+        response: &str,
+        iteration: usize,
+        config: &DeepResearchConfig,
+    ) -> bool {
+        // Check for explicit completion indicators (inspired by DeepWiki)
+        let completion_indicators = [
+            "this concludes our research",
+            "this completes our investigation",
+            "this concludes the deep research process",
+            "final conclusion",
+            "in conclusion,",
+            "to summarize,",
+            "comprehensive analysis complete",
+        ];
+
+        let response_lower = response.to_lowercase();
+        let has_completion_indicator = completion_indicators
+            .iter()
+            .any(|indicator| response_lower.contains(indicator));
+
+        // Force completion at max iterations
+        let at_max_iterations = iteration >= config.max_iterations;
+
+        has_completion_indicator || at_max_iterations
+    }
+
+    /// Summarize previous research iterations
+    fn summarize_research_iterations(
+        &self,
+        iterations: &[crate::types::ResearchIteration],
+    ) -> String {
+        if iterations.is_empty() {
+            return "No previous findings.".to_string();
+        }
+
+        iterations
+            .iter()
+            .map(|iter| {
+                format!(
+                    "Iteration {}: {}",
+                    iter.iteration,
+                    iter.response.lines().take(3).collect::<Vec<_>>().join(" ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 

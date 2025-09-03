@@ -1,436 +1,267 @@
-//! Main research engine implementation
-//! Now based on Repository Manager instead of Session Manager
+//! Simplified Research Engine - Application layer coordination
+//!
+//! This module provides a simplified research engine that coordinates between
+//! the application layer and the RAG layer for deep research functionality.
 
-use super::{
-    planner::ResearchPlanner,
-    strategy::{AdaptiveResearchStrategy, ResearchStrategySelector},
-    synthesizer::ResearchSynthesizer,
-    types::*,
-};
+use super::types::*;
 use crate::{
     repository::RepositoryManager, ApplicationError, ApplicationResult, PermissionContext,
 };
+use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
-/// Deep research engine for complex multi-step investigations
-/// Now based on Repository Manager instead of Session Manager
+/// Simplified research engine that coordinates deep research sessions
 pub struct ResearchEngine {
-    /// Research planner for question decomposition
-    planner: ResearchPlanner,
-    /// Research synthesizer for result compilation
-    synthesizer: ResearchSynthesizer,
-    /// Strategy selector for adaptive research
-    strategy_selector: ResearchStrategySelector,
     /// Repository manager for RAG operations
     repository_manager: Arc<RepositoryManager>,
-    /// Active research sessions (now repository-based)
-    active_sessions: Arc<RwLock<HashMap<String, ResearchContext>>>,
+    /// Active research sessions
+    active_sessions: Arc<RwLock<HashMap<String, ResearchSession>>>,
+}
+
+/// Research session state
+#[derive(Debug, Clone)]
+pub struct ResearchSession {
+    pub id: String,
+    pub repository_id: String,
+    pub query: String,
+    pub status: ResearchStatus,
+    pub config: ResearchConfig,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub result: Option<wikify_rag::DeepResearchResult>,
 }
 
 impl ResearchEngine {
     /// Create a new research engine with repository manager
-    pub fn new(config: ResearchConfig, repository_manager: Arc<RepositoryManager>) -> Self {
+    pub fn new(repository_manager: Arc<RepositoryManager>) -> Self {
         Self {
-            planner: ResearchPlanner::new(config.clone()),
-            synthesizer: ResearchSynthesizer::new(config.clone()),
-            strategy_selector: ResearchStrategySelector::new(config),
             repository_manager,
             active_sessions: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    /// Create a new research engine with LLM support
-    pub fn with_llm_client(
-        config: ResearchConfig,
-        repository_manager: Arc<RepositoryManager>,
-        _llm_client: Box<dyn siumai::prelude::ChatCapability>,
-    ) -> Self {
-        // Clone the LLM client for different components
-        // Note: In a real implementation, you'd want to use Arc<dyn ChatCapability>
-        // For now, we'll create separate instances
-        Self {
-            planner: ResearchPlanner::new(config.clone()), // TODO: Add LLM support
-            synthesizer: ResearchSynthesizer::new(config.clone()), // TODO: Add LLM support
-            strategy_selector: ResearchStrategySelector::new(config), // TODO: Add LLM support
-            repository_manager,
-            active_sessions: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
-    /// Start a new research process
+    /// Start a new deep research process
     pub async fn start_research(
-        &self,
-        repository_id: String,
-        topic: String,
-        config: ResearchConfig,
-    ) -> ApplicationResult<String> {
-        let research_session_id = Uuid::new_v4().to_string();
-
-        // Create initial research context
-        let research_context = ResearchContext {
-            id: research_session_id.clone(),
-            repository_id: repository_id.clone(),
-            topic: topic.clone(),
-            config: config.clone(),
-            questions: vec![
-                // Create initial research question
-                ResearchQuestion {
-                    id: Uuid::new_v4(),
-                    text: topic,
-                    priority: 1.0,
-                    answered: false,
-                    source: QuestionSource::Initial,
-                    created_at: chrono::Utc::now(),
-                },
-            ],
-            findings: Vec::new(),
-            iterations: Vec::new(),
-            status: ResearchStatus::Active,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
-
-        // Store the research context
-        {
-            let mut sessions = self.active_sessions.write().await;
-            sessions.insert(research_session_id.clone(), research_context);
-        }
-
-        info!(
-            "Started research session {} for repository {}",
-            research_session_id, repository_id
-        );
-        Ok(research_session_id)
-    }
-
-    /// Execute one research iteration using repository-based approach
-    pub async fn research_iteration(
         &self,
         context: &PermissionContext,
         repository_id: &str,
-        research_session_id: &str,
-    ) -> ApplicationResult<ResearchProgress> {
+        query: String,
+        config: Option<ResearchConfig>,
+    ) -> ApplicationResult<String> {
+        let session_id = Uuid::new_v4().to_string();
+        let research_config = config.unwrap_or_default();
+
         info!(
-            "Executing research iteration for repository: {} session: {}",
-            repository_id, research_session_id
+            "Starting deep research session {} for repository {}",
+            session_id, repository_id
         );
 
-        // Get research context
-        let research_context = {
-            let sessions = self.active_sessions.read().await;
-            sessions
-                .get(research_session_id)
-                .ok_or_else(|| ApplicationError::Research {
-                    message: format!("Research session not found: {}", research_session_id),
-                })?
-                .clone()
+        // Create research session
+        let session = ResearchSession {
+            id: session_id.clone(),
+            repository_id: repository_id.to_string(),
+            query: query.clone(),
+            status: ResearchStatus::InProgress,
+            config: research_config.clone(),
+            started_at: Utc::now(),
+            completed_at: None,
+            result: None,
         };
 
-        let iteration_start = std::time::Instant::now();
-        let iteration_num = research_context.iterations.len() + 1;
-
-        // Select questions to research in this iteration
-        let questions_to_research = self
-            .select_questions_for_iteration(&research_context)
-            .await?;
-
-        if questions_to_research.is_empty() {
-            info!(
-                "No more questions to research for session: {}",
-                research_session_id
-            );
-            return self
-                .finalize_research_internal(context, research_session_id)
-                .await;
+        // Store the session
+        {
+            let mut sessions = self.active_sessions.write().await;
+            sessions.insert(session_id.clone(), session);
         }
 
-        let mut iteration_findings = Vec::new();
-        let mut new_questions = Vec::new();
+        // Start background research task
+        let repository_manager = self.repository_manager.clone();
+        let sessions = self.active_sessions.clone();
+        let session_id_clone = session_id.clone();
+        let repository_id_clone = repository_id.to_string();
 
-        // Research each selected question using Repository Manager
-        for question in &questions_to_research {
-            info!("Researching question: {}", question.text);
+        tokio::spawn(async move {
+            Self::execute_research_background(
+                repository_manager,
+                sessions,
+                session_id_clone,
+                repository_id_clone,
+                query,
+                research_config,
+            )
+            .await
+        });
 
-            // Create repository query
+        Ok(session_id)
+    }
+
+    /// Get research progress for a session
+    pub async fn get_research_progress(
+        &self,
+        session_id: &str,
+    ) -> ApplicationResult<ResearchProgress> {
+        let sessions = self.active_sessions.read().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| ApplicationError::Research {
+                message: format!("Research session not found: {}", session_id),
+            })?;
+
+        // Convert session to progress
+        let progress = if let Some(result) = &session.result {
+            // Research is complete
+            ResearchProgress {
+                id: session.id.clone(),
+                status: session.status.clone(),
+                current_iteration: result.iterations.len(),
+                max_iterations: session.config.max_iterations,
+                progress: 1.0,
+                current_response: result.iterations.last().map(|i| i.response.clone()),
+                estimated_remaining_ms: None,
+                last_updated: session.completed_at.unwrap_or(session.started_at),
+            }
+        } else {
+            // Research is in progress
+            ResearchProgress {
+                id: session.id.clone(),
+                status: session.status.clone(),
+                current_iteration: 0, // We don't track individual iterations in this simplified version
+                max_iterations: session.config.max_iterations,
+                progress: 0.5, // Rough estimate
+                current_response: None,
+                estimated_remaining_ms: None,
+                last_updated: chrono::Utc::now(),
+            }
+        };
+
+        Ok(progress)
+    }
+
+    /// Stop a research session
+    pub async fn stop_research(&self, session_id: &str) -> ApplicationResult<()> {
+        let mut sessions = self.active_sessions.write().await;
+        if let Some(session) = sessions.get_mut(session_id) {
+            session.status = ResearchStatus::Cancelled;
+            session.completed_at = Some(Utc::now());
+            info!("Stopped research session: {}", session_id);
+        } else {
+            warn!(
+                "Attempted to stop non-existent research session: {}",
+                session_id
+            );
+        }
+        Ok(())
+    }
+
+    /// Execute research in background
+    async fn execute_research_background(
+        repository_manager: Arc<RepositoryManager>,
+        sessions: Arc<RwLock<HashMap<String, ResearchSession>>>,
+        session_id: String,
+        repository_id: String,
+        query: String,
+        config: ResearchConfig,
+    ) {
+        info!("Starting background research for session: {}", session_id);
+
+        // Execute deep research using repository manager
+        let rag_result = {
+            // Create a dummy permission context for internal operations
+            let context = PermissionContext::local(); // Use local context for internal operations
+
+            // For now, we'll use a simple query approach instead of deep research
+            // TODO: Implement proper deep research integration with repository manager
             let repo_query = crate::repository::RepositoryQuery {
-                question: question.text.clone(),
+                question: query.clone(),
                 max_results: Some(10),
                 parameters: None,
             };
 
-            // Use Repository Manager to query
-            let rag_response = self
-                .repository_manager
-                .query_repository(context, repository_id, repo_query)
+            match repository_manager
+                .query_repository(&context, &repository_id, repo_query)
                 .await
-                .map_err(|e| ApplicationError::Research {
-                    message: format!("Repository query failed: {}", e),
-                })?;
+            {
+                Ok(response) => {
+                    // Create a simplified deep research result
+                    let iteration = wikify_rag::ResearchIteration {
+                        iteration: 1,
+                        query: query.clone(),
+                        response: response.answer.clone(),
+                        sources: vec![], // Simplified - we don't have the actual search results
+                        duration_ms: 1000, // Placeholder
+                        timestamp: Utc::now(),
+                        confidence_score: response.confidence.map(|c| c as f32),
+                    };
 
-            // Convert repository response to research findings
-            let findings = self
-                .convert_repo_response_to_findings(question, &rag_response)
-                .await?;
-            iteration_findings.extend(findings);
-        }
+                    let result = wikify_rag::DeepResearchResult {
+                        id: session_id.clone(),
+                        original_query: query.clone(),
+                        iterations: vec![iteration],
+                        final_synthesis: response.answer,
+                        status: wikify_rag::ResearchStatus::Completed,
+                        total_duration_ms: 1000,
+                        started_at: Utc::now(),
+                        completed_at: Some(Utc::now()),
+                        config: wikify_rag::DeepResearchConfig::default(),
+                        all_sources: vec![],
+                    };
 
-        // Generate follow-up questions based on findings
-        let followup_questions = self
-            .planner
-            .plan_followup_questions(&research_context, &iteration_findings)
-            .await?;
-        new_questions.extend(followup_questions);
-
-        // Create partial synthesis
-        let all_findings: Vec<_> = research_context
-            .findings
-            .iter()
-            .cloned()
-            .chain(iteration_findings.iter().cloned())
-            .collect();
-
-        let partial_synthesis = self
-            .synthesizer
-            .create_partial_synthesis(&research_context.topic, &all_findings)
-            .await?;
-
-        // Calculate confidence
-        let confidence = self.calculate_iteration_confidence(&iteration_findings);
-
-        // Create iteration result
-        let iteration = ResearchIteration {
-            iteration: iteration_num,
-            questions: questions_to_research,
-            findings: iteration_findings.clone(),
-            new_questions: new_questions.clone(),
-            partial_synthesis,
-            confidence,
-            needs_more_research: iteration_num < research_context.config.max_iterations
-                && !new_questions.is_empty(),
-            duration: iteration_start.elapsed(),
+                    Ok(result)
+                }
+                Err(e) => {
+                    warn!("Failed to query repository for research: {}", e);
+                    Err(wikify_rag::RagError::Config(format!(
+                        "Repository query failed: {}",
+                        e
+                    )))
+                }
+            }
         };
 
-        // Update research context
-        {
-            let mut sessions = self.active_sessions.write().await;
-            if let Some(context) = sessions.get_mut(research_session_id) {
-                // Add new findings
-                context.findings.extend(iteration_findings);
-
-                // Add new questions
-                context.questions.extend(new_questions);
-
-                // Add iteration
-                context.iterations.push(iteration.clone());
+        // Update session with result
+        let mut sessions_guard = sessions.write().await;
+        if let Some(session) = sessions_guard.get_mut(&session_id) {
+            match rag_result {
+                Ok(result) => {
+                    session.status = ResearchStatus::Completed;
+                    session.result = Some(result);
+                    session.completed_at = Some(Utc::now());
+                    info!(
+                        "Research completed successfully for session: {}",
+                        session_id
+                    );
+                }
+                Err(e) => {
+                    session.status = ResearchStatus::Failed(format!("Research failed: {}", e));
+                    session.completed_at = Some(Utc::now());
+                    warn!("Research failed for session {}: {}", session_id, e);
+                }
             }
         }
-
-        // Return progress
-        Ok(ResearchProgress {
-            session_id: research_session_id.to_string(),
-            repository_id: research_context.repository_id.clone(),
-            current_iteration: iteration_num,
-            total_iterations: research_context.config.max_iterations,
-            stage: format!("Completed iteration {}", iteration_num),
-            progress: iteration_num as f64 / research_context.config.max_iterations as f64,
-            current_question: None,
-            findings_count: research_context.findings.len() + iteration.findings.len(),
-            estimated_remaining: Some(std::time::Duration::from_secs(
-                (research_context.config.max_iterations - iteration_num) as u64 * 60,
-            )),
-        })
     }
 
-    /// Get research progress
-    pub async fn get_progress(
-        &self,
-        research_session_id: &str,
-    ) -> ApplicationResult<ResearchProgress> {
-        let sessions = self.active_sessions.read().await;
-        let context =
-            sessions
-                .get(research_session_id)
-                .ok_or_else(|| ApplicationError::Research {
-                    message: format!("Research session not found: {}", research_session_id),
-                })?;
-
-        let current_iteration = context.iterations.len();
-        let progress = if context.config.max_iterations > 0 {
-            current_iteration as f64 / context.config.max_iterations as f64
-        } else {
-            0.0
-        };
-
-        Ok(ResearchProgress {
-            session_id: research_session_id.to_string(),
-            repository_id: context.repository_id.clone(),
-            current_iteration,
-            total_iterations: context.config.max_iterations,
-            stage: if current_iteration == 0 {
-                "Planning".to_string()
-            } else {
-                format!("Iteration {}", current_iteration)
-            },
-            progress,
-            current_question: None,
-            findings_count: context.findings.len(),
-            estimated_remaining: Some(std::time::Duration::from_secs(
-                (context
-                    .config
-                    .max_iterations
-                    .saturating_sub(current_iteration)) as u64
-                    * 60,
-            )),
-        })
-    }
-
-    /// List all active research processes
+    /// List all active research sessions
     pub async fn list_active_research(&self) -> Vec<String> {
         let sessions = self.active_sessions.read().await;
         sessions.keys().cloned().collect()
     }
 
-    /// Get research details
-    pub async fn get_research_details(
+    /// Get research result (if completed)
+    pub async fn get_research_result(
         &self,
-        research_id: &str,
-    ) -> ApplicationResult<ResearchContext> {
+        session_id: &str,
+    ) -> ApplicationResult<Option<wikify_rag::DeepResearchResult>> {
         let sessions = self.active_sessions.read().await;
-        sessions
-            .get(research_id)
-            .cloned()
+        let session = sessions
+            .get(session_id)
             .ok_or_else(|| ApplicationError::Research {
-                message: format!("Research not found: {}", research_id),
-            })
-    }
+                message: format!("Research session not found: {}", session_id),
+            })?;
 
-    /// Cancel research
-    pub async fn cancel_research(&self, research_id: &str) -> ApplicationResult<()> {
-        let mut sessions = self.active_sessions.write().await;
-        if let Some(mut context) = sessions.remove(research_id) {
-            context.status = ResearchStatus::Cancelled;
-            info!("Cancelled research: {}", research_id);
-            Ok(())
-        } else {
-            Err(ApplicationError::Research {
-                message: format!("Research not found: {}", research_id),
-            })
-        }
-    }
-
-    // Helper methods
-
-    /// Select questions for the current iteration
-    async fn select_questions_for_iteration(
-        &self,
-        context: &ResearchContext,
-    ) -> ApplicationResult<Vec<ResearchQuestion>> {
-        // Get unanswered questions
-        let unanswered_questions: Vec<_> = context
-            .questions
-            .iter()
-            .filter(|q| !q.answered)
-            .cloned()
-            .collect();
-
-        if unanswered_questions.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Sort by priority (f64 doesn't implement Ord, so we use partial_cmp)
-        let mut sorted_questions = unanswered_questions;
-        sorted_questions.sort_by(|a, b| {
-            b.priority
-                .partial_cmp(&a.priority)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Take top questions for this iteration
-        let max_questions = context.config.max_sources_per_iteration.min(3);
-        sorted_questions.truncate(max_questions);
-
-        Ok(sorted_questions)
-    }
-
-    /// Convert repository response to research findings
-    async fn convert_repo_response_to_findings(
-        &self,
-        question: &ResearchQuestion,
-        response: &crate::repository::RepositoryQueryResponse,
-    ) -> ApplicationResult<Vec<ResearchFinding>> {
-        let mut findings = Vec::new();
-
-        // Create a finding from the main answer
-        let finding = ResearchFinding {
-            id: Uuid::new_v4(),
-            question_id: question.id,
-            content: response.answer.clone(),
-            source: SourceInfo {
-                id: response.sources.join(", "),
-                source_type: SourceType::SourceCode, // Default to source code
-                title: None,
-                author: None,
-                last_modified: None,
-                reliability: response.confidence.unwrap_or(0.5),
-            },
-            confidence: response.confidence.unwrap_or(0.5),
-            timestamp: chrono::Utc::now(),
-            relevance: response.confidence.unwrap_or(0.5),
-            evidence: response.sources.clone(),
-            limitations: Vec::new(),
-        };
-        findings.push(finding);
-
-        Ok(findings)
-    }
-
-    /// Calculate confidence for iteration findings
-    fn calculate_iteration_confidence(&self, findings: &[ResearchFinding]) -> f64 {
-        if findings.is_empty() {
-            return 0.0;
-        }
-
-        let total_confidence: f64 = findings.iter().map(|f| f.confidence).sum();
-        total_confidence / findings.len() as f64
-    }
-
-    /// Finalize research session
-    async fn finalize_research_internal(
-        &self,
-        _context: &PermissionContext,
-        research_session_id: &str,
-    ) -> ApplicationResult<ResearchProgress> {
-        let mut sessions = self.active_sessions.write().await;
-        if let Some(context) = sessions.get_mut(research_session_id) {
-            context.status = ResearchStatus::Completed;
-
-            let final_synthesis = self
-                .synthesizer
-                .create_final_synthesis(&context.topic, &context.findings, &context.iterations)
-                .await?;
-
-            info!("Research session completed: {}", research_session_id);
-            info!("Final synthesis: {}", final_synthesis);
-
-            Ok(ResearchProgress {
-                session_id: research_session_id.to_string(),
-                repository_id: context.repository_id.clone(),
-                current_iteration: context.iterations.len(),
-                total_iterations: context.config.max_iterations,
-                stage: "Completed".to_string(),
-                progress: 1.0,
-                current_question: None,
-                findings_count: context.findings.len(),
-                estimated_remaining: Some(std::time::Duration::from_secs(0)),
-            })
-        } else {
-            Err(ApplicationError::Research {
-                message: format!("Research session not found: {}", research_session_id),
-            })
-        }
+        Ok(session.result.clone())
     }
 }

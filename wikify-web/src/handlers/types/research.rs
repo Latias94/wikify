@@ -60,14 +60,16 @@ pub struct ResearchProgressResponse {
 impl From<ResearchProgress> for ResearchProgressResponse {
     fn from(progress: ResearchProgress) -> Self {
         Self {
-            research_id: progress.session_id,
-            status: "in_progress".to_string(), // TODO: Add status field to ResearchProgress
+            research_id: progress.id,
+            status: format!("{:?}", progress.status),
             current_iteration: progress.current_iteration,
-            total_iterations: progress.total_iterations,
-            current_focus: progress.stage, // Use stage as current_focus
-            findings: vec![],              // TODO: Add findings field to ResearchProgress
-            progress_percentage: progress.progress * 100.0, // Convert to percentage
-            timestamp: chrono::Utc::now(),
+            total_iterations: progress.max_iterations,
+            current_focus: progress
+                .current_response
+                .unwrap_or_else(|| "Processing...".to_string()),
+            findings: vec![], // TODO: Add findings field to ResearchProgress
+            progress_percentage: progress.progress as f64 * 100.0, // Convert to percentage
+            timestamp: progress.last_updated,
         }
     }
 }

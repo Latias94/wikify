@@ -303,3 +303,202 @@ pub struct ChatSession {
     /// Session metadata
     pub metadata: HashMap<String, serde_json::Value>,
 }
+
+// ============================================================================
+// Deep Research Types
+// ============================================================================
+
+/// Configuration for deep research
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeepResearchConfig {
+    /// Maximum number of research iterations
+    pub max_iterations: usize,
+    /// Minimum confidence threshold for completion
+    pub completion_threshold: f32,
+    /// Whether to enable automatic iteration
+    pub auto_iterate: bool,
+    /// Delay between iterations (ms)
+    pub iteration_delay_ms: u64,
+    /// Custom prompt templates for different stages
+    pub prompt_templates: ResearchPromptTemplates,
+}
+
+impl Default for DeepResearchConfig {
+    fn default() -> Self {
+        Self {
+            max_iterations: 5,
+            completion_threshold: 0.8,
+            auto_iterate: true,
+            iteration_delay_ms: 1000,
+            prompt_templates: ResearchPromptTemplates::default(),
+        }
+    }
+}
+
+/// Prompt templates for different research stages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchPromptTemplates {
+    /// Template for the first iteration
+    pub first_iteration: String,
+    /// Template for intermediate iterations
+    pub intermediate_iteration: String,
+    /// Template for the final iteration
+    pub final_iteration: String,
+    /// Template for generating follow-up queries
+    pub follow_up_query: String,
+    /// Template for synthesizing final results
+    pub synthesis: String,
+}
+
+impl Default for ResearchPromptTemplates {
+    fn default() -> Self {
+        Self {
+            first_iteration: r#"You are conducting a deep research investigation. This is the initial research phase.
+
+Research Question: {query}
+
+Create a comprehensive research plan and provide initial findings based on the available context. Structure your response with:
+
+1. **Research Plan**: Outline your approach to investigating this topic
+2. **Initial Findings**: Present what you've discovered so far
+3. **Key Questions**: Identify specific areas that need further investigation
+
+Use the provided context to give detailed, accurate information. If certain aspects need deeper investigation, mention them clearly."#.to_string(),
+
+            intermediate_iteration: r#"Continue your deep research investigation (iteration {iteration}/{max_iterations}).
+
+Original Question: {query}
+
+Previous Findings Summary:
+{previous_findings}
+
+Dive deeper into specific aspects that need further investigation. Focus on:
+- Addressing gaps from previous iterations
+- Exploring technical details and implementation specifics
+- Investigating relationships and dependencies
+- Analyzing patterns and best practices
+
+Structure your response with clear sections and build upon previous findings."#.to_string(),
+
+            final_iteration: r#"This is the final iteration of your deep research on: {query}
+
+Previous Research Summary:
+{previous_findings}
+
+Provide a comprehensive conclusion and synthesis. Your response should include:
+
+1. **Executive Summary**: Key findings and insights
+2. **Detailed Analysis**: Comprehensive technical details
+3. **Conclusions**: Final answers to the original question
+4. **Recommendations**: Actionable insights or next steps
+
+This concludes the deep research process. Ensure your response is complete and addresses all aspects of the original question."#.to_string(),
+
+            follow_up_query: r#"Based on the previous research findings, generate a focused follow-up question that will help deepen the investigation.
+
+Original Question: {original_query}
+Previous Findings: {previous_findings}
+Current Iteration: {iteration}
+
+Generate a specific, targeted question that addresses gaps or areas needing deeper investigation. The question should:
+- Build upon previous findings
+- Focus on specific technical aspects
+- Help complete the overall research objective
+
+Return only the follow-up question, nothing else."#.to_string(),
+
+            synthesis: r#"Synthesize all research findings into a comprehensive final answer.
+
+Original Question: {original_query}
+
+All Research Iterations:
+{all_findings}
+
+Create a well-structured, comprehensive response that:
+1. Directly answers the original question
+2. Integrates insights from all research iterations
+3. Provides technical details and examples
+4. Offers actionable conclusions
+
+Structure the response with clear headings and ensure it's complete and authoritative."#.to_string(),
+        }
+    }
+}
+
+/// Status of a deep research session
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ResearchStatus {
+    /// Research is in progress
+    InProgress,
+    /// Research completed successfully
+    Completed,
+    /// Research was cancelled
+    Cancelled,
+    /// Research failed with error
+    Failed(String),
+}
+
+/// A single iteration in the research process
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchIteration {
+    /// Iteration number (1-based)
+    pub iteration: usize,
+    /// Query used for this iteration
+    pub query: String,
+    /// Generated response
+    pub response: String,
+    /// Retrieved sources for this iteration
+    pub sources: Vec<SearchResult>,
+    /// Time taken for this iteration (ms)
+    pub duration_ms: u64,
+    /// Timestamp of this iteration
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Confidence score for this iteration
+    pub confidence_score: Option<f32>,
+}
+
+/// Complete deep research result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeepResearchResult {
+    /// Research session ID
+    pub id: String,
+    /// Original research question
+    pub original_query: String,
+    /// All research iterations
+    pub iterations: Vec<ResearchIteration>,
+    /// Final synthesized answer
+    pub final_synthesis: String,
+    /// Overall research status
+    pub status: ResearchStatus,
+    /// Total research time (ms)
+    pub total_duration_ms: u64,
+    /// Research start time
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    /// Research completion time
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Research configuration used
+    pub config: DeepResearchConfig,
+    /// All unique sources across iterations
+    pub all_sources: Vec<SearchResult>,
+}
+
+/// Progress update for ongoing research
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchProgress {
+    /// Research session ID
+    pub id: String,
+    /// Current iteration number
+    pub current_iteration: usize,
+    /// Maximum iterations
+    pub max_iterations: usize,
+    /// Current status
+    pub status: ResearchStatus,
+    /// Progress percentage (0.0 to 1.0)
+    pub progress: f32,
+    /// Current iteration response (if available)
+    pub current_response: Option<String>,
+    /// Estimated time remaining (ms)
+    pub estimated_remaining_ms: Option<u64>,
+    /// Last update timestamp
+    pub last_updated: chrono::DateTime<chrono::Utc>,
+}

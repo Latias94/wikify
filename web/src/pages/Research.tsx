@@ -3,15 +3,17 @@
  * 提供深度研究功能的完整界面
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DeepResearchInterface } from '@/components/research';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { DeepResearchInterface, StreamingResearchInterface } from '@/components/research';
 import { AuthRequired, FeatureConditional } from '@/components/AuthProvider';
 import { useRepositoryById } from '@/store/app-store';
 import { useRepositories } from '@/hooks/use-api';
-import { ArrowLeft, Brain, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Brain, AlertCircle, Zap, Clock, Sparkles } from 'lucide-react';
 
 // ============================================================================
 // 主组件
@@ -21,6 +23,7 @@ const ResearchPage: React.FC = () => {
   const { repositoryId } = useParams<{ repositoryId: string }>();
   const navigate = useNavigate();
   const repository = useRepositoryById(repositoryId || '');
+  const [researchMode, setResearchMode] = useState<'streaming' | 'traditional'>('streaming');
 
   // 确保数据刷新
   const { refetch } = useRepositories();
@@ -31,8 +34,8 @@ const ResearchPage: React.FC = () => {
   }, [refetch]);
 
   // 处理研究完成
-  const handleResearchComplete = (conclusion: string) => {
-    console.log('Research completed:', conclusion);
+  const handleResearchComplete = (result: any) => {
+    console.log('Research completed:', result);
     // 可以在这里添加额外的处理逻辑，比如保存结果、显示通知等
   };
 
@@ -195,11 +198,85 @@ const ResearchPage: React.FC = () => {
           </header>
 
           {/* Main Content */}
-          <main className="container py-6">
-            <DeepResearchInterface
-              repositoryId={repositoryId}
-              onResearchComplete={handleResearchComplete}
-            />
+          <main className="container py-6 space-y-6">
+            {/* 研究模式选择 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  研究模式选择
+                </CardTitle>
+                <CardDescription>
+                  选择适合您需求的研究模式
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs value={researchMode} onValueChange={(value) => setResearchMode(value as 'streaming' | 'traditional')}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="streaming" className="flex items-center gap-2">
+                      <Zap className="h-4 w-4" />
+                      流式研究
+                      <Badge variant="secondary" className="ml-1">推荐</Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="traditional" className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      传统研究
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <div className="mt-4 space-y-4">
+                    <TabsContent value="streaming" className="space-y-3">
+                      <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <Sparkles className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <div>
+                          <h4 className="font-medium text-blue-900 dark:text-blue-100">实时流式研究</h4>
+                          <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                            获得即时反馈和实时进度更新，支持中断和恢复，提供最佳的用户体验。
+                          </p>
+                          <ul className="text-xs text-blue-600 dark:text-blue-400 mt-2 space-y-1">
+                            <li>• 毫秒级实时更新</li>
+                            <li>• 可随时中断研究</li>
+                            <li>• 流畅的用户体验</li>
+                            <li>• 自动错误恢复</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="traditional" className="space-y-3">
+                      <div className="flex items-start gap-3 p-4 bg-gray-50 dark:bg-gray-950/20 rounded-lg border border-gray-200 dark:border-gray-800">
+                        <Clock className="h-5 w-5 text-gray-600 mt-0.5" />
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">传统轮询研究</h4>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                            使用传统的轮询方式获取研究进度，适合网络环境不稳定的情况。
+                          </p>
+                          <ul className="text-xs text-gray-600 dark:text-gray-400 mt-2 space-y-1">
+                            <li>• 定期更新进度</li>
+                            <li>• 网络兼容性好</li>
+                            <li>• 稳定可靠</li>
+                            <li>• 支持断点续传</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </div>
+                </Tabs>
+              </CardContent>
+            </Card>
+
+            {/* 研究界面 */}
+            {researchMode === 'streaming' ? (
+              <StreamingResearchInterface
+                repositoryId={repositoryId}
+                onResearchComplete={handleResearchComplete}
+              />
+            ) : (
+              <DeepResearchInterface
+                repositoryId={repositoryId}
+                onResearchComplete={handleResearchComplete}
+              />
+            )}
           </main>
         </div>
       </FeatureConditional>

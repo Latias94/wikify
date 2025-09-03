@@ -7,6 +7,46 @@ use uuid::Uuid;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
+// ============================================================================
+// Simplified Research Types (New Implementation)
+// ============================================================================
+
+/// Research status for simplified implementation
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub enum ResearchStatus {
+    /// Research is in progress
+    InProgress,
+    /// Research completed successfully
+    Completed,
+    /// Research was cancelled
+    Cancelled,
+    /// Research failed with error
+    Failed(String),
+}
+
+/// Research progress information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct ResearchProgress {
+    /// Research session ID
+    pub id: String,
+    /// Current status
+    pub status: ResearchStatus,
+    /// Current iteration number
+    pub current_iteration: usize,
+    /// Maximum iterations
+    pub max_iterations: usize,
+    /// Progress percentage (0.0 to 1.0)
+    pub progress: f32,
+    /// Current iteration response (if available)
+    pub current_response: Option<String>,
+    /// Estimated time remaining (ms)
+    pub estimated_remaining_ms: Option<u64>,
+    /// Last update timestamp
+    pub last_updated: chrono::DateTime<chrono::Utc>,
+}
+
 /// Research session configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -257,28 +297,9 @@ pub struct ResearchQualityMetrics {
     pub coverage_breadth: f64,
 }
 
-/// Research progress update
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResearchProgress {
-    /// Research session ID
-    pub session_id: String,
-    /// Repository ID being researched
-    pub repository_id: String,
-    /// Current iteration
-    pub current_iteration: usize,
-    /// Total planned iterations
-    pub total_iterations: usize,
-    /// Current stage description
-    pub stage: String,
-    /// Progress percentage (0.0-1.0)
-    pub progress: f64,
-    /// Current question being researched
-    pub current_question: Option<String>,
-    /// Number of findings so far
-    pub findings_count: usize,
-    /// Estimated time remaining
-    pub estimated_remaining: Option<std::time::Duration>,
-}
+// ============================================================================
+// Legacy Research Types (Keep for compatibility)
+// ============================================================================
 
 /// Research planning strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -304,20 +325,6 @@ pub enum QuestionSource {
     Generated,
     /// Follow-up question
     FollowUp,
-}
-
-/// Research session status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub enum ResearchStatus {
-    /// Research is active
-    Active,
-    /// Research completed successfully
-    Completed,
-    /// Research was cancelled
-    Cancelled,
-    /// Research failed with error
-    Failed,
 }
 
 /// Research context for maintaining state across iterations

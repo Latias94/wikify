@@ -11,11 +11,15 @@ use crate::{
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::Json,
+    response::{sse::Event, Json, Sse},
     Json as JsonExtractor,
 };
-use tracing::{error, info};
+use futures_util::stream::{self, Stream};
+use std::convert::Infallible;
+use std::time::Duration;
+use tracing::{error, info, warn};
 use uuid::Uuid;
+use wikify_applications::research::types::ResearchStatus;
 use wikify_applications::{ResearchCategory, ResearchTemplate};
 
 /// Helper function to convert User to PermissionContext for application layer
@@ -728,6 +732,230 @@ pub async fn get_research_statistics(
         }
         Err(e) => {
             error!("Failed to get research statistics: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+// ============================================================================
+// Deep Research Streaming Endpoints
+// ============================================================================
+
+/// Start deep research with streaming response
+#[utoipa::path(
+    post,
+    path = "/api/research/deep-stream",
+    tag = "Research",
+    summary = "Start deep research with streaming response",
+    description = "Start a new deep research session with real-time streaming updates",
+    request_body = StartResearchRequest,
+    responses(
+        (status = 200, description = "Streaming research updates", content_type = "text/event-stream"),
+        (status = 404, description = "Repository not found"),
+        (status = 500, description = "Failed to start research session")
+    )
+)]
+pub async fn start_deep_research_stream(
+    State(state): State<AppState>,
+    RequireQuery(user): RequireQuery,
+    JsonExtractor(request): JsonExtractor<StartResearchRequest>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    info!(
+        "Starting deep research stream for repository: {} (user: {})",
+        request.repository_id, user.id
+    );
+
+    // Convert to permission context for application layer
+    let context = user_to_permission_context(&user);
+
+    // Convert request config to application config
+    let config = request
+        .config
+        .map(|c| wikify_applications::research::ResearchConfig {
+            max_iterations: c.max_iterations.unwrap_or(5),
+            max_depth: 3,
+            confidence_threshold: 0.7,
+            max_sources_per_iteration: c.max_sources_per_iteration.unwrap_or(10),
+            enable_parallel_research: true,
+        });
+
+    // Start research session
+    let research_id = match state
+        .application
+        .start_research(
+            &context,
+            &request.repository_id,
+            request.research_question.clone(),
+            config,
+        )
+        .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            error!("Failed to start research: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    info!("Started deep research session: {}", research_id);
+
+    // Create streaming response
+    let stream = create_research_progress_stream(state, research_id, request.research_question);
+
+    Ok(Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    ))
+}
+
+/// Create a stream of research progress updates
+fn create_research_progress_stream(
+    state: AppState,
+    research_id: String,
+    original_query: String,
+) -> impl Stream<Item = Result<Event, Infallible>> {
+    stream::unfold(
+        (state, research_id, original_query, 0u32, false),
+        |(state, research_id, original_query, poll_count, completed)| async move {
+            // If already completed, end the stream
+            if completed {
+                return None;
+            }
+
+            // Poll for research progress
+            let context = wikify_applications::PermissionContext::local();
+            match state
+                .application
+                .get_research_progress(&context, &research_id)
+                .await
+            {
+                Ok(progress) => {
+                    // Create detailed progress event
+                    let event_data = serde_json::json!({
+                        "type": "progress",
+                        "research_id": research_id,
+                        "original_query": original_query,
+                        "status": format!("{:?}", progress.status),
+                        "current_iteration": progress.current_iteration,
+                        "max_iterations": progress.max_iterations,
+                        "progress": progress.progress,
+                        "current_response": progress.current_response,
+                        "last_updated": progress.last_updated,
+                        "poll_count": poll_count,
+                        "timestamp": chrono::Utc::now()
+                    });
+
+                    let progress_event = Event::default()
+                        .event("research_progress")
+                        .data(event_data.to_string());
+
+                    // Check if research is complete
+                    let is_complete = matches!(
+                        progress.status,
+                        ResearchStatus::Completed
+                            | ResearchStatus::Cancelled
+                            | ResearchStatus::Failed(_)
+                    );
+
+                    if is_complete {
+                        // Mark as completed to end stream after this event
+                        Some((
+                            Ok(progress_event),
+                            (state, research_id, original_query, poll_count + 1, true),
+                        ))
+                    } else {
+                        // Continue polling after a delay
+                        tokio::time::sleep(Duration::from_millis(1000)).await;
+                        Some((
+                            Ok(progress_event),
+                            (state, research_id, original_query, poll_count + 1, false),
+                        ))
+                    }
+                }
+                Err(e) => {
+                    // Send error event and end stream
+                    let error_event = Event::default().event("research_error").data(
+                        serde_json::json!({
+                            "type": "error",
+                            "research_id": research_id,
+                            "error": format!("Failed to get research progress: {}", e),
+                            "timestamp": chrono::Utc::now()
+                        })
+                        .to_string(),
+                    );
+
+                    // End stream after error
+                    Some((
+                        Ok(error_event),
+                        (state, research_id, original_query, poll_count + 1, true),
+                    ))
+                }
+            }
+        },
+    )
+}
+
+/// Get detailed research result
+#[utoipa::path(
+    get,
+    path = "/api/research/{research_id}/result",
+    tag = "Research",
+    summary = "Get detailed research result",
+    description = "Get the complete research result including all iterations and final synthesis",
+    responses(
+        (status = 200, description = "Research result retrieved successfully"),
+        (status = 404, description = "Research not found"),
+        (status = 500, description = "Failed to get research result")
+    )
+)]
+pub async fn get_research_result(
+    State(state): State<AppState>,
+    RequireQuery(user): RequireQuery,
+    Path(research_id): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    info!(
+        "Getting research result for: {} (user: {})",
+        research_id, user.id
+    );
+
+    let context = user_to_permission_context(&user);
+
+    match state
+        .application
+        .get_research_details(&context, &research_id)
+        .await
+    {
+        Ok(details) => {
+            let response = serde_json::json!({
+                "research_id": research_id,
+                "topic": details.topic,
+                "status": format!("{:?}", details.status),
+                "iterations": details.iterations.iter().map(|iter| serde_json::json!({
+                    "iteration": iter.iteration,
+                    "questions": iter.questions,
+                    "findings": iter.findings,
+                    "new_questions": iter.new_questions,
+                    "partial_synthesis": iter.partial_synthesis,
+                    "confidence": iter.confidence,
+                    "needs_more_research": iter.needs_more_research,
+                    "duration_ms": iter.duration.as_millis()
+                })).collect::<Vec<_>>(),
+                "findings": details.findings,
+                "questions": details.questions,
+                "config": serde_json::json!({
+                    "max_iterations": details.config.max_iterations,
+                    "max_depth": details.config.max_depth,
+                    "confidence_threshold": details.config.confidence_threshold
+                }),
+                "created_at": details.created_at,
+                "updated_at": details.updated_at
+            });
+
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("Failed to get research result: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }

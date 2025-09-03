@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import ResearchPage from "./pages/Research";
+import StreamingDemoPage from "./pages/StreamingDemo";
 import { ChatInterface } from "./components/ChatInterface";
 import { WikiViewer } from "./components/WikiViewer";
 import { AuthProvider, AuthModeDetector, OpenSourceBadge } from "./components/AuthProvider";
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/chat/:repositoryId" element={<ChatInterface />} />
               <Route path="/wiki/:repositoryId" element={<WikiViewer />} />
               <Route path="/research/:repositoryId" element={<ResearchPage />} />
+              <Route path="/streaming-demo" element={<StreamingDemoPage />} />
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

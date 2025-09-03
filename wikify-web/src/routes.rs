@@ -77,7 +77,14 @@ pub fn api_routes(_state: AppState) -> Router<AppState> {
         .route("/wiki/{repository_id}/export", post(handlers::export_wiki))
         // Research endpoints (requires Query permission)
         .route("/research/start", post(handlers::start_research))
-        .route("/research/deep", post(handlers::start_research)) // Alias for frontend compatibility
+        .route(
+            "/research/deep-stream",
+            post(handlers::start_deep_research_stream),
+        ) // Streaming endpoint
+        .route(
+            "/research/{research_id}/result",
+            get(handlers::get_research_result),
+        ) // Get detailed result
         .route(
             "/research/iterate/{repository_id}",
             post(handlers::research_iteration),

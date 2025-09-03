@@ -26,8 +26,9 @@ pub use token_counter::*;
 
 // Re-export our own types with explicit names to avoid conflicts
 pub use types::{
-    ChatMessage as WikifyChatMessage, LlmConfig, RagConfig, RagError, RagQuery, RagResponse,
-    RagResult,
+    ChatMessage as WikifyChatMessage, DeepResearchConfig, DeepResearchResult, LlmConfig, RagConfig,
+    RagError, RagQuery, RagResponse, RagResult, ResearchIteration, ResearchProgress,
+    ResearchStatus,
 };
 
 // Re-export commonly used types from siumai
